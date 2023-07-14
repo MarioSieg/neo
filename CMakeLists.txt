@@ -6,8 +6,8 @@ project(NEO LANGUAGES C)
 
 message("Configuring NEO...")
 
-file(GLOB_RECURSE neo_sources src/*.h src/*.c)
-add_library(libneo STATIC ${neo_sources})
+file(GLOB_RECURSE neo_compiler_sources compiler/*.h compiler/*.c)
+add_library(libneo STATIC ${neo_compiler_sources})
 
 if (WIN32)
     set(COMPILE_OPTIONS /W4 /WX)
