@@ -1,9 +1,13 @@
-// (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
+/* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
 #ifndef NEORT_BC_H
 #define NEORT_BC_H
 
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
 ** Bytecode instructions are 32-bit wide and stored in host byte order when in memory.
@@ -24,6 +28,7 @@
 **      Which effectively results in the following operation:
 **      x = imm16 << shift; <- shift value is unsigned
 **      if (com) x = ~x; <- complement flag inverts the result
+ *      This is somewhat similar to AArch64's movk, movn, movz instructions.
 */
 
 /* General instruction en/decoding (applies to mode 1 and 2) */
@@ -34,9 +39,9 @@ typedef uint8_t bci_opc_t;
 #define BCI_MOD1 0
 #define BCI_MOD2 1
 #define bci_unpackopc(i) ((bci_opc_t)((i)&127))
+#define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
 #define bci_unpackmod(i) (((i)&128)>>7)
-#define bci_packopc(i,opc) ((bci_instr_t)((i)|((opc)&127)))
-#define bci_packmod(i,mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
+#define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
 #define bci_switchmod(i) ((bci_instr_t)(((i)^128)&~0xffffff00u))
 
 /* Mode 1 macros */
@@ -45,7 +50,7 @@ typedef uint8_t bci_opc_t;
 #define BCI_MOD1IMM24BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
 #define bci_mod1unpack_imm24(i) ((int32_t)(((i)>>8)&0x00ffffffu))
-#define bci_mod1pack_imm24(i,imm24) ((bci_instr_t)((i)|(((imm24)&0x00ffffffu)<<8)))
+#define bci_mod1pack_imm24(i, imm24) ((bci_instr_t)((i)|(((imm24)&0x00ffffffu)<<8)))
 
 /* Mode 2 macros */
 #define BCI_MOD2IMM16MAX (BCI_MOD1IMM24MAX>>8)
@@ -53,14 +58,19 @@ typedef uint8_t bci_opc_t;
 #define BCI_MOD2IMM16BIAS (BCI_MOD1IMM24BIAS<<1)
 #define bci_mod2imm16_sign(x) (((x)&0x8000)>>15)
 #define bci_mod2unpack_imm16(i) ((int32_t)(((i)>>16)&0xffffu))
-#define bci_mod2pack_imm16(i,imm16) ((bci_instr_t)((i)|(((imm16)&0xffffu)<<16)))
+#define bci_mod2pack_imm16(i, imm16) ((bci_instr_t)((i)|(((imm16)&0xffffu)<<16)))
 #define bci_mod2unpack_com(i) (((i)>>15)&1)
-#define bci_mod2pack_com(i,com) ((bci_instr_t)((i)|(((com)&1)<<15)))
+#define bci_mod2unpack_com_i64sb(i) (((uint64_t)(i)<<(64-15))&(1ull<<63)) /* Complement flag to int64 sign bit */
+#define bci_mod2pack_com(i, com) ((bci_instr_t)((i)|(((com)&1)<<15)))
 #define bci_mod2unpack_shift(i) (((i)>>8)&127)
-#define bci_mod2pack_shift(i,shift) ((bci_instr_t)((i)|(((shift)&127)<<8)))
+#define bci_mod2pack_shift(i, shift) ((bci_instr_t)((i)|(((shift)&127)<<8)))
 
 /* Instruction composition */
-#define bci_comp_mod1(i,opc,imm24) ((bci_instr_t)(bci_packmod(bci_packopc(i,opc),BCI_MOD1)|bci_mod1pack_imm24(0,imm24)))
-#define bci_comp_mod2(i,opc,shift,com,imm16) ((bci_instr_t)(bci_packmod(bci_packopc(i,opc),BCI_MOD2)|bci_mod2pack_shift(0,shift)|bci_mod2pack_com(0,com)|bci_mod2pack_imm16(0,imm16)))
+#define bci_comp_mod1(i, opc, imm24) ((bci_instr_t)(bci_packmod(bci_packopc(i,opc),BCI_MOD1)|bci_mod1pack_imm24(0,imm24)))
+#define bci_comp_mod2(i, opc, shift, com, imm16) ((bci_instr_t)(bci_packmod(bci_packopc(i,opc),BCI_MOD2)|bci_mod2pack_shift(0,shift)|bci_mod2pack_com(0,com)|bci_mod2pack_imm16(0,imm16)))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
