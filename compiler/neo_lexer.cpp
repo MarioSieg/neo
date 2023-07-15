@@ -43,31 +43,18 @@ namespace neoc {
     auto cursor::utf8_iter_next(const char8_t*& p) noexcept -> char32_t {
         char32_t r{};
         std::size_t len{utf8_seq_length(*p)};
+        if (!len) [[unlikely]] {
+            return U'\0';
+        }
         assert(simdutf::convert_valid_utf8_to_utf32(reinterpret_cast<const char*>(p), len, &r) == 1);
         p += len;
         return r;
     }
 
-    auto cursor::peek() const -> lex_char32 {
-        if (is_done()) [[unlikely]] { return {}; }
-        const char8_t* tmp{needle_};
-        assert(tmp);
-        char32_t r{utf8_iter_next(tmp)};
-        return lex_char32{r};
-    }
-
-    auto cursor::peek_next() const -> lex_char32 {
-        if (is_done()) [[unlikely]] { return {}; }
-        const char8_t* tmp{needle_};
-        assert(tmp);
-        tmp += utf8_seq_length(*tmp); // skip char1
-        return lex_char32{utf8_iter_next(tmp)};
-    }
-
     auto cursor::consume() -> void {
         if (is_done()) [[unlikely]] { return; }
         assert(needle_);
-        if (!*needle_) [[unlikely]] { // we're done
+        if (*needle_ == u'\0') [[unlikely]] { // we're done
             return;
         } else if (*needle_ == '\n') [[unlikely]] {
             ++line_;
@@ -77,6 +64,9 @@ namespace neoc {
             ++column_;
         }
         needle_ += utf8_seq_length(*needle_);
+        const char8_t* tmp{needle_};
+        curr_ = utf8_iter_next(tmp);
+        next_ = utf8_iter_next(tmp);
     }
 
     auto cursor::is_match(char32_t c) -> bool {
@@ -92,6 +82,9 @@ namespace neoc {
         src_ = src;
         src_ptr_ = src_->get_source_code().c_str();
         needle_ = tok_start_ = line_start_ = src_ptr_;
+        const char8_t* tmp{needle_};
+        curr_ = utf8_iter_next(tmp);
+        next_ = utf8_iter_next(tmp);
         line_ = 1;
         column_ = 1;
     }
