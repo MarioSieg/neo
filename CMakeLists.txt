@@ -16,7 +16,7 @@ option(NEO_BUILD_COMPILER "Build NEO compiler" ON) # Requires C++ 20 capable com
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
 
 if (WIN32)
-    set(COMPILE_OPTIONS /W4 /WX)
+    set(COMPILE_OPTIONS /W3 /WX)
 else()
     set(COMPILE_OPTIONS -Werror -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -std=gnu99 -DNOEL=1 -Wno-gnu-auto-type)
 endif(WIN32)
@@ -35,7 +35,7 @@ endif()
 
 if (${NEO_BUILD_COMPILER}) # Requires C++ 20
     file(GLOB_RECURSE neo_compiler_sources compiler/*.hpp compiler/*.cpp)
-    add_library(libneoc STATIC ${neo_compiler_sources} test/compiler/lexer.cpp) # NEO compiler.
+    add_library(libneoc STATIC ${neo_compiler_sources}) # NEO compiler.
     target_compile_options(libneoc PUBLIC "${COMPILE_OPTIONS}")
 endif()
 
@@ -56,6 +56,7 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     target_link_libraries(neo_test GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(neo_test)
+    target_link_libraries(neo_test libneoc)
 endif()
 
 message("neo configured successfully!")

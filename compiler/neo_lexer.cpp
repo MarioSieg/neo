@@ -31,7 +31,7 @@ namespace neoc {
         return result;
     }
 
-    source_code::source_code(std::u8string&& src, std::filesystem::path&& path) : src_{std::move(src)}, path_{std::move(path)} {
+    source_code::source_code(std::u8string&& src, std::filesystem::path&& path): src_{std::move(src)}, path_{std::move(path)} {
         simdutf::result validation_result{simdutf::validate_utf8_with_errors(reinterpret_cast<const char*>(src_.data()), src_.size())};
         if (validation_result.error != simdutf::SUCCESS) [[unlikely]] {
             throw lex_exception {std::format("Invalid UTF-8 encoding ({:#x}) at position {} in file: '{}'", static_cast<std::uint8_t>(src_[validation_result.count]), validation_result.count, path_.string())};
@@ -40,9 +40,18 @@ namespace neoc {
 
     source_code::source_code(std::filesystem::path&& path) : source_code{load_source_from_file(path), std::move(path)} {}
 
+    auto cursor::utf8_iter_next(const char8_t*& p) noexcept -> char32_t {
+        char32_t r{};
+        std::size_t len{utf8_seq_length(*p)};
+        assert(simdutf::convert_valid_utf8_to_utf32(reinterpret_cast<const char*>(p), len, &r) == 1);
+        p += len;
+        return r;
+    }
+
     auto cursor::peek() const -> lex_char32 {
         if (is_done()) [[unlikely]] { return {}; }
         const char8_t* tmp{needle_};
+        assert(tmp);
         char32_t r{utf8_iter_next(tmp)};
         return lex_char32{r};
     }
@@ -50,18 +59,17 @@ namespace neoc {
     auto cursor::peek_next() const -> lex_char32 {
         if (is_done()) [[unlikely]] { return {}; }
         const char8_t* tmp{needle_};
-        char32_t r{utf8_iter_next(tmp)};
-        if (!r) [[unlikely]] { return {}; }
-        r = utf8_iter_next(tmp);
-        return lex_char32{r};
+        assert(tmp);
+        tmp += utf8_seq_length(*tmp); // skip char1
+        return lex_char32{utf8_iter_next(tmp)};
     }
 
     auto cursor::consume() -> void {
         if (is_done()) [[unlikely]] { return; }
-        const char8_t* tmp{needle_};
-        if (!*tmp) [[unlikely]] { // we're done
+        assert(needle_);
+        if (!*needle_) [[unlikely]] { // we're done
             return;
-        } else if (*tmp == '\n') {
+        } else if (*needle_ == '\n') [[unlikely]] {
             ++line_;
             column_ = 1;
             line_start_ = needle_ + 1;
@@ -82,7 +90,7 @@ namespace neoc {
     auto cursor::set_source(const std::shared_ptr<source_code>& src) -> void {
         if (!src) { throw lex_exception{"source cannot be null"}; }
         src_ = src;
-        src_ptr_ = src_->get_source_code().data();
+        src_ptr_ = src_->get_source_code().c_str();
         needle_ = tok_start_ = line_start_ = src_ptr_;
         line_ = 1;
         column_ = 1;

@@ -94,7 +94,7 @@ namespace neoc {
 
     class source_code final {
     public:
-        explicit source_code(std::u8string&& src, std::filesystem::path&& path = "?.neo");
+        source_code(std::u8string&& src, std::filesystem::path&& path);
         explicit source_code(std::filesystem::path&& path);
 
         [[nodiscard]] inline auto get_source_code() const noexcept -> const std::u8string& { return src_; }
@@ -109,23 +109,13 @@ namespace neoc {
     class cursor final {
     public:
         [[nodiscard]] static constexpr auto utf8_seq_length(char8_t x) noexcept -> std::uint32_t {
-            if (x && x < 0x80) [[likely]] { return 1; } // ASCII
+            if (x < 0x80) [[likely]] { return 1; } // ASCII
             else if ((x >> 5) == 0x6) { return 2; }
             else if ((x >> 4) == 0xe) { return 3; }
             else if ((x >> 3) == 0x1e) { return 4; }
             else { return 0; }
         }
-        [[nodiscard]] static constexpr auto utf8_iter_next(const char8_t*& p) noexcept -> char32_t {
-            char32_t cp{*p};
-            switch (utf8_seq_length(*p)) {
-                case 1: break;
-                case 2: cp = ((cp << 6) & 0x7ff) + ((*++p) & 0x3f); break;
-                case 3: cp = ((cp << 12) & 0xffff) + ((*++p << 6) & 0xfff); cp += *++p & 0x3f; break;
-                case 4: cp = ((cp << 18) & 0x1fffff) + ((*++p << 12) & 0x3ffff); cp += (*++p << 6) & 0xfff; cp += *++p & 0x3f; break;
-            }
-            ++p;
-            return cp;
-        }
+        [[nodiscard]] static auto utf8_iter_next(const char8_t*& p) noexcept -> char32_t;
 
         [[nodiscard]] inline auto is_done() const noexcept -> bool { return !src_ || !*needle_; }
         [[nodiscard]] auto peek() const -> lex_char32;
@@ -133,6 +123,7 @@ namespace neoc {
         auto consume() -> void;
         auto is_match(char32_t c) -> bool;
         auto set_source(const std::shared_ptr<source_code>& src) -> void;
+        [[nodiscard]] inline auto get_needle() const noexcept -> const char8_t* { return needle_; }
 
     private:
         std::shared_ptr<source_code> src_{};
