@@ -3,11 +3,11 @@
 #include "neo_lexer.h"
 #include "neo_core.h"
 
-static NEO_AINLINE int utf8_seqlen(uint8_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static NEO_AINLINE int utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
-    else if ((x >> 5) == 0x6) { return 2; } /* 2 bytes */
-    else if ((x >> 4) == 0xe) { return 3; } /* 3 bytes */
-    else if ((x >> 3) == 0x1e) { return 4; } /* 4 bytes */
+    else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
+    else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
+    else if ((x>>3) == 0x1e) { return 4; } /* 4 bytes */
     else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
 }
 
@@ -19,14 +19,14 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
     else {
         switch (len) {
             default:;
-            case 2: cp = ((cp << 6) & 0x7ff) | (*++*p & 0x3f); break; /* 2 bytes */
+            case 2: cp = ((cp<<6) & 0x7ff)|(*++*p & 0x3f); break; /* 2 bytes */
             case 3: /* 3 bytes */
-                cp = ((cp << 12) & 0xffff) | ((*++*p << 6) & 0xfff);
+                cp = ((cp<<12) & 0xffff)|((*++*p<<6) & 0xfff);
                 cp += *++*p & 0x3f;
                 break;
             case 4: /* 4 bytes */
-                cp = ((cp << 18) & 0x1fffff) | ((*++*p << 12) & 0x3ffff);
-                cp += (*++*p << 6) & 0xfff;
+                cp = ((cp<<18) & 0x1fffff)|((*++*p<<12) & 0x3ffff);
+                cp += (*++*p<<6) & 0xfff;
                 cp += *++*p & 0x3f;
                 break;
         }
@@ -42,7 +42,7 @@ static unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos)
     size_t pos = 0;
     uint32_t cp = 0;
     while (pos < len) {
-        size_t np = pos + 16;
+        size_t np = pos+16;
         if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
             uint64_t v1 = *(const uint64_t *)(buf+pos);
             uint64_t v2 = *(const uint64_t *)(buf+pos+sizeof(v1));
@@ -57,26 +57,26 @@ static unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos)
             b = buf[pos];
         }
         if ((b & 0xe0) == 0xc0) {
-            np = pos + 2;
+            np = pos+2;
             if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0x1fu) << 6u | (buf[pos + 1] & 0x3fu);
+            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            cp = (b & 0x1fu)<<6u | (buf[pos+1] & 0x3fu);
             if (neo_unlikely((cp < 0x80) || (0x7ff < cp))) { *ppos = pos; return UNIERR_OVERLONG; }
         } else if ((b & 0xf0) == 0xe0) {
-            np = pos + 3;
+            np = pos+3;
             if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0xfu) << 12u | (buf[pos + 1] & 0x3fu) << 6u | (buf[pos + 2] & 0x3fu);
+            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            cp = (b & 0xfu)<<12u | (buf[pos+1] & 0x3fu)<<6u | (buf[pos+2] & 0x3fu);
             if (neo_unlikely((cp < 0x800) || (0xffff < cp))) { *ppos = pos; return UNIERR_OVERLONG; }
             if (neo_unlikely(0xd7ff < cp && cp < 0xe000)) { *ppos = pos; return UNIERR_SURROGATE; }
         } else if ((b & 0xf8) == 0xf0) {
-            np = pos + 4;
+            np = pos+4;
             if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos + 3] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0x7u) << 18u | (buf[pos + 1] & 0x3fu) << 12u | (buf[pos + 2] & 0x3fu) << 6u | (buf[pos + 3] & 0x3fu);
+            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            if (neo_unlikely((buf[pos+3] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
+            cp = (b & 0x7u)<<18u | (buf[pos+1] & 0x3fu)<<12u | (buf[pos+2] & 0x3fu)<<6u | (buf[pos+3] & 0x3fu);
             if (neo_unlikely(cp <= 0xffff)) { *ppos = pos; return UNIERR_OVERLONG; }
             if (neo_unlikely(0x10ffff < cp)) { *ppos = pos; return UNIERR_TOO_LARGE; }
         } else { /* We either have too many continuation bytes or an invalid leading byte. */
@@ -111,6 +111,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
 }
 
 static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
+    neo_dbg_assert(self && self->src && self->needle);
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -126,7 +127,7 @@ static void consume(lexer_t *self) {
     else if (neo_unlikely(peek(self) == '\n')) { /* Newline just started. */
         ++self->line;
         self->col = 1;
-        self->line_start = self->needle + 1;
+        self->line_start = self->needle+1;
     } else { /* No special event, just increment column. */
         ++self->col;
     }
