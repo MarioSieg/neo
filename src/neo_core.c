@@ -2,6 +2,10 @@
 
 #include "neo_core.h"
 
+void neo_assert_impl(const char *expr, const char *file, int line) {
+    neo_panic("%s:%d <- Fatal internal NEO error! Assertion failed: '%s'", file, line, expr);
+}
+
 void neo_panic(const char *msg, ...) {
     fprintf(stderr, "%s", NEO_CCRED);
     va_list args;

@@ -3,7 +3,7 @@
 #include "neo_lexer.h"
 #include "neo_core.h"
 
-static NEO_AINLINE int utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static unsigned utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
     else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
@@ -13,7 +13,7 @@ static NEO_AINLINE int utf8_seqlen(uint32_t x) { /* Computes the length of incom
 
 static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
-    int len = utf8_seqlen(cp);
+    unsigned len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 0x7f; } /* ASCII and most common case. */
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
@@ -37,7 +37,7 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
 
 typedef enum { UNIERR_OK, UNIERR_TOO_SHORT, UNIERR_TOO_LONG, UNIERR_TOO_LARGE, UNIERR_OVERLONG, UNIERR_HEADER_BITS, UNIERR_SURROGATE } unicode_err_t;
 
-static unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
+static __attribute__((unused)) unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
     neo_dbg_assert(buf && ppos);
     size_t pos = 0;
     uint32_t cp = 0;
@@ -120,7 +120,7 @@ static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
 #define peek(l) ((l)->cp_curr)
 #define peek_next(l) ((l)->cp_next)
 #define is_done(l) (peek(l) == 0)
-static void consume(lexer_t *self) {
+static __attribute__((unused)) void consume(lexer_t *self) {
     neo_dbg_assert(self && self->src && self->needle);
     neo_dbg_assert(neo_bnd_check(self->needle, self->src, self->src_len));
     if (neo_unlikely(is_done(self))) { return; } /* We're done here. */

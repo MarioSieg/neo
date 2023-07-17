@@ -13,10 +13,34 @@ message("Configuring NEO...")
 
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
 
+if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    message("Detected release mode")
+    set (IS_RELEASE true)
+    set (IS_DEBUG false)
+else ()
+    message("Detected debug mode")
+    set (IS_RELEASE false)
+    set (IS_DEBUG true)
+endif ()
+
 if (WIN32)
-    set(COMPILE_OPTIONS /W3 /WX)
+    set(COMPILE_OPTIONS /W3 /WX) # basic compile options
 else()
-    set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers)
+    set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers) # basic compile options
+    set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -fwrapv) # advanced options
+    if (${IS_RELEASE})
+        set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -O3 -fvisibility=hidden -fomit-frame-pointer) # advanced options
+        if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            add_link_options(-fuse-ld=lld)
+            add_link_options("-Wl,--thinlto-cache-dir=${PROJECT_BINARY_DIR}/lto_cache")
+            add_link_options("-Wl,--thinlto-jobs=64")
+            add_compile_options(-flto=thin)
+            add_link_options(-flto=thin)
+        elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            add_compile_options(flto=64)
+            add_link_options(-flto=64)
+        endif()
+    endif()
 endif(WIN32)
 
 if (${NEO_BUILD_TESTS}) # These targets require a C++ 20 compiler.
