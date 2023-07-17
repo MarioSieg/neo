@@ -1,10 +1,16 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
+/*
+** About this file:
+** Important stuff used by the compiler and runtime are defined here.
+*/
+
 #ifndef NEO_CORE_H
 #define NEO_CORE_H
 
 /* -------- Prelude-------- */
 #include <float.h>
+#include <stdint.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdarg.h>
@@ -27,7 +33,7 @@ extern "C" {
 #define NEO_VER_MAJOR 0
 #define NEO_VER_MINOR 1
 
-/* -------- Compiler and platform specific macros -------- */
+/* ---- Compiler & Platform Macros ---- */
 
 #define NEO_DBG 0 /* debug mode */
 
@@ -392,6 +398,8 @@ extern "C" {
 #   define NEO_DBG 1
 #endif
 
+/* ---- Compiler Specific Intrinsics ---- */
+
 #if NEO_COM_GCC || NEO_COM_CLANG
 #   define NEO_EXPORT __attribute__((visibility("default")))
 #	define NEO_NORET __attribute__((noreturn))
@@ -567,6 +575,8 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 }
 #endif
 
+/* ---- Misc ---- */
+
 #ifndef neo_rol
 #	define neo_rol(x, n) (((x)<<(n))|((x)>>(-(int)(n)&((sizeof(x)<<3)-1))))
 #endif
@@ -590,6 +600,8 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #   define neo_dbg_assert(ex) (void)0 /* assert for debug only builds */
 #endif
 
+/* ---- Logging ---- */
+
 #define NEO_ENUM_SEP ,
 #define NEO_STRINGIZE(x) NEO_STRINGIZE2(x)
 #define NEO_STRINGIZE2(x) #x
@@ -612,118 +624,6 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #   define neo_warn(msg, ...)
 #   define neo_error(msg, ...)
 #endif
-
-typedef struct {
-    size_t len;
-} neo_alloc_header_t;
-
-typedef void *(neo_allocproc_t)(void *blk, size_t size); /* TODO: add __LINE__ and __FILE__ info */
-extern void *neo_sys_allocator(void *blk, size_t size);
-extern void *neo_dbg_allocator(void *blk, size_t size);
-extern void neo_alloc_finalize(void); /* should be called at exit */
-extern void neo_alloc_dump(void);
-#define neo_alloc_inithook() neo_assert(!atexit(&neo_allocator_finalize))
-extern neo_allocproc_t *neo_alloc_hook;
-#ifndef neo_alloc_malloc
-#   define neo_alloc_malloc(size) calloc(1, size)
-#endif
-#ifndef neo_alloc_realloc
-#   define neo_alloc_realloc(blk, size) realloc((blk),(size))
-#endif
-#ifndef neo_dealloc
-#   define neo_dealloc(blk) free(blk)
-#endif
-#ifndef neo_memalloc
-#   if NEO_DBG
-#       define neo_memalloc(blk, size) ((*neo_alloc_hook)((blk),(size)))
-#   else
-#       define neo_memalloc(blk, len) (neo_sys_allocator((blk),(len)))
-#   endif
-#endif
-typedef enum {
-    NEO_PA_NONE = 0,
-    NEO_PA_R = 1<<0,
-    NEO_PA_W = 1<<1,
-    NEO_PA_X = 1<<2
-} neo_pageaccess_t;
-neo_static_assert(NEO_PA_X <= 7);
-#define NEO_VALLOC_PAP_MEM (NEO_PA_R|NEO_PA_W) /* default memory */
-#define NEO_VALLOC_PAP_MACH (NEO_PA_R|NEO_PA_X) /* executable machine code */
-#define NEO_VALLOC_PREPOPULATE 0 /* 1 = Force kernel to prefault whole range. This can help avoid page faults during the first access to the mapped memory. */
-#define NEO_VALLOC_NOPOISON 0xffff /* Don't poison the allocated memory. */
-#define neo_valloc_poison(x) ((uint16_t)((0xff<<8)|((x)&0xff))) /* Poison the allocated memory with the specified byte. */
-typedef struct {
-    neo_pageaccess_t access:8;
-    uint32_t os_access:32;
-    size_t len:64;
-} neo_vheader_t;
-extern NEO_EXPORT bool neo_valloc(void **ptr, size_t size, neo_pageaccess_t access, void *hint, uint16_t poison);
-extern NEO_EXPORT bool neo_vprotect(void *ptr, neo_pageaccess_t access);
-extern NEO_EXPORT bool neo_vfree(void **ptr, bool poison);
-#define neo_vheader_of(p) ((neo_vheader_t*)((uint8_t*)(p)-sizeof(neo_vheader_t)))
-static NEO_AINLINE void neo_vmachine_icache_flush(void *ptr) { /* Some CPUs require flushing the instruction cache (Harvard-CPU etc..) */
-    const neo_vheader_t *hdr = neo_vheader_of(ptr);
-#if NEO_COM_MSVC || NEO_CPU_AMD64 /* Nothing to do on x86-64/AMD64 */
-    (void)ptr;
-    (void)hdr;
-#else
-    __builtin___clear_cache((char*)ptr, (char*)ptr+hdr->len);
-#endif
-}
-typedef uint64_t neo_mcookie_t;
-static NEO_AINLINE neo_mcookie_t neo_vmachine_exec(void *ptr, neo_mcookie_t param) { /* execute machine code */
-    const neo_vheader_t *hdr = neo_vheader_of(ptr);
-    neo_dbg_assert((hdr->access & NEO_PA_X) && "invalid page access for execution, only R|X is allowed");
-    (void)hdr;
-#if NEO_DBG
-    if (neo_unlikely(hdr->access & (NEO_PA_X|NEO_PA_W))) {
-        neo_error("W|X pages not secure: 0x%x", hdr->access);
-    }
-#endif
-    neo_vmachine_icache_flush(ptr);
-    return (*((neo_mcookie_t(*)(neo_mcookie_t))(uintptr_t)ptr))(param);
-}
-
-/* ---- Hashing Functions ---- */
-
-extern NEO_EXPORT uint32_t neo_hash_bernstein(const void *key, size_t len);
-extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
-extern NEO_EXPORT uint32_t neo_hash_fnv1a(const void *key, size_t len);
-
-/* ---- Unsigned/Signed LEB128 (Little Endian Based) variable-length integer en/decoding functions ---- */
-
-extern NEO_EXPORT size_t neo_leb128_encode_u64(uint8_t *begin, uint8_t *end, uint64_t x);
-extern NEO_EXPORT size_t neo_leb128_encode_i64(uint8_t *begin, uint8_t *end, int64_t x);
-extern NEO_EXPORT size_t neo_leb128_decode_u64(const uint8_t *begin, const uint8_t *end, uint64_t *o);
-extern NEO_EXPORT size_t neo_leb128_decode_i64(const uint8_t *begin, const uint8_t *end, int64_t *o);
-
-/* ---- Unicode Library ---- */
-
-typedef enum {
-    NEO_UNIERR_OK,
-    NEO_UNIERR_TOO_SHORT,
-    NEO_UNIERR_TOO_LONG,
-    NEO_UNIERR_TOO_LARGE, /* codepoint too large */
-    NEO_UNIERR_OVERLONG,
-    NEO_UNIERR_HEADER_BITS,
-    NEO_UNIERR_SURROGATE
-} neo_unicode_error_t;
-
-typedef struct {
-    neo_unicode_error_t code;
-    size_t err_pos;
-} neo_unicode_result_t;
-
-extern NEO_EXPORT neo_unicode_result_t neo_utf8_validate(const uint8_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_utf8_count_codepoints(const uint8_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_utf8_len_from_utf32(const uint32_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_utf16_len_from_utf8(const uint8_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_utf16_len_from_utf32(const uint32_t *buf, size_t len);
-extern NEO_EXPORT neo_unicode_result_t neo_utf32_validate(const uint32_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_utf32_count_codepoints(const uint32_t *buf, size_t len);
-extern NEO_EXPORT size_t neo_valid_utf8_to_utf32(const uint8_t *buf, size_t len, uint32_t *out);
-extern NEO_EXPORT size_t neo_valid_utf32_to_utf8(const uint32_t *buf, size_t len, uint8_t *out);
-
 
 #ifdef __cplusplus
 }

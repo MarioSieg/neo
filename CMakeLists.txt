@@ -16,7 +16,7 @@ option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compi
 if (WIN32)
     set(COMPILE_OPTIONS /W3 /WX)
 else()
-    set(COMPILE_OPTIONS -Werror -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers)
+    set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers)
 endif(WIN32)
 
 if (${NEO_BUILD_TESTS}) # These targets require a C++ 20 compiler.
@@ -27,7 +27,7 @@ endif()
 
 file(GLOB_RECURSE neo_sources src/*.h src/*.c)
 add_library(libneo STATIC ${neo_sources}) # NEO compiler.
-target_compile_options(libneo PUBLIC "${COMPILE_OPTIONS}")
+target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
 
 if (${NEO_BUILD_TESTS}) # Requires C++ 20
     set(DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
