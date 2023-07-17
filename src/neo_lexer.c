@@ -3,7 +3,7 @@
 #include "neo_lexer.h"
 #include "neo_core.h"
 
-static int utf8_seqlen(uint8_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static NEO_AINLINE int utf8_seqlen(uint8_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x >> 5) == 0x6) { return 2; } /* 2 bytes */
     else if ((x >> 4) == 0xe) { return 3; } /* 3 bytes */
@@ -13,7 +13,7 @@ static int utf8_seqlen(uint8_t x) { /* Computes the length of incoming UTF-8 seq
 
 static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
-    int len = utf8_seqlen(**p);
+    int len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 0x7f; } /* ASCII and most common case. */
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
@@ -35,15 +35,7 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
     return cp;
 }
 
-typedef enum {
-    UNIERR_OK,
-    UNIERR_TOO_SHORT,
-    UNIERR_TOO_LONG,
-    UNIERR_TOO_LARGE,
-    UNIERR_OVERLONG,
-    UNIERR_HEADER_BITS,
-    UNIERR_SURROGATE
-} unicode_err_t;
+typedef enum { UNIERR_OK, UNIERR_TOO_SHORT, UNIERR_TOO_LONG, UNIERR_TOO_LARGE, UNIERR_OVERLONG, UNIERR_HEADER_BITS, UNIERR_SURROGATE } unicode_err_t;
 
 static unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
     neo_dbg_assert(buf && ppos);
@@ -118,7 +110,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
         || c == 0x2029u; /* PARAGRAPH-SEPARATOR */
 }
 
-static NEO_AINLINE void decode_cached_via_tmp(lexer_t *self) {
+static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -139,7 +131,7 @@ static void consume(lexer_t *self) {
         ++self->col;
     }
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
-    decode_cached_via_tmp(self); /* Decode cached codepoints. */
+    decode_cached_tmp(self); /* Decode cached codepoints. */
 }
 
 void lexer_set_src(lexer_t *self, const uint8_t *src, size_t src_len) {
@@ -147,5 +139,5 @@ void lexer_set_src(lexer_t *self, const uint8_t *src, size_t src_len) {
     self->src_len = src_len;
     self->src = self->needle = self->tok_start = self->line_start = src;
     self->line = self->col = 1;
-    decode_cached_via_tmp(self); /* Decode cached codepoints. */
+    decode_cached_tmp(self); /* Decode cached codepoints. */
 }
