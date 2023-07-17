@@ -11,33 +11,23 @@ project(NEO LANGUAGES C)
 
 message("Configuring NEO...")
 
-option(NEO_BUILD_RUNTIME "Build NEO runtime" ON) # Requires C 99 capable compiler.
-option(NEO_BUILD_COMPILER "Build NEO compiler" ON) # Requires C++ 20 capable compiler.
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
 
 if (WIN32)
     set(COMPILE_OPTIONS /W3 /WX)
 else()
-    set(COMPILE_OPTIONS -Werror -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -std=gnu99 -DNOEL=1 -Wno-gnu-auto-type)
+    set(COMPILE_OPTIONS -Werror -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers)
 endif(WIN32)
 
-if (${NEO_BUILD_COMPILER} OR ${NEO_BUILD_TESTS}) # These targets require a C++ 20 compiler.
+if (${NEO_BUILD_TESTS}) # These targets require a C++ 20 compiler.
     enable_language(CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-if (${NEO_BUILD_RUNTIME})
-    file(GLOB_RECURSE neo_runtime_sources runtime/*.h runtime/*.c)
-    add_library(libneort STATIC ${neo_runtime_sources}) # NEO runtime environment.
-    target_compile_options(libneort PUBLIC "${COMPILE_OPTIONS}")
-endif()
-
-if (${NEO_BUILD_COMPILER}) # Requires C++ 20
-    file(GLOB_RECURSE neo_compiler_sources compiler/*.hpp compiler/*.cpp)
-    add_library(libneoc STATIC ${neo_compiler_sources}) # NEO compiler.
-    target_compile_options(libneoc PUBLIC "${COMPILE_OPTIONS}")
-endif()
+file(GLOB_RECURSE neo_sources src/*.h src/*.c)
+add_library(libneo STATIC ${neo_sources}) # NEO compiler.
+target_compile_options(libneo PUBLIC "${COMPILE_OPTIONS}")
 
 if (${NEO_BUILD_TESTS}) # Requires C++ 20
     set(DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
@@ -51,12 +41,11 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     enable_testing()
     file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp)
     add_executable(neo_test ${neo_test_sources})
-    target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
-    target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/compiler)
+    target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_link_libraries(neo_test GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(neo_test)
-    target_link_libraries(neo_test libneoc)
+    target_link_libraries(neo_test libneo)
 endif()
 
 message("neo configured successfully!")

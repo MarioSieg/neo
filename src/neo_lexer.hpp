@@ -109,14 +109,13 @@ namespace neoc {
     class cursor final {
     public:
         [[nodiscard]] static constexpr auto utf8_seq_length(char8_t x) noexcept -> std::uint32_t {
-            if (x == u'\0') [[unlikely]] { return 0; }
-            else if (x < 0x80) [[likely]] { return 1; } // ASCII
+            if (x && x < 0x80) [[likely]] { return 1; } // ASCII
             else if ((x >> 5) == 0x6) { return 2; }
             else if ((x >> 4) == 0xe) { return 3; }
             else if ((x >> 3) == 0x1e) { return 4; }
             else { return 0; }
         }
-        [[nodiscard]] static auto utf8_iter_next(const char8_t*& p) noexcept -> char32_t;
+        [[nodiscard]] static auto utf8_decode_cp(const char8_t*& p) noexcept -> char32_t;
 
         [[nodiscard]] inline auto is_done() const noexcept -> bool { return !src_ || !*needle_; }
         [[nodiscard]] inline auto peek() const -> lex_char32 { return lex_char32{curr_}; }

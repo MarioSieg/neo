@@ -40,15 +40,17 @@ namespace neoc {
 
     source_code::source_code(std::filesystem::path&& path) : source_code{load_source_from_file(path), std::move(path)} {}
 
-    auto cursor::utf8_iter_next(const char8_t*& p) noexcept -> char32_t {
-        char32_t r{};
-        std::size_t len{utf8_seq_length(*p)};
-        if (!len) [[unlikely]] {
-            return U'\0';
+    auto cursor::utf8_decode_cp(const char8_t*& p) noexcept -> char32_t {
+        char32_t cp{static_cast<char32_t>(*p)};
+        switch (utf8_seq_length(*p)) {
+            case 0: return U'\0';
+            case 1: [[likely]] break;
+            case 2: cp = ((cp << 6) & 0x7ff) + (*++p & 0x3f); break;
+            case 3: cp = ((cp << 12) & 0xffff) + ((*++p << 6) & 0xfff); cp += *++p & 0x3f; break;
+            case 4: cp = ((cp << 18) & 0x1fffff) + ((*++p << 12) & 0x3ffff); cp += (*++p << 6) & 0xfff; cp += *++p & 0x3f; break;
         }
-        assert(simdutf::convert_valid_utf8_to_utf32(reinterpret_cast<const char*>(p), len, &r) == 1);
-        p += len;
-        return r;
+        ++p;
+        return cp;
     }
 
     auto cursor::consume() -> void {
@@ -65,8 +67,8 @@ namespace neoc {
         }
         needle_ += utf8_seq_length(*needle_);
         const char8_t* tmp{needle_};
-        curr_ = utf8_iter_next(tmp);
-        next_ = utf8_iter_next(tmp);
+        curr_ = utf8_decode_cp(tmp);
+        next_ = utf8_decode_cp(tmp);
     }
 
     auto cursor::is_match(char32_t c) -> bool {
@@ -83,8 +85,8 @@ namespace neoc {
         src_ptr_ = src_->get_source_code().c_str();
         needle_ = tok_start_ = line_start_ = src_ptr_;
         const char8_t* tmp{needle_};
-        curr_ = utf8_iter_next(tmp);
-        next_ = utf8_iter_next(tmp);
+        curr_ = utf8_decode_cp(tmp);
+        next_ = utf8_decode_cp(tmp);
         line_ = 1;
         column_ = 1;
     }
