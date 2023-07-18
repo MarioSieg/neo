@@ -18,7 +18,6 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
         switch (len) {
-            default:;
             case 2: cp = ((cp<<6) & 0x7ff)|(*++*p & 0x3f); break; /* 2 bytes */
             case 3: /* 3 bytes */
                 cp = ((cp<<12) & 0xffff)|((*++*p<<6) & 0xfff);
@@ -29,69 +28,68 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
                 cp += (*++*p<<6) & 0xfff;
                 cp += *++*p & 0x3f;
                 break;
+            default:;
         }
     }
     ++*p;
     return cp;
 }
 
-typedef enum { UNIERR_OK, UNIERR_TOO_SHORT, UNIERR_TOO_LONG, UNIERR_TOO_LARGE, UNIERR_OVERLONG, UNIERR_HEADER_BITS, UNIERR_SURROGATE } unicode_err_t;
-
-static __attribute__((unused)) unicode_err_t utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
-    neo_dbg_assert(buf && ppos);
-    size_t pos = 0;
-    uint32_t cp = 0;
-    while (pos < len) {
-        size_t np = pos+16;
-        if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
-            uint64_t v1 = *(const uint64_t *)(buf+pos);
-            uint64_t v2 = *(const uint64_t *)(buf+pos+sizeof(v1));
-            if (!((v1|v2)&UINT64_C(0x8080808080808080))) {
-                pos = np;
-                continue;
-            }
-        }
-        uint8_t b = buf[pos];
-        while (b < 0x80) {
-            if (neo_likely(++pos == len)) { *ppos = len; return UNIERR_OK; }
-            b = buf[pos];
-        }
-        if ((b & 0xe0) == 0xc0) {
-            np = pos+2;
-            if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0x1fu)<<6u | (buf[pos+1] & 0x3fu);
-            if (neo_unlikely((cp < 0x80) || (0x7ff < cp))) { *ppos = pos; return UNIERR_OVERLONG; }
-        } else if ((b & 0xf0) == 0xe0) {
-            np = pos+3;
-            if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0xfu)<<12u | (buf[pos+1] & 0x3fu)<<6u | (buf[pos+2] & 0x3fu);
-            if (neo_unlikely((cp < 0x800) || (0xffff < cp))) { *ppos = pos; return UNIERR_OVERLONG; }
-            if (neo_unlikely(0xd7ff < cp && cp < 0xe000)) { *ppos = pos; return UNIERR_SURROGATE; }
-        } else if ((b & 0xf8) == 0xf0) {
-            np = pos+4;
-            if (neo_unlikely(np > len)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+3] & 0xc0) != 0x80)) { *ppos = pos; return UNIERR_TOO_SHORT; }
-            cp = (b & 0x7u)<<18u | (buf[pos+1] & 0x3fu)<<12u | (buf[pos+2] & 0x3fu)<<6u | (buf[pos+3] & 0x3fu);
-            if (neo_unlikely(cp <= 0xffff)) { *ppos = pos; return UNIERR_OVERLONG; }
-            if (neo_unlikely(0x10ffff < cp)) { *ppos = pos; return UNIERR_TOO_LARGE; }
-        } else { /* We either have too many continuation bytes or an invalid leading byte. */
-            if (neo_unlikely((b & 0xc0) == 0x80)) { *ppos = pos; return UNIERR_TOO_LONG; }
-            else { *ppos = pos; return UNIERR_HEADER_BITS; }
-        }
-        pos = np;
+bool source_load(source_t *self, const uint8_t *path) {
+    neo_dbg_assert(self && path);
+    FILE *f = NULL;
+    if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R | NEO_FMODE_BIN))) {
+        neo_error("Failed to open file '%s'.", path);
+        return false;
     }
-    *ppos = len;
-    return UNIERR_OK;
+    /* Check for BOM and skip it if present */
+    uint8_t bom[3];
+    size_t bom_len = fread(bom, 1, 3, f);
+    bool has_bom = false;
+    if (bom_len == sizeof(bom) && memcmp(bom, "\xef\xbb\xbf", sizeof(bom)) == 0) {
+        has_bom = true; /* BOM found */
+    }
+    else { rewind(f); } /* No BOM, rewind to start of file */
+    fseek(f, 0, SEEK_END);
+    size_t size = (size_t)ftell(f);
+    rewind(f);
+    if (has_bom) {
+        fseek(f, sizeof(bom), SEEK_SET); /* BOM detected, skip it */
+        size -= sizeof(bom);
+    }
+    if (neo_unlikely(!size)) { /* File is empty */
+        fclose(f);
+        return false;
+    }
+    uint8_t *buf = (uint8_t *)neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
+    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) {
+        neo_memalloc(buf, 0);
+        fclose(f);
+        neo_error("Failed to read source file: '%s'", path);
+        return false;
+    }
+    fclose(f);
+#if NEO_OS_WINDOWS
+    /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
+    for (size_t i = 0; i < size; ++i) {
+        if (buf[i] == '\r' && buf[i+1] == '\n') {
+            buf[i] = '\n';
+            memmove(buf+i+1, buf+i+2, size-i-2); /* Fold data downwards. */
+            --size, --i;
+        }
+    }
+#endif
+    buf[size] = '\n'; /* Append final newline */
+    buf[size+1] = '\0'; /* Append terminator */
+    self->filename = path;
+    self->src = buf;
+    self->len = size;
+    return true;
 }
 
 #define c32_is_within(c, min, max) ((c) >= (min) && (c) <= (max))
 #define c32_is_ascii(c) ((c) < 0x80)
-#define c32_is_ascii_whitespace(c) ((c) == ' ' || (c) == '\t' || (c) == '\v' || (c) == '\r') /* \n is no whitespace - it's a punctuation token in Neo */
+#define c32_is_ascii_whitespace(c) ((c) == ' ' || (c) == '\t' || (c) == '\v' || (c) == '\r') /* \n is no whitespace - it's a punctuation token. */
 #define c32_is_ascii_digit(c) c32_is_within((c), '0', '9')
 #define c32_is_ascii_hexdigit(c) (c32_is_ascii_digit(c) || c32_is_within((c), 'a', 'f') || c32_is_within((c), 'A', 'F'))
 #define c32_is_ascii_bin_digit(c) ((c) == '0' || (c) == '1')
@@ -120,7 +118,7 @@ static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
 #define peek(l) ((l)->cp_curr)
 #define peek_next(l) ((l)->cp_next)
 #define is_done(l) (peek(l) == 0)
-static __attribute__((unused)) void consume(lexer_t *self) {
+static NEO_UNUSED void consume(lexer_t *self) {
     neo_dbg_assert(self && self->src && self->needle);
     neo_dbg_assert(neo_bnd_check(self->needle, self->src, self->src_len));
     if (neo_unlikely(is_done(self))) { return; } /* We're done here. */

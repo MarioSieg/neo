@@ -15,6 +15,13 @@ extern "C" {
 #endif
 
 typedef struct {
+    const uint8_t *filename;
+    const uint8_t *src;
+    size_t len;
+} source_t;
+extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
+
+typedef struct {
     size_t src_len;
     const uint8_t *src;
     const uint8_t *needle;

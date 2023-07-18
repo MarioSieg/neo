@@ -410,6 +410,7 @@ extern "C" {
 #   define NEO_COLDPROC __attribute((cold))
 #   define NEO_PACKED __attribute__((packed))
 #   define NEO_FALLTHROUGH __attribute__((fallthrough))
+#   define NEO_UNUSED __attribute__((unused))
 #	define neo_likely(x) __builtin_expect(!!(x), 1)
 #	define neo_unlikely(x) __builtin_expect(!!(x), 0)
 #   if NEO_CPU_AMD64
@@ -488,6 +489,7 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 #   define NEO_COLDPROC
 #   define NEO_PACKED
 #   define NEO_FALLTHROUGH
+#   define NEO_UNUSED
 #	define neo_likely(x) (x)
 #	define neo_unlikely(x) (x)
 #   define neo_unreachable() __assume(0)
@@ -624,6 +626,25 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #   define neo_warn(msg, ...)
 #   define neo_error(msg, ...)
 #endif
+
+/* ---- Memory ---- */
+#ifndef neo_alloc_malloc
+#   define neo_alloc_malloc(size) calloc(1, size)
+#endif
+#ifndef neo_alloc_realloc
+#   define neo_alloc_realloc(blk, size) realloc((blk),(size))
+#endif
+#ifndef neo_dealloc
+#   define neo_dealloc(blk) free(blk)
+#endif
+extern void *neo_defmemalloc(void *blk, size_t len);
+#define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
+
+/* ---- Misc ---- */
+typedef enum { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* append */, NEO_FMODE_BIN /* read */, NEO_FMODE_TXT /* text */ } neo_fmode_t;
+extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
+typedef enum { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } unicode_err_t;
+extern NEO_EXPORT unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 
 #ifdef __cplusplus
 }
