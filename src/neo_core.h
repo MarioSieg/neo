@@ -627,6 +627,10 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #   define neo_error(msg, ...)
 #endif
 
+/* ---- OS interface ---- */
+extern NEO_EXPORT void neo_osi_init(void);
+extern NEO_EXPORT void neo_osi_shutdown(void);
+
 /* ---- Memory ---- */
 #ifndef neo_alloc_malloc
 #   define neo_alloc_malloc(size) calloc(1, size)

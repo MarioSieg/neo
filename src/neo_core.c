@@ -5,6 +5,9 @@
 #if NEO_OS_WINDOWS
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
+#   include <locale.h>
+#   include <fcntl.h>
+#   include <io.h>
 #endif
 
 void neo_assert_impl(const char *expr, const char *file, int line) {
@@ -22,6 +25,16 @@ void neo_panic(const char *msg, ...) {
     fflush(stderr);
     abort();
     neo_unreachable();
+}
+
+void neo_osi_init(void) {
+#if NEO_OS_WINDOWS
+    neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+#endif
+}
+
+void neo_osi_shutdown(void) {
+
 }
 
 void *neo_defmemalloc(void *blk, size_t len) {
@@ -55,15 +68,20 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
     neo_dbg_assert(fp && filepath && mode);
     *fp = NULL;
 #if NEO_OS_WINDOWS
-    int len = MultiByteToWideChar(CP_UTF8, 0, (const char *)filepath, -1, NULL, 0);
+    int len = MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, NULL, 0);
+    if (neo_unlikely(!len)) {
+        return false;
+    }
     bool heap = len >= (1u<<12);
-    wchar_t *wstr = heap ? neo_memalloc(NULL, len*sizeof(*wstr)) : alloca(len*sizeof(*wstr));
-    MultiByteToWideChar(CP_UTF8, 0, (const char *)filepath, -1, wstr, len);
-    wchar_t *modstr = NULL;
-    get_fmodstr(L)
+    WCHAR *wstr = heap ? neo_memalloc(NULL, len*sizeof(*wstr)) : alloca(len*sizeof(*wstr));
+    if (neo_unlikely(!MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, wstr, len))) {
+        return false;
+    }
+    WCHAR *modstr = NULL;
+    get_fmodstr(L);
     errno_t e = _wfopen_s(fp, wstr, modstr);
     if (heap) { neo_memalloc(wstr, 0); }
-    return e == 0 && *fp != NULL;
+    return !e && *fp != NULL;
 #else
     char *modstr = NULL;
     get_fmodstr()

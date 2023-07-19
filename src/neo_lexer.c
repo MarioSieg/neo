@@ -44,7 +44,7 @@ bool source_load(source_t *self, const uint8_t *path) {
     }
     /* Check for BOM and skip it if present */
     uint8_t bom[3];
-    size_t bom_len = fread(bom, 1, 3, f);
+    size_t bom_len = fread(bom, sizeof(*bom),  sizeof(bom), f);
     bool has_bom = false;
     if (bom_len == sizeof(bom) && memcmp(bom, "\xef\xbb\xbf", sizeof(bom)) == 0) {
         has_bom = true; /* BOM found */

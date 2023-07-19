@@ -24,7 +24,7 @@ else ()
 endif ()
 
 if (WIN32)
-    set(COMPILE_OPTIONS /W3 /WX) # basic compile options
+    set(COMPILE_OPTIONS /W3 /WX /utf-8) # basic compile options
 else()
     set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -pedantic -Wpedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers) # basic compile options
     set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -fwrapv) # advanced options
@@ -52,6 +52,11 @@ endif()
 file(GLOB_RECURSE neo_sources src/*.h src/*.c)
 add_library(libneo STATIC ${neo_sources}) # NEO compiler.
 target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
+
+add_executable(neo driver/neo_driver.c)
+target_link_libraries(neo PRIVATE libneo)
+target_compile_options(neo PRIVATE "${COMPILE_OPTIONS}")
+target_include_directories(neo PRIVATE src)
 
 if (${NEO_BUILD_TESTS}) # Requires C++ 20
     set(DOWNLOAD_EXTRACT_TIMESTAMP TRUE)

@@ -57,7 +57,8 @@ TEST(lexer, null_terminated_string) {
 
 TEST(lexer, src_load) {
     source_t src = {0};
-    ASSERT_TRUE(source_load(&src, reinterpret_cast<const std::uint8_t*>(u8"test/files/hallöchen.neo")));
+    const char8_t *path{u8"test/files/hall\u00f6chen.neo"};
+    ASSERT_TRUE(source_load(&src, reinterpret_cast<const std::uint8_t*>(path)));
     const char8_t *expected {u8"\xc3\x84\x70\x66\xe2\x82\xac\x6c\x20\x73\x69\x6e\x64\x20\x6c\x65\x63\x6b\x65\x72\x21"};
     ASSERT_EQ(src.len, std::strlen(reinterpret_cast<const char*>(expected)));
     ASSERT_EQ(std::memcmp(src.src, expected, src.len), 0);
