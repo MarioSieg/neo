@@ -6,22 +6,22 @@
 #include "neo_lexer.c"
 
 TEST(lexer, utf8_seqlen_1) {
-    const char8_t *str {u8"h"};
+    static constexpr  std::uint8_t str[] = {'h'};
     ASSERT_EQ(utf8_seqlen(*str), 1);
 }
 
 TEST(lexer, utf8_seqlen_2) {
-    const char8_t *str {u8"\xc3\xa4"};
+    static constexpr  std::uint8_t str[] = {0xc3, 0xa4}; // So MSVC just shits itself when encoding some Emojis or Unicode characters, so I'll encode them by myself. Thanks MSVC :)
     ASSERT_EQ(utf8_seqlen(*str), 2);
 }
 
 TEST(lexer, utf8_seqlen_3) {
-    const char8_t *str {u8"\u20ac"};
+    static constexpr  std::uint8_t str[] = {0xe2, 0x82, 0xac};
     ASSERT_EQ(utf8_seqlen(*str), 3);
 }
 
 TEST(lexer, utf8_seqlen_4) {
-    const char8_t *str {u8"\xf0\x9f\x98\x80"};
+    static constexpr  std::uint8_t str[] = {0xf0,0x9f,0x98,0x80};
     ASSERT_EQ(utf8_seqlen(*str), 4);
 }
 
@@ -57,9 +57,15 @@ TEST(lexer, null_terminated_string) {
 
 TEST(lexer, src_load) {
     source_t src = {0};
-    const char8_t *path{u8"test/files/hall\u00f6chen.neo"};
-    ASSERT_TRUE(source_load(&src, reinterpret_cast<const std::uint8_t*>(path)));
-    const char8_t *expected {u8"\xc3\x84\x70\x66\xe2\x82\xac\x6c\x20\x73\x69\x6e\x64\x20\x6c\x65\x63\x6b\x65\x72\x21"};
-    ASSERT_EQ(src.len, std::strlen(reinterpret_cast<const char*>(expected)));
+    static constexpr std::uint8_t path[] = {
+        0x74,0x65,0x73,0x74,0x2f,0x66,0x69,0x6c,0x65,0x73,0x2f,0x68,0x61,0x6c,
+        0x6c,0xc3,0xb6,0x63,0x68,0x65,0x6e,0x2e,0x6e,0x65,0x6f
+    };
+    ASSERT_TRUE(source_load(&src, path));
+    std::uint8_t expected[] = {
+        0xc3,0x84,0x70,0x66,0xe2,0x82,0xac,0x6c,0x20,0x73,0x69,0x6e,0x64,
+        0x20,0x6c,0x65,0x63,0x6b,0x65,0x72,0x21, '\n', '&'
+    };;
+    ASSERT_EQ(src.len, sizeof(expected)/sizeof(*expected));
     ASSERT_EQ(std::memcmp(src.src, expected, src.len), 0);
 }

@@ -15,9 +15,9 @@ extern "C" {
 #endif
 
 typedef struct {
-    const uint8_t *filename;
-    const uint8_t *src;
-    size_t len;
+    const uint8_t *filename; /* Encoded in UTF-8 and terminated. */
+    const uint8_t *src; /* Encoded in UTF-8 and terminated. */
+    size_t len; /* In bytes. */
 } source_t;
 extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
 
