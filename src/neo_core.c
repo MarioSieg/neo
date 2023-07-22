@@ -77,13 +77,13 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
     if (neo_unlikely(!MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, wstr, len))) {
         return false;
     }
-    WCHAR *modstr = NULL;
+    const WCHAR *modstr = NULL;
     get_fmodstr(L);
     errno_t e = _wfopen_s(fp, wstr, modstr);
     if (heap) { neo_memalloc(wstr, 0); }
     return !e && *fp != NULL;
 #else
-    char *modstr = NULL;
+    const char *modstr = NULL;
     get_fmodstr()
     return (*fp = fopen((const char *)filepath, modstr)) != NULL;
 #endif

@@ -3,7 +3,7 @@
 #include "neo_lexer.h"
 #include "neo_core.h"
 
-static unsigned utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
     else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
@@ -13,7 +13,7 @@ static unsigned utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF
 
 static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
-    unsigned len = utf8_seqlen(cp);
+    uint32_t len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 0x7f; } /* ASCII and most common case. */
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
