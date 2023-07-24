@@ -578,28 +578,23 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 #endif
 
 /* ---- Misc ---- */
-
-#ifndef neo_rol
+#if !defined(neo_rol) || !defined(neo_ror)
 #	define neo_rol(x, n) (((x)<<(n))|((x)>>(-(int)(n)&((sizeof(x)<<3)-1))))
-#endif
-#ifndef neo_ror
 #	define neo_ror(x, n) (((x)<<(-(int)(n)&((sizeof(x)<<3)-1)))|((x)>>(n)))
 #endif
-
+#define neo_bnd_check(p, o, l) neo_likely(((uintptr_t)(p)>=(uintptr_t)(o)) && ((uintptr_t)(p)<((uintptr_t)(o)+(l))))
 #define neo_assert_name2(name, line) name ## line
 #define neo_assert_name(line) neo_assert_name2(_assert_, line)
 #define neo_static_assert(expr) extern void neo_assert_name(__LINE__)(bool STATIC_ASSERTION_FAILED[((expr)?1:-1)])
-static NEO_AINLINE bool neo_bnd_check(const void *p, const void *o, size_t l) {
-    return neo_likely(((uintptr_t)p >= (uintptr_t)o) && ((uintptr_t)p < ((uintptr_t)o + l)));
-}
 extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
 extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, const char *file, int line);
+#define NEO_SEP ,
 
-#define neo_assert(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* assert for debug and release builds */
+#define neo_as(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* Assert for debug and release builds. */
 #if NEO_DBG
-#   define neo_dbg_assert(ex) neo_assert(ex) /* assert for debug only builds */
+#   define neo_asd(ex) neo_as(ex) /* Assert for debug only builds. */
 #else
-#   define neo_dbg_assert(ex) (void)0 /* assert for debug only builds */
+#   define neo_asd(ex) /* Assert for debug only builds. */
 #endif
 
 /* ---- Logging ---- */

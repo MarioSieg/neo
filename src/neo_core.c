@@ -29,7 +29,7 @@ void neo_panic(const char *msg, ...) {
 
 void neo_osi_init(void) {
 #if NEO_OS_WINDOWS
-    neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+    neo_as(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
 #endif
 }
 
@@ -43,11 +43,11 @@ void *neo_defmemalloc(void *blk, size_t len) {
         return NULL;
     } else if(neo_likely(!blk)) {  /* allocation */
         blk = neo_alloc_malloc(len);
-        neo_assert(blk && "allocation failed");
+        neo_as(blk && "allocation failed");
         return blk;
     } else { /* reallocation */
         void *newblock = neo_alloc_realloc(blk, len);
-        neo_assert(newblock && "reallocation failed");
+        neo_as(newblock && "reallocation failed");
         return newblock;
     }
 }
@@ -65,7 +65,7 @@ void *neo_defmemalloc(void *blk, size_t len) {
     else { neo_panic("Invalid file mode: %d", mode); }
 
 bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
-    neo_dbg_assert(fp && filepath && mode);
+    neo_asd(fp && filepath && mode);
     *fp = NULL;
 #if NEO_OS_WINDOWS
     int len = MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, NULL, 0);
@@ -92,7 +92,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 #undef get_fmodstr
 
 unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
-    neo_dbg_assert(buf && ppos);
+    neo_asd(buf && ppos);
     size_t pos = 0;
     uint32_t cp;
     while (pos < len) {
