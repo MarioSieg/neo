@@ -5,11 +5,131 @@
 
 #include "neo_lexer.c"
 
+TEST(lexer, complex_statement) {
+    source_t src {};
+    src.src = reinterpret_cast<const std::uint8_t*>("let x=0x22&129>>>=x\nnew Class()\nlet #*lol*# y class == 23.3%x\n#hello");
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
+    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
+
+    lexer_t lexer;
+    lexer_init(&lexer);
+
+    lexer_set_src(&lexer, &src);
+    token_t *tok, *t;
+    size_t len = lexer_drain(&lexer, &tok);
+    t = tok;
+    ASSERT_EQ(len, 22);
+
+    ASSERT_EQ(tok->type, TOK_KW_LET);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("let")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 1);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_LI_IDENT);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("x")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 5);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_OP_ASSIGN);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("=")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 6);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_LI_INT);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("22")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 7);
+    ASSERT_EQ(tok->radix, RADIX_HEX);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_OP_BIT_AND);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("&")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 11);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_LI_INT);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("129")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 12);
+    ASSERT_EQ(tok->radix, RADIX_DEC);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_OP_BIT_LSHR_ASSIGN);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from(">>>=")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 15);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_LI_IDENT);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("x")));
+    ASSERT_EQ(tok->line, 1);
+    ASSERT_EQ(tok->col, 19);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let x=0x22&129>>>=x")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_PU_NEWLINE);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("\n")));
+    ASSERT_EQ(tok->line, 2);
+    ASSERT_EQ(tok->col, 0);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("new Class()")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_KW_NEW);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("new")));
+    ASSERT_EQ(tok->line, 2);
+    ASSERT_EQ(tok->col, 1);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("new Class()")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_LI_IDENT);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("Class")));
+    ASSERT_EQ(tok->line, 2);
+    ASSERT_EQ(tok->col, 5);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("new Class()")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_PU_L_PAREN);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("(")));
+    ASSERT_EQ(tok->line, 2);
+    ASSERT_EQ(tok->col, 10);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("new Class()")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_PU_R_PAREN);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from(")")));
+    ASSERT_EQ(tok->line, 2);
+    ASSERT_EQ(tok->col, 11);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("new Class()")));
+    ++tok;
+
+    ASSERT_EQ(tok->type, TOK_PU_NEWLINE);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("\n")));
+    ASSERT_EQ(tok->line, 3);
+    ASSERT_EQ(tok->col, 0);
+    ASSERT_TRUE(srcspan_eq(tok->lexeme_line, srcspan_from("let #*lol*# y class == 23.3%x")));
+    ++tok;
+
+    ASSERT_TRUE(is_done(&lexer));
+    neo_memalloc(t, 0);
+    lexer_free(&lexer);
+}
+
 #define generic_lexer_test(name, symbol, tokt)\
 TEST(lexer, tok_##name) {\
     source_t src {};\
     src.src = reinterpret_cast<const std::uint8_t*>(symbol);\
-    src.len = strlen(reinterpret_cast<const char*>(src.src));\
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));\
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");\
     \
     lexer_t lexer;\
@@ -99,6 +219,7 @@ generic_lexer_test(bit_complo, "~", TOK_OP_BIT_COMPL)
 generic_lexer_test(log_and, "and", TOK_OP_LOG_AND)
 generic_lexer_test(log_or, "or", TOK_OP_LOG_OR)
 generic_lexer_test(log_not, "not", TOK_OP_LOG_NOT)
+generic_lexer_test(me_eof, "", TOK_ME_EOF)
 
 TEST(lexer, identifier_literal) {
     static constexpr std::uint8_t bytes[] = {
@@ -107,7 +228,7 @@ TEST(lexer, identifier_literal) {
 
     source_t src {};
     src.src = bytes;
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -128,7 +249,7 @@ TEST(lexer, identifier_literal) {
 TEST(lexer, float_literal) {
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>("30.123456789");
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -150,7 +271,7 @@ TEST(lexer, float_literal) {
 TEST(lexer, int_literal_dec) {
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>("01234567890_100111");
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -172,7 +293,7 @@ TEST(lexer, int_literal_dec) {
 TEST(lexer, int_literal_hex) {
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>("0x123_45678_90abcdefA_BCDEF");
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -194,7 +315,7 @@ TEST(lexer, int_literal_hex) {
 TEST(lexer, int_literal_bin) {
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>("0b111_1010");
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -216,7 +337,7 @@ TEST(lexer, int_literal_bin) {
 TEST(lexer, int_literal_octal) {
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>("0o01234567");
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;
@@ -240,7 +361,7 @@ TEST(lexer, consume_whitespace) {
 
     source_t src {};
     src.src = reinterpret_cast<const std::uint8_t*>(srcstr);
-    src.len = strlen(reinterpret_cast<const char*>(src.src));
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
     lexer_t lexer;

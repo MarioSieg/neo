@@ -42,7 +42,8 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_LI_IDENT, "<ident>")__\
     _(TOK_LI_INT, "<int>")__\
     _(TOK_LI_FLOAT, "<float>")__\
-    _(TOK_LI_STRING, "<string>")__\
+    _(TOK_LI_STRING, "<string>")__  \
+    _(TOK_LI_CHAR, "<char>")__\
     _(TOK_LI_TRUE, "true")__\
     _(TOK_LI_FALSE, "false")__\
     /* Punctuation */\
@@ -122,6 +123,8 @@ typedef struct srcspan_t {
     const uint8_t *p;
     uint32_t len;
 } srcspan_t;
+#define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
+#define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
@@ -133,12 +136,13 @@ typedef enum radix_t {
 typedef struct token_t {
     toktype_t type : 8;
     radix_t radix : 8; /* Only used if type == TOK_LI_INT */
-    uint32_t col;
-    uint32_t line;
+    uint32_t line; /* Line number of the start of the token. 1-based. */
+    uint32_t col; /* Column number of the start of the token. 1-based. */
     srcspan_t lexeme;
     srcspan_t lexeme_line;
     const uint8_t *file;
 } token_t;
+extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
 
 typedef struct lexer_t {
     source_t src_dat;
@@ -146,6 +150,7 @@ typedef struct lexer_t {
     const uint8_t *needle;
     const uint8_t *tok_start;
     const uint8_t *line_start;
+    const uint8_t *line_end;
     uint32_t cp_curr;
     uint32_t cp_next;
     uint32_t line;
@@ -158,6 +163,7 @@ extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 extern NEO_EXPORT NEO_COLDPROC void lexer_init(lexer_t *self);
 extern NEO_EXPORT NEO_COLDPROC void lexer_set_src(lexer_t *self, const source_t *src);
 extern NEO_EXPORT NEO_HOTPROC token_t lexer_scan_next(lexer_t *self);
+extern NEO_EXPORT NEO_COLDPROC size_t lexer_drain(lexer_t *self, token_t **tok);
 extern NEO_EXPORT NEO_COLDPROC void lexer_free(lexer_t *self);
 
 #ifdef __cplusplus

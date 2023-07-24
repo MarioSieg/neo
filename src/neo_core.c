@@ -38,10 +38,10 @@ void neo_osi_shutdown(void) {
 }
 
 void *neo_defmemalloc(void *blk, size_t len) {
-    if (neo_unlikely(!len)) { /* deallocation */
+    if (!len) { /* deallocation */
         neo_dealloc(blk);
         return NULL;
-    } else if(neo_likely(!blk)) {  /* allocation */
+    } else if(!blk) {  /* allocation */
         blk = neo_alloc_malloc(len);
         neo_as(blk && "allocation failed");
         return blk;
