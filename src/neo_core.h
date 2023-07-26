@@ -406,8 +406,8 @@ extern "C" {
 #	define NEO_ALIGN(x) __attribute__((aligned(x)))
 #	define NEO_AINLINE inline __attribute__((always_inline))
 #	define NEO_NOINLINE __attribute__((noinline))
-#   define NEO_HOTPROC __attribute((hot))
-#   define NEO_COLDPROC __attribute((cold))
+#   define NEO_HOTPROC __attribute__((hot))
+#   define NEO_COLDPROC __attribute__((cold))
 #   define NEO_PACKED __attribute__((packed))
 #   define NEO_FALLTHROUGH __attribute__((fallthrough))
 #   define NEO_UNUSED __attribute__((unused))
@@ -639,7 +639,38 @@ extern NEO_EXPORT void neo_osi_shutdown(void);
 extern void *neo_defmemalloc(void *blk, size_t len);
 #define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
 
+/* ---- Types ---- */
+
+typedef int64_t neo_int_t;
+typedef double neo_float_t;
+typedef uint32_t neo_char_t;
+typedef uint8_t neo_bool_t;
+
+typedef uint64_t neo_uint_t; /* Unsigned equivalent of neo_int_t, but no Neo builtin type */
+
+neo_static_assert(sizeof(neo_int_t) == 8);
+neo_static_assert(sizeof(neo_uint_t) == sizeof(neo_int_t));
+neo_static_assert(sizeof(neo_float_t) == 8);
+neo_static_assert(sizeof(neo_char_t) == 4);
+neo_static_assert(sizeof(neo_bool_t) == 1);
+neo_static_assert(-1 == ~0); /* Check for 2's complement integers */
+
+#define NEO_INT_C(x) INT64_C(x)
+#define NEO_UINT_C(x) UINT64_C(x)
+#define NEO_INT_MAX INT64_MAX
+#define NEO_INT_MIN INT64_MIN
+#define NEO_FLOAT_MAX DBL_MAX
+#define NEO_FLOAT_MIN DBL_MIN
+#define NEO_CHAR_MAX UINT32_MAX
+#define NEO_CHAR_MIN 0
+#define NEO_TRUE 1	/* Only for Neo's builtin neo_bool_t type. For regular C code use bool and true/false from stdbool.h! */
+#define NEO_FALSE 0 /* Only for Neo's builtin neo_bool_t type. For regular C code use bool and true/false from stdbool.h! */
+
+neo_static_assert(NEO_INT_MAX == INT64_MAX && NEO_INT_MAX > 0);
+neo_static_assert(NEO_INT_MIN == INT64_MIN && NEO_INT_MIN < 0);
+
 /* ---- Misc ---- */
+
 typedef enum { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* append */, NEO_FMODE_BIN /* read */, NEO_FMODE_TXT /* text */ } neo_fmode_t;
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
 typedef enum { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } unicode_err_t;
