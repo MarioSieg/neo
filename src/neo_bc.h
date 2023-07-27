@@ -45,23 +45,23 @@ extern "C" {
 **
 */
 
-#define opdef(_, __)\
-    _(OPC_HLT, "hlt")/* Halt VM execution. */__ \
-    _(OPC_NOP, "nop")/* NO-Operation. */__\
-    _(OPC_IPUSH, "ipush")/* Push 24-bit int value. */__\
-    _(OPC_IPUSH0, "ipush0")/* Push int value 0. */__\
-    _(OPC_IPUSH1, "ipush1")/* Push int value 1. */__\
-    _(OPC_IPUSH2, "ipush2")/* Push int value 2. */__\
-    _(OPC_IPUSHM1, "ipushm1")/* Push int value -1. */__\
-    _(OPC_FPUSH0, "fpush0")/* Push float value 0.0. */__\
-    _(OPC_FPUSH1, "fpush1")/* Push float value 1.0. */__\
-    _(OPC_FPUSH2, "fpush2")/* Push float value 2.0. */__\
-    _(OPC_FPUSH05, "fpush05")/* Push float value 0.5. */__\
-    _(OPC_FPUSHM1, "fpushm1")/* Push float value -1.0. */__ \
-    _(OPC_POP, "pop")/* Pop one stack record. */__\
-    _(OPC_LDC, "ldc")/* Load constant from constant pool. */
+#define opdef(_, __) /* Enum | Mnemonic | Stack-Depth | HasImmediate */\
+    _(OPC_HLT, "hlt", 0, false)/* Halt VM execution. */__ \
+    _(OPC_NOP, "nop", 0, false)/* NO-Operation. */__\
+    _(OPC_IPUSH, "ipush", 1, true)/* Push 24-bit int value. */__\
+    _(OPC_IPUSH0, "ipush0", 1, false)/* Push int value 0. */__\
+    _(OPC_IPUSH1, "ipush1", 1, false)/* Push int value 1. */__\
+    _(OPC_IPUSH2, "ipush2", 1, false)/* Push int value 2. */__\
+    _(OPC_IPUSHM1, "ipushm1", 1, false)/* Push int value -1. */__\
+    _(OPC_FPUSH0, "fpush0", 1, false)/* Push float value 0.0. */__\
+    _(OPC_FPUSH1, "fpush1", 1, false)/* Push float value 1.0. */__\
+    _(OPC_FPUSH2, "fpush2", 1, false)/* Push float value 2.0. */__\
+    _(OPC_FPUSH05, "fpush05", 1, false)/* Push float value 0.5. */__\
+    _(OPC_FPUSHM1, "fpushm1", 1, false)/* Push float value -1.0. */__ \
+    _(OPC_POP, "pop", -1, false)/* Pop one stack record. */__\
+    _(OPC_LDC, "ldc", 1, true)/* Load constant from constant pool. */
 
-#define _(_1, _2) _1
+#define _(_1, _2, _3, _4) _1
 typedef enum {
     opdef(_, NEO_SEP),
     OPC__COUNT,
@@ -69,6 +69,9 @@ typedef enum {
 } opcode_t;
 #undef _
 neo_static_assert(OPC__COUNT <= OPC__MAX);
+extern NEO_EXPORT const char *const opc_mnemonic[OPC__COUNT];
+extern NEO_EXPORT const int8_t opc_depth[OPC__COUNT];
+extern NEO_EXPORT const bool opc_imm[OPC__COUNT];
 
 /* General instruction en/decoding (applies to mode 1 and 2) */
 typedef uint32_t bci_instr_t;
@@ -80,11 +83,15 @@ typedef uint32_t bci_instr_t;
 #define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
 #define bci_unpackmod(i) (((i)&128)>>7)
 #define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
-#define bci_switchmod(i) ((bci_instr_t)(((i)^128)&~0xffffff00u))
+#define bci_switchmod(i) ((bci_instr_t)(((i)^128)&255))
+
+extern NEO_EXPORT bool bci_validate_instr(bci_instr_t instr);
+extern NEO_EXPORT void bci_dump_instr(bci_instr_t instr, FILE *out);
 
 /* Mode 1 macros. */
 #define BCI_MOD1IMM24MAX 0x007fffff
 #define BCI_MOD1IMM24MIN 0x00800000
+#define BCI_MOD1IMM24UNUSED 0x00ffffffu /* If imm24 is unused value must be set to BCI_MOD1IMM24UNUSED. */
 #define BCI_MOD1IMM24BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
 #define bci_mod1unpack_imm24(i) ((int32_t)(((i)>>8)&0x00ffffffu))
@@ -95,7 +102,8 @@ typedef uint32_t bci_instr_t;
 /* NYI */
 
 /* Instruction composition. */
-#define bci_comp_mod1(opc, imm24) ((bci_instr_t)(((opc)&127)|(1<<7)|(((imm24)&0x00ffffffu)<<8)))
+#define bci_comp_mod1(opc, imm24) ((bci_instr_t)(((opc)&127)|(((imm24)&0x00ffffffu)<<8)))
+#define bci_comp_mod1_noimm(opc) bci_comp_mod1(opc, BCI_MOD1IMM24UNUSED) /* Use this if the instruction does not use the immediate value. */
 
 #ifdef __cplusplus
 }

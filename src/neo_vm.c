@@ -2,6 +2,39 @@
 
 #include "neo_vm.h"
 
+bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode) {
+    neo_as(isolate && bcode);
+    const bci_instr_t *code = bcode->p;
+    size_t len = bcode->len;
+    if (neo_unlikely(!code || !len)) {
+        neo_error("invalid code pointer or length: %zu", len);
+        return false;
+    }
+    if (neo_unlikely(bci_unpackopc(code[0]) != OPC_NOP)) {
+        neo_error("first instruction must be NOP, but instead is: %s", opc_mnemonic[bci_unpackopc(code[0])]);
+        return false;
+    }
+    if (neo_unlikely(bci_unpackopc(code[len-1]) != OPC_HLT)) {
+        neo_error("last instruction must be HLT, but instead is: %s", opc_mnemonic[bci_unpackopc(code[len-1])]);
+        return false;
+    }
+    for (size_t i = 0; i < len; ++i) { /* Validate the encoding of all instructions. */
+        if (neo_unlikely(!bci_validate_instr(code[i]))) {
+            neo_error("invalid instruction at index: %zu", i);
+            return false;
+        }
+        opcode_t opc = bci_unpackopc(code[i]);
+        if (neo_unlikely(opc == OPC_LDC)) { /* Specific instruction validation. */
+            int32_t imm24 = bci_mod1unpack_imm24(code[i]);
+            if (neo_unlikely(imm24 < 0 || (size_t)imm24 >= isolate->constpool.len)) {
+                neo_error("invalid constant pool index: %" PRIi32, imm24);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 #define NEO_VM_COMPUTED_GOTO
 #ifdef NEO_VM_COMPUTED_GOTO
 #   define decl_op(name) __##name##__:
@@ -39,16 +72,19 @@
     stk_check_uv(n)\
     sp -= (n)
 
-bool NEO_HOTPROC vm_exec(vmisolate_t *isolate, register const bci_instr_t *restrict ip, size_t len) {
-    neo_as(isolate && ip && len && isolate->stack.len);
-    neo_as(bci_unpackopc(ip[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
-    neo_as(bci_unpackopc(ip[len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
+bool NEO_HOTPROC vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
+    neo_as(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
+    neo_as(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
+    neo_as(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
 
-    const uintptr_t ipb = (uintptr_t)ip; /* Instruction pointer backup for delta computation. */
+    const uintptr_t ipb = (uintptr_t)bcode->p; /* Instruction pointer backup for delta computation. */
     const uintptr_t spb = (uintptr_t)isolate->stack.p; /* Stack pointer backup for delta computation. */
+
+    register const bci_instr_t *restrict ip = bcode->p; /* Current instruction pointer. */
     register const uintptr_t sps = (uintptr_t)isolate->stack.p+sizeof(*isolate->stack.p); /* Start of stack. +1 for padding. */
     register const uintptr_t spe = (uintptr_t)(isolate->stack.p+isolate->stack.len)-sizeof(*isolate->stack.p); /* End of stack (last element). */
     register record_t *restrict sp = isolate->stack.p; /* Current stack pointer. */
+    register const record_t *restrict cp = isolate->constpool.p; /* Constant pool pointer. */
     register vminterrupt_t vif = VMINT_OK; /* VM interrupt flag. */
 
     sp->as_uint = STK_PADD_MAGIC;
@@ -127,7 +163,7 @@ bool NEO_HOTPROC vm_exec(vmisolate_t *isolate, register const bci_instr_t *restr
         dispatch()
 
         decl_op(LDC) /* Load constant from constant pool. */
-            pop(1);
+            push(int, cp[bci_mod1unpack_imm24(*ip)].as_int);
         dispatch()
 
 #ifndef NEO_VM_COMPUTED_GOTO /* To suppress enumeration value ‘OPC__**’ not handled in switch [-Werror=switch]. */
