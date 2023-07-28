@@ -402,6 +402,7 @@ extern "C" {
 
 #if NEO_COM_GCC || NEO_COM_CLANG
 #   define NEO_EXPORT __attribute__((visibility("default")))
+#   define NEO_NODISCARD __attribute__((warn_unused_result))
 #	define NEO_NORET __attribute__((noreturn))
 #	define NEO_ALIGN(x) __attribute__((aligned(x)))
 #	define NEO_AINLINE inline __attribute__((always_inline))
@@ -481,6 +482,7 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 #elif defined(_MSC_VER)
 #	include <intrin.h>
 #   define NEO_EXPORT __declspec(dllexport)
+#   define NEO_NODISCARD _Check_return_
 #	define NEO_NORET __declspec(noreturn)
 #	define NEO_ALIGN(x)	__declspec(align(x))
 #	define NEO_AINLINE __forceinline

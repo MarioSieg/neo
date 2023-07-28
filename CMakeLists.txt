@@ -26,7 +26,7 @@ endif ()
 if (WIN32)
     set(COMPILE_OPTIONS /W3 /WX /utf-8) # basic compile options
 else()
-    set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -Wno-pedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers) # basic compile options
+    set(COMPILE_OPTIONS -Werror -std=gnu99 -Wall -Wextra -Wno-pedantic -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -Wno-error=type-limits) # basic compile options
     set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -fwrapv) # advanced options
     if (${IS_RELEASE})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -O3 -fvisibility=hidden -fomit-frame-pointer) # advanced options
