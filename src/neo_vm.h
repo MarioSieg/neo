@@ -10,8 +10,10 @@
 extern "C" {
 #endif
 
-extern NEO_EXPORT NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_EXPORT NEO_NODISCARD neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k); /* Unsigned r = x ^ k. o overflow checks. */
 extern NEO_EXPORT NEO_NODISCARD neo_int_t vmop_ipow64_no_ov(neo_int_t x, neo_int_t k); /* Signed r = x ^ k. No overflow checks. */
+extern NEO_EXPORT NEO_NODISCARD bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_EXPORT NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
 
 typedef NEO_ALIGN(8) union record_t {
     neo_int_t as_int;

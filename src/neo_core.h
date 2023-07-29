@@ -429,8 +429,11 @@ static NEO_AINLINE int neo_bsr32(uint32_t x) {
 }
 #   define neo_bswap32(x) __builtin_bswap32(x)
 #   define neo_bswap64(x) __builtin_bswap64(x)
-#	define neo_rol(x, n) __builtin_rotl(x,n)
-#	define neo_ror(x, n) __builtin_rotr(x,n)
+#	if NEO_CPU_AMD64
+#	include <x86intrin.h>
+#	define neo_rol(x, n) __rolq(x,n)
+#	define neo_ror(x, n) __rorq(x,n)
+#endif
 typedef enum
 {
     NEO_MEMORD_RELX = __ATOMIC_RELAXED,

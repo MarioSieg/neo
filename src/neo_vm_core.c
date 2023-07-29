@@ -63,78 +63,82 @@ neo_static_assert(sizeof(long) == sizeof(neo_int_t));
 #define u64_mul_overflow(x, y, r) __builtin_umull_overflow((x), (y), (r))
 #endif
 
-bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by squaring. */
-    neo_asd(r);
-    if (neo_unlikely(k == 0)) {
-        *r = 1; return false;
-    } else if (neo_unlikely(k < 0)) {
-        if (neo_unlikely(x == 0)) {
-            *r = NEO_UINT_C(0x7fffffffffffffff); return false;
-        } else if (x == 1) {
-            *r = 1; return false;
-        } else if (x == -1) {
-            *r = k & 1 ? -1 : 1; return false;
-        } else {
-            *r = 0; return false;
+neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k) {
+    neo_uint_t y;
+    if (neo_unlikely(k == 0)) { return 1; }
+    for (; (k & 1) == 0; k >>= 1) { x *= x; }
+    y = x;
+    if ((k >>= 1) != 0) {
+        for (;;) {
+            x *= x;
+            if (k == 1) { break; }
+            if (k & 1) { y *= x; }
+            k >>= 1;
         }
-    } else {
-        if (neo_unlikely(k == 0)) { *r = 1; return false; }
-        for (; (k & 1) == 0; k >>= 1) {
-            if (neo_unlikely(i64_mul_overflow(x, x, &x))) {
-                *r = 0;
-                return true; /* Overflow happened. */
-            }
-        }
-        int64_t y = x;
-        if ((k >>= 1) != 0) {
-            for (;;) {
-                if (neo_unlikely(i64_mul_overflow(x, x, &x))) {
-                    *r = 0;
-                    return true; /* Overflow happened. */
-                }
-                if (k == 1) { break; }
-                else if (k & 1) {
-                    if (neo_unlikely(i64_mul_overflow(y, x, &y))) {
-                        *r = 0;
-                        return true; /* Overflow happened. */
-                    }
-                }
-                k >>= 1;
-            }
-            if (neo_unlikely(i64_mul_overflow(y, x, &y))) {
-                *r = 0;
-                return true; /* Overflow happened. */
-            }
-        }
-        *r = y;
-        return false;
+        y *= x;
     }
+    return y;
 }
 
 neo_int_t vmop_ipow64_no_ov(register neo_int_t x, register neo_int_t k) {
     if (neo_unlikely(k == 0)) { return 1; }
     else if (neo_unlikely(k < 0)) {
-        if (x == 0) { return NEO_UINT_C(0x7fffffffffffffff); }
+        if (x == 0) { return NEO_INT_MAX; }
         else if (x == 1) { return 1; }
         else if (x == -1) { return k & 1 ? -1 : 1; }
         else { return 0; }
-    } else {
-        if (neo_unlikely(k == 0)) { return 1; }
-        for (; (k & 1) == 0; k >>= 1) { x *= x; }
-        register int64_t r = x;
-        if ((k >>= 1) != 0) {
-            for (;;) {
-                x *= x;
-                if (k == 1) { break; }
-                if (k & 1) { r *= x; }
-                k >>= 1;
-            }
-            r *= x;
-        }
-        return r;
-    }
+    } else { return (neo_int_t)vmop_upow64_no_ov((neo_uint_t)x, (neo_uint_t)k); }
 }
 
+#define imulov(x, y, rr) if (neo_unlikely(i64_mul_overflow((x), (y), (rr)))) { *r = 0; return true; /* Overflow happened. */ }
+#define umulov(x, y, rr) if (neo_unlikely(u64_mul_overflow((x), (y), (rr)))) { *r = 0; return true; /* Overflow happened. */ }
+
+bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
+    neo_asd(r);
+    neo_uint_t y;
+    if (neo_unlikely(k == 0)) { return 1; }
+    for (; (k & 1) == 0; k >>= 1) { umulov(x, x, &x) }
+    y = x;
+    if ((k >>= 1) != 0) {
+        for (;;) {
+            umulov(x, x, &x)
+            if (k == 1) { break; }
+            if (k & 1) { umulov(y, x, &y) }
+            k >>= 1;
+        }
+        umulov(y, x, &y)
+    }
+    *r = y;
+    return false;
+}
+bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by squaring. */
+    neo_asd(r);
+    if (neo_unlikely(k == 0)) { *r = 1; return false; }
+    else if (neo_unlikely(k < 0)) {
+        switch (x) {
+            case 0: *r = NEO_INT_MAX; return false;
+            case 1: *r = 1; return false;
+            case -1: *r = k & 1 ? -1 : 1; return false;
+            default: *r = 0; return false;
+        }
+    } else {
+        for (; (k & 1) == 0; k >>= 1) { imulov(x, x, &x) }
+        neo_int_t y = x;
+        if ((k >>= 1) != 0) {
+            for (;;) {
+                imulov(x, x, &x)
+                if (k == 1) { break; }
+                if (k & 1) { imulov(y, x, &y) }
+                k >>= 1;
+            }
+            imulov(y, x, &y)
+        }
+        *r = y;
+        return false;
+    }
+}
+#undef imulov
+#undef umulov
 #define i64_pow_overflow(...) vmop_ipow64(__VA_ARGS__)
 
 #define bin_int_op(op)\
@@ -152,12 +156,15 @@ neo_int_t vmop_ipow64_no_ov(register neo_int_t x, register neo_int_t k) {
     }\
     pop(1)
 
-#define zerochecked_bin_int_op(op) \
-    if (neo_unlikely(peek(0)->as_int == 0)) {/* Check if we would divide by zero. */\
-        vif = VMINT_DIV_BY_ZERO;/* Zero division would happen. */\
+#define z_op(op, ev)\
+    if (neo_unlikely(peek(0)->as_int == 0)) { /* Check for zero divison. */\
+        vif = VMINT_ARI_ZERODIV;\
         goto exit;\
-    }\
-    bin_int_op(op)
+    } else if (neo_unlikely(peek(-1)->as_int == NEO_INT_MIN && peek(0)->as_int == -1)) { /* Check for overflow. */\
+        peek(-1)->as_int = (ev);\
+    } else {\
+        bin_int_op(op);\
+    }
 
 NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
     neo_as(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
@@ -196,10 +203,20 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
         label_ref(ISUB),
         label_ref(IMUL),
         label_ref(IPOW),
-        label_ref(IADD_NOV),
-        label_ref(ISUB_NOV),
-        label_ref(IMUL_NOV),
-        label_ref(IPOW_NOV),
+        label_ref(IADDO),
+        label_ref(ISUBO),
+        label_ref(IMULO),
+        label_ref(IPOWO),
+        label_ref(IDIV),
+        label_ref(IMOD),
+        label_ref(IAND),
+        label_ref(IOR),
+        label_ref(IXOR),
+        label_ref(ISAL),
+        label_ref(ISAR),
+        label_ref(ISLR),
+        label_ref(IROL),
+        label_ref(IROR)
     };
 #endif
 
@@ -277,25 +294,69 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
         ovchecked_bin_int_op(pow);
     dispatch()
 
-    decl_op(IADD_NOV) /* Integer addition with overflow check. */
+    decl_op(IADDO) /* Integer addition without overflow check. */
         bin_int_op(+);
     dispatch()
 
-    decl_op(ISUB_NOV) /* Integer subtraction with overflow check. */
+    decl_op(ISUBO) /* Integer subtraction without overflow check. */
         bin_int_op(-);
     dispatch()
 
-    decl_op(IMUL_NOV) /* Integer multiplication with overflow check. */
+    decl_op(IMULO) /* Integer multiplication without overflow check. */
         bin_int_op(*);
     dispatch()
 
-    decl_op(IPOW_NOV) /* Integer exponentiation with overflow check. */
+    decl_op(IPOWO) /* Integer exponentiation without overflow check. */
         bin_int_op_call(vmop_ipow64_no_ov);
+    dispatch()
+
+    decl_op(IDIV) /* Integer division. */
+        z_op(/, NEO_INT_MIN);
+    dispatch()
+
+    decl_op(IMOD) /* Integer modulo. */
+        z_op(%, 0);
+    dispatch()
+
+    decl_op(IAND) /* Integer bitwise conjunction (AND). */
+        bin_int_op(&);
+    dispatch()
+
+    decl_op(IOR) /* Integer bitwise disjunction (OR). */
+        bin_int_op(|);
+    dispatch()
+
+    decl_op(IXOR) /* Integer bitwise exclusive disjunction (XOR). */
+        bin_int_op(^);
+    dispatch()
+
+    decl_op(ISAL) /* Integer bitwise arithmetic left shift. */
+        peek(-1)->as_int = peek(-1)->as_int << (peek(0)->as_uint&63);
+        pop(1);
+    dispatch()
+
+    decl_op(ISAR) /* Integer bitwise arithmetic right shift. */
+        peek(-1)->as_int = peek(-1)->as_int >> (peek(0)->as_uint&63);
+        pop(1);
+    dispatch()
+
+    decl_op(ISLR) /* Integer bitwise logical right shift. */
+        peek(-1)->as_int = (neo_int_t)((neo_uint_t)peek(-1)->as_int >> peek(0)->as_uint&63);
+        pop(1);
+    dispatch()
+
+    decl_op(IROL) /* Integer bitwise arithmetic left rotation. */
+        peek(-1)->as_int = (neo_int_t)neo_rol((neo_uint_t)peek(-1)->as_int, peek(0)->as_uint&63);
+    pop(1);
+    dispatch()
+
+    decl_op(IROR) /* Integer bitwise arithmetic right rotation. */
+        peek(-1)->as_int = (neo_int_t)neo_ror((neo_uint_t)peek(-1)->as_int, peek(0)->as_uint&63);
     dispatch()
 
 #ifndef NEO_VM_COMPUTED_GOTO /* To suppress enumeration value ‘OPC__**’ not handled in switch [-Werror=switch]. */
     case OPC__COUNT:
-        case OPC__MAX: break;
+    case OPC__MAX: break;
 #endif
 
     zone_exit()

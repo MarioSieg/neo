@@ -3,6 +3,636 @@
 #include <gtest/gtest.h>
 #include <neo_vm.h>
 
+TEST(vm_exec, iror) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=0xfe},
+        record_t{.as_int=8},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IROR),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 0xfe00000000000000);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, irol) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=0x7fffffffffffffff},
+        record_t{.as_int=8},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IROL),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 0xffffffffffffff7f);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, islr) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0x80),
+        bci_comp_mod1_imm24(OPC_IPUSH, 7),
+        bci_comp_mod1_no_imm(OPC_ISLR),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 1);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, isar) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0x80),
+        bci_comp_mod1_imm24(OPC_IPUSH, 7),
+        bci_comp_mod1_no_imm(OPC_ISAR),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 1);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, isal) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 1),
+        bci_comp_mod1_imm24(OPC_IPUSH, 48),
+        bci_comp_mod1_no_imm(OPC_ISAL),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, UINT64_C(1)<<48);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, ixor) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0xf0),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0xff),
+        bci_comp_mod1_no_imm(OPC_IXOR),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+            .p=code.data(),
+            .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 0x0f);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, ior) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0xf0),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0x0f),
+        bci_comp_mod1_no_imm(OPC_IOR),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 0xff);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, iand) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 0x7fffef),
+        bci_comp_mod1_imm24(OPC_IPUSH, 255),
+        bci_comp_mod1_no_imm(OPC_IAND),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+            .p=code.data(),
+            .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 0xef);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, imod_zero_division) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=22},
+        record_t{.as_int=0},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IMOD),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+            .p=code.data(),
+            .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_FALSE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(vm.interrupt, VMINT_ARI_ZERODIV);
+}
+
+TEST(vm_exec, imod) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 35),
+        bci_comp_mod1_imm24(OPC_IPUSH, 4),
+        bci_comp_mod1_no_imm(OPC_IMOD),
+        bci_comp_mod1_imm24(OPC_IPUSH, 3),
+        bci_comp_mod1_no_imm(OPC_IMOD),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, (35%4)%3);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, idiv_zero_division) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=22},
+        record_t{.as_int=0},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IDIV),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_FALSE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(vm.interrupt, VMINT_ARI_ZERODIV);
+}
+
+TEST(vm_exec, idiv) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 32),
+        bci_comp_mod1_imm24(OPC_IPUSH, 4),
+        bci_comp_mod1_no_imm(OPC_IDIV),
+        bci_comp_mod1_imm24(OPC_IPUSH, 4),
+        bci_comp_mod1_no_imm(OPC_IDIV),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, (32/4)/4);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, ipowo_overflow) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=NEO_INT_MAX},
+        record_t{.as_int=3},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IPOWO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, NEO_INT_MAX*NEO_INT_MAX*NEO_INT_MAX);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, ipowo) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 2),
+        bci_comp_mod1_imm24(OPC_IPUSH, 2),
+        bci_comp_mod1_no_imm(OPC_IPOWO),
+        bci_comp_mod1_imm24(OPC_IPUSH, 2),
+        bci_comp_mod1_no_imm(OPC_IPOWO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, 16);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, imulo_overflow) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=NEO_INT_MAX},
+        record_t{.as_int=3},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_IMULO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, NEO_INT_MAX*3);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, imulo) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, -10),
+        bci_comp_mod1_imm24(OPC_IPUSH, 5),
+        bci_comp_mod1_no_imm(OPC_IMULO),
+        bci_comp_mod1_imm24(OPC_IPUSH, 1),
+        bci_comp_mod1_no_imm(OPC_IMULO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, -50);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, isubo_overflow) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=NEO_INT_MIN},
+        record_t{.as_int=1},
+};
+    std::vector<std::uint8_t> tags {
+            RT_INT,
+            RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 1),
+        bci_comp_mod1_no_imm(OPC_ISUBO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, NEO_INT_MIN-1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, isubo) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 10),
+        bci_comp_mod1_imm24(OPC_IPUSH, 5),
+        bci_comp_mod1_no_imm(OPC_ISUBO),
+        bci_comp_mod1_imm24(OPC_IPUSH, 7),
+        bci_comp_mod1_no_imm(OPC_ISUBO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, -2);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, iaddo_overflow) {
+    std::array<record_t, 8> stack {};
+    std::vector<record_t> constpool {
+        record_t{.as_int=NEO_INT_MAX},
+        record_t{.as_int=1},
+    };
+    std::vector<std::uint8_t> tags {
+        RT_INT,
+        RT_INT
+    };
+    ASSERT_EQ(constpool.size(), tags.size());
+
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+    vm.constpool.p = constpool.data();
+    vm.constpool.tags = tags.data();
+    vm.constpool.len = constpool.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_umm24(OPC_LDC, 0),
+        bci_comp_mod1_no_imm(OPC_IADDO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, NEO_INT_MAX+NEO_INT_MAX);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
+TEST(vm_exec, iaddo) {
+    std::array<record_t, 8> stack {};
+    vmisolate_t vm {};
+    vm.stack.p = stack.data();
+    vm.stack.len = stack.size();
+
+    std::vector<bci_instr_t> code {
+        bci_comp_mod1_no_imm(OPC_NOP),
+        bci_comp_mod1_imm24(OPC_IPUSH, 10),
+        bci_comp_mod1_imm24(OPC_IPUSH, 5),
+        bci_comp_mod1_no_imm(OPC_IADDO),
+        bci_comp_mod1_imm24(OPC_IPUSH, -22),
+        bci_comp_mod1_no_imm(OPC_IADDO),
+        bci_comp_mod1_no_imm(OPC_HLT)
+    };
+
+    const bytecode_t bcode {
+        .p=code.data(),
+        .len=code.size()
+    };
+    ASSERT_TRUE(vm_validate(&vm, &bcode));
+    ASSERT_TRUE(vm_exec(&vm, &bcode));
+    ASSERT_EQ(stack[1].as_int, -7);
+    ASSERT_EQ(vm.sp, stack.data() + 1); /* + 1 because one is padding */
+    ASSERT_EQ(vm.sp_delta, 1);
+    ASSERT_EQ(vm.ip_delta, code.size() - 1);
+    ASSERT_EQ(vm.interrupt, VMINT_OK);
+}
+
 TEST(vm_exec, ipow_overflow) {
     std::array<record_t, 8> stack {};
     std::vector<record_t> constpool {
@@ -56,8 +686,8 @@ TEST(vm_exec, ipow) {
     };
 
     const bytecode_t bcode {
-            .p=code.data(),
-            .len=code.size()
+        .p=code.data(),
+        .len=code.size()
     };
     ASSERT_TRUE(vm_validate(&vm, &bcode));
     ASSERT_TRUE(vm_exec(&vm, &bcode));

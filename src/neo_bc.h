@@ -70,10 +70,20 @@ enum {
     _(OPC_ISUB, "isub", 2, 1, IMM_NONE)/* Integer subtraction with overflow check. */__\
     _(OPC_IMUL, "imul", 2, 1, IMM_NONE)/* Integer multiplication with overflow check. */__\
     _(OPC_IPOW, "ipow", 2, 1, IMM_NONE)/* Integer exponentiation with overflow check. */__\
-    _(OPC_IADD_NOV, "iaddnov", 2, 1, IMM_NONE)/* Integer addition without overflow check. */__\
-    _(OPC_ISUB_NOV, "isubnov", 2, 1, IMM_NONE)/* Integer subtraction without overflow check. */__\
-    _(OPC_IMUL_NOV, "imulnov", 2, 1, IMM_NONE)/* Integer multiplication without overflow check. */__\
-    _(OPC_IPOW_NOV, "ipownov", 2, 1, IMM_NONE)/* Integer exponentiation without overflow check. */
+    _(OPC_IADDO, "iaddo", 2, 1, IMM_NONE)/* Integer addition without overflow check. */__\
+    _(OPC_ISUBO, "isubo", 2, 1, IMM_NONE)/* Integer subtraction without overflow check. */__\
+    _(OPC_IMULO, "imulo", 2, 1, IMM_NONE)/* Integer multiplication without overflow check. */__\
+    _(OPC_IPOWO, "ipowo", 2, 1, IMM_NONE)/* Integer exponentiation without overflow check. */__\
+    _(OPC_IDIV, "idiv", 2, 1, IMM_NONE)/* Integer division. */__\
+    _(OPC_IMOD, "imod", 2, 1, IMM_NONE)/* Integer modulo. */__\
+    _(OPC_IAND, "iand", 2, 1, IMM_NONE)/* Integer bitwise conjunction (AND). */__\
+    _(OPC_IOR, "ior", 2, 1, IMM_NONE)/* Integer bitwise disjunction (OR). */__\
+    _(OPC_IXOR, "ixor", 2, 1, IMM_NONE)/* Integer bitwise exclusive disjunction (XOR). */__\
+    _(OPC_ISAL, "isal", 2, 1, IMM_NONE)/* Integer bitwise arithmetic left shift. */__\
+    _(OPC_ISAR, "isar", 2, 1, IMM_NONE)/* Integer bitwise arithmetic right shift. */__\
+    _(OPC_ISLR, "islr", 2, 1, IMM_NONE)/* Integer bitwise logical right shift. */__\
+    _(OPC_IROL, "irol", 2, 1, IMM_NONE)/* Integer bitwise arithmetic left rotation. */__\
+    _(OPC_IROR, "iror", 2, 1, IMM_NONE)/* Integer bitwise arithmetic right rotation. */
 
 #define _(enumerator, _2, _3, _4, _5) enumerator
 typedef enum {
@@ -126,17 +136,17 @@ extern NEO_EXPORT bool bci_validate_instr(bci_instr_t instr);
 extern NEO_EXPORT void bci_dump_instr(bci_instr_t instr, FILE *out);
 
 /* Instruction composition. */
-static inline bci_instr_t bci_comp_mod1_imm24(opcode_t opc, int32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(opcode_t opc, int32_t imm) {
     neo_as(bci_fits_i24(imm) && "24-bit signed imm out of range"); /* Verify immediate value. */
     neo_as(opc_imm[opc&127] == IMM_I24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_i32toi24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline bci_instr_t bci_comp_mod1_umm24(opcode_t opc, uint32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(opcode_t opc, uint32_t imm) {
     neo_as(bci_fits_u24(imm) && "24-bit unsigned imm out of range"); /* Verify immediate value. */
     neo_as(opc_imm[opc&127] == IMM_U24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_u32tou24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
     neo_as(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc);
 }
