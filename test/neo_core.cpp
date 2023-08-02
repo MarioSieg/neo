@@ -3,6 +3,48 @@
 #include <gtest/gtest.h>
 #include <neo_core.h>
 
+TEST(core, neo_mempool_alloc)
+{
+    neo_mempool_t pool;
+    neo_mempool_init(&pool, 8);
+
+    int32_t *i = (int32_t*)neo_mempool_alloc(&pool, sizeof(int32_t));
+    ASSERT_EQ(pool.len, 4);
+    ASSERT_EQ(pool.cap, 8);
+    *i = -22;
+    ASSERT_EQ(*i, -22);
+    ASSERT_EQ(*(int32_t *)pool.needle, *i);
+
+    int64_t *j = (int64_t*)neo_mempool_alloc(&pool, sizeof(int64_t));
+    ASSERT_EQ(pool.len, 12);
+    ASSERT_EQ(pool.cap, 16);
+    *j = 0x1234567890abcdef;
+    ASSERT_EQ(*j, 0x1234567890abcdef);
+    ASSERT_EQ(*(int64_t *)((uint8_t *)pool.needle + 4), *j);
+
+    neo_mempool_free(&pool);
+}
+
+TEST(core, neo_mempool_alloc_aligned)
+{
+    neo_mempool_t pool;
+    neo_mempool_init(&pool, 8);
+
+    int32_t *i = (int32_t*)neo_mempool_alloc_aligned(&pool, sizeof(int32_t), 8);
+    ASSERT_TRUE((uintptr_t)i % 8 == 0);
+    ASSERT_EQ(pool.cap, 32);
+
+    i = (int32_t*)neo_mempool_alloc_aligned(&pool, sizeof(int32_t), 16);
+    ASSERT_TRUE((uintptr_t)i % 16 == 0);
+    ASSERT_EQ(pool.cap, 64);
+
+    i = (int32_t*)neo_mempool_alloc_aligned(&pool, sizeof(int32_t), 64);
+    ASSERT_TRUE((uintptr_t)i % 64 == 0);
+    ASSERT_EQ(pool.cap, 128);
+
+    neo_mempool_free(&pool);
+}
+
 TEST(core, neo_ror64)
 {
     ASSERT_EQ(neo_ror64(UINT64_C(0x0000000000000001), 0), UINT64_C(0x0000000000000001));

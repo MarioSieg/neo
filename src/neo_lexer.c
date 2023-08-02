@@ -345,7 +345,11 @@ token_t lexer_scan_next(lexer_t *self) {
         }
         case '<': {
             if (ismatch(self, '<')) {
-                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ASHL_ASSIGN : TOK_OP_BIT_ASHL, 0);
+                if (ismatch(self, '<')) {
+                    return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ROL_ASSIGN : TOK_OP_BIT_ROL, 0);
+                } else {
+                    return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ASHL_ASSIGN : TOK_OP_BIT_ASHL, 0);
+                }
             } else if (ismatch(self, '=')) {
                 return mktok(self, TOK_OP_LESS_EQUAL, 0);
             } else {
@@ -359,8 +363,13 @@ token_t lexer_scan_next(lexer_t *self) {
                     if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ASHR_ASSIGN, 0); }
                     else {
                         if (ismatch(self, '>')) {
-                            if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
-                            else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                            if (ismatch(self, '>')) {
+                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
+                                else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                            } else {
+                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ROR_ASSIGN, 0); }
+                                else { return mktok(self, TOK_OP_BIT_ROR, 0); }
+                            }
                         }
                         else { return mktok(self, TOK_OP_BIT_ASHR, 0); }
                     }

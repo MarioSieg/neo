@@ -94,11 +94,15 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_OP_BIT_OR_ASSIGN, "|=")__\
     _(TOK_OP_BIT_XOR_ASSIGN, "^=")__\
     _(TOK_OP_BIT_ASHL, "<<")__\
-    _(TOK_OP_BIT_ASHR, ">>")__\
-    _(TOK_OP_BIT_LSHR, ">>>")__\
+    _(TOK_OP_BIT_ASHR, ">>")__  \
+    _(TOK_OP_BIT_ROL, "<<<")__\
+    _(TOK_OP_BIT_ROR, ">>>")__\
+    _(TOK_OP_BIT_LSHR, ">>>>")__\
     _(TOK_OP_BIT_ASHL_ASSIGN, "<<=")__\
-    _(TOK_OP_BIT_ASHR_ASSIGN, ">>=")__\
-    _(TOK_OP_BIT_LSHR_ASSIGN, ">>>=")__\
+    _(TOK_OP_BIT_ASHR_ASSIGN, ">>=")__ \
+    _(TOK_OP_BIT_ROL_ASSIGN, "<<<=")__\
+    _(TOK_OP_BIT_ROR_ASSIGN, ">>>=")__\
+    _(TOK_OP_BIT_LSHR_ASSIGN, ">>>>=")__\
     _(TOK_OP_BIT_COMPL, "~")__\
     _(TOK_OP_LOG_AND, "and")__\
     _(TOK_OP_LOG_OR, "or")__\

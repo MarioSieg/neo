@@ -548,8 +548,19 @@ extern NEO_EXPORT const neo_osi_t *neo_osi;
 #ifndef neo_dealloc
 #   define neo_dealloc(blk) free(blk)
 #endif
-extern void *neo_defmemalloc(void *blk, size_t len);
+extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 #define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
+
+typedef struct neo_mempool_t {
+    void *needle;
+    size_t len;
+    size_t cap;
+} neo_mempool_t;
+
+extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *pool, size_t cap);
+extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *pool, size_t len);
+extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align);
+extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *pool);
 
 /* ---- Types ---- */
 
