@@ -580,9 +580,9 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 #if NEO_OS_WINDOWS
 #	include <malloc.h>
 #elif NEO_OS_BSD
-#	include <alloca.h>
-#else
 #   include <stdlib.h>
+#else
+#	include <alloca.h>
 #endif
 #if !defined(neo_rol) || !defined(neo_ror)
 #	define neo_rol(x, n) (((x)<<(n))|((x)>>(-(int)(n)&((sizeof(x)<<3)-1))))
