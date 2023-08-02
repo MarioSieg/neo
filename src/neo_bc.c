@@ -19,7 +19,7 @@ const uint8_t opc_imm[OPC__COUNT] = {opdef(_, NEO_SEP)};
 #undef _
 
 bool bci_validate_instr(bci_instr_t instr) {
-    mode_t mod = bci_unpackmod(instr);
+    int mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);
         if (neo_unlikely(opc >= OPC__COUNT)) { /* Invalid opcode value. */
@@ -40,7 +40,7 @@ bool bci_validate_instr(bci_instr_t instr) {
 
 void bci_dump_instr(bci_instr_t instr, FILE *out) {
     neo_asd(out);
-    mode_t mod = bci_unpackmod(instr);
+    int mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);
         if (opc_imm[opc]) {
