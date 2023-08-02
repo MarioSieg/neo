@@ -349,12 +349,12 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
     dispatch()
 
     decl_op(IROL) /* Integer bitwise arithmetic left rotation. */
-        pint(-1) = (neo_int_t)neo_rol((neo_uint_t)pint(-1), puint(0) & 63);
+        pint(-1) = (neo_int_t)neo_rol64((neo_uint_t)pint(-1), puint(0) & 63);
     pop(1);
     dispatch()
 
     decl_op(IROR) /* Integer bitwise arithmetic right rotation. */
-        pint(-1) = (neo_int_t)neo_ror((neo_uint_t)pint(-1), puint(0) & 63);
+        pint(-1) = (neo_int_t)neo_ror64((neo_uint_t)pint(-1), puint(0) & 63);
     dispatch()
 
 #ifndef NEO_VM_COMPUTED_GOTO /* To suppress enumeration value ‘OPC__**’ not handled in switch [-Werror=switch]. */

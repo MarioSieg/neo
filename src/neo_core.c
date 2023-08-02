@@ -8,6 +8,10 @@
 #   include <locale.h>
 #   include <fcntl.h>
 #   include <io.h>
+#elif NEO_OS_POSIX
+#   include <unistd.h>
+#else
+#   error "unsupported platform"
 #endif
 
 void neo_assert_impl(const char *expr, const char *file, int line) {
@@ -27,15 +31,28 @@ void neo_panic(const char *msg, ...) {
     neo_unreachable();
 }
 
+static neo_osi_t osi_data; /* Global OSI data. Only set once inneo_osi_init(). */
+
 void neo_osi_init(void) {
+    memset(&osi_data, 0, sizeof(osi_data));
 #if NEO_OS_WINDOWS
     neo_as(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 1<<12;
+#elif NEO_OS_LINUX || NEO_OS_BSD
+    long ps = sysconf(_SC_PAGESIZE);
+    osi_data.page_size = ps > 0 ? (uint32_t)ps : 1<<12;
+#else
+#   error "unsupported platform"
 #endif
 }
 
 void neo_osi_shutdown(void) {
 
 }
+
+const neo_osi_t *neo_osi = &osi_data;
 
 void *neo_defmemalloc(void *blk, size_t len) {
     if (!len) { /* deallocation */
