@@ -18,3 +18,7 @@ It is designed to be easily embedded into any application, making it a versatile
 - **Garbage Collection**: Forget about manual memory management. NEO incorporates a robust garbage collector to handle memory allocation and deallocation automatically.
 
 - **Extensive Standard Library**: NEO comes with a comprehensive standard library, providing a rich set of tools and functionalities out of the box.
+
+## Screenshots
+Simple rectangle class implemented with help of the (WIP) Visual Studio Code extension:
+![Rectangle class](https://i.imgur.com/oPfifUM.png)
