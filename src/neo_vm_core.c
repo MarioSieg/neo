@@ -140,28 +140,31 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
 #undef imulov
 #undef umulov
 #define i64_pow_overflow(...) vmop_ipow64(__VA_ARGS__)
+#define pint(i) ((*peek(i)).as_int)
+#define puint(i) ((*peek(i)).as_uint)
+#define pfloat(i) ((*peek(i)).as_float)
 
 #define bin_int_op(op)\
-    peek(-1)->as_int op##= peek(0)->as_int;\
+    pint(-1) op##= pint(0);\
     pop(1)
 
 #define bin_int_op_call(proc)\
-    peek(-1)->as_int = proc(peek(-1)->as_int, peek(0)->as_int);\
+    pint(-1) = proc(pint(-1), pint(0));\
     pop(1)
 
 #define ovchecked_bin_int_op(op)\
-    if (neo_unlikely(i64_##op##_overflow(peek(-1)->as_int, peek(0)->as_int, &peek(-1)->as_int))) {\
+    if (neo_unlikely(i64_##op##_overflow(pint(-1), pint(0), &pint(-1)))) {\
         vif = VMINT_ARI_OVERFLOW;/* Overflow would happen. */\
         goto exit;\
     }\
     pop(1)
 
 #define z_op(op, ev)\
-    if (neo_unlikely(peek(0)->as_int == 0)) { /* Check for zero divison. */\
+    if (neo_unlikely(pint(0) == 0)) { /* Check for zero divison. */\
         vif = VMINT_ARI_ZERODIV;\
         goto exit;\
-    } else if (neo_unlikely(peek(-1)->as_int == NEO_INT_MIN && peek(0)->as_int == -1)) { /* Check for overflow. */\
-        peek(-1)->as_int = (ev);\
+    } else if (neo_unlikely(pint(-1) == NEO_INT_MIN && pint(0) == -1)) { /* Check for overflow. */\
+        pint(-1) = (ev);\
     } else {\
         bin_int_op(op);\
     }
@@ -331,27 +334,27 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
     dispatch()
 
     decl_op(ISAL) /* Integer bitwise arithmetic left shift. */
-        peek(-1)->as_int = peek(-1)->as_int << (peek(0)->as_uint&63);
+        pint(-1) = pint(-1) << (puint(0) & 63);
         pop(1);
     dispatch()
 
     decl_op(ISAR) /* Integer bitwise arithmetic right shift. */
-        peek(-1)->as_int = peek(-1)->as_int >> (peek(0)->as_uint&63);
+        pint(-1) = pint(-1) >> (puint(0) & 63);
         pop(1);
     dispatch()
 
     decl_op(ISLR) /* Integer bitwise logical right shift. */
-        peek(-1)->as_int = (neo_int_t)((neo_uint_t)peek(-1)->as_int >> peek(0)->as_uint&63);
+        pint(-1) = (neo_int_t)((neo_uint_t)pint(-1) >> puint(0));
         pop(1);
     dispatch()
 
     decl_op(IROL) /* Integer bitwise arithmetic left rotation. */
-        peek(-1)->as_int = (neo_int_t)neo_rol((neo_uint_t)peek(-1)->as_int, peek(0)->as_uint&63);
+        pint(-1) = (neo_int_t)neo_rol((neo_uint_t)pint(-1), puint(0) & 63);
     pop(1);
     dispatch()
 
     decl_op(IROR) /* Integer bitwise arithmetic right rotation. */
-        peek(-1)->as_int = (neo_int_t)neo_ror((neo_uint_t)peek(-1)->as_int, peek(0)->as_uint&63);
+        pint(-1) = (neo_int_t)neo_ror((neo_uint_t)pint(-1), puint(0) & 63);
     dispatch()
 
 #ifndef NEO_VM_COMPUTED_GOTO /* To suppress enumeration value ‘OPC__**’ not handled in switch [-Werror=switch]. */

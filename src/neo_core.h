@@ -20,12 +20,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if _WIN32
-#	include <malloc.h>
-#else
-#	include <alloca.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -583,6 +577,13 @@ static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr
 #endif
 
 /* ---- Misc ---- */
+#if NEO_OS_WINDOWS
+#	include <malloc.h>
+#elif NEO_OS_BSD
+#	include <alloca.h>
+#else
+#   include <stdlib.h>
+#endif
 #if !defined(neo_rol) || !defined(neo_ror)
 #	define neo_rol(x, n) (((x)<<(n))|((x)>>(-(int)(n)&((sizeof(x)<<3)-1))))
 #	define neo_ror(x, n) (((x)<<(-(int)(n)&((sizeof(x)<<3)-1)))|((x)>>(n)))
