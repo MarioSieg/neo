@@ -599,6 +599,8 @@ extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmod
 typedef enum { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } unicode_err_t;
 extern NEO_EXPORT unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 
+extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

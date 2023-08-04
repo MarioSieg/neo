@@ -219,7 +219,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
     return tok;
 }
 
-static NEO_UNUSED token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
+static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
     neo_asd(self);
     toktype_t type = TOK_LI_INT; /* Assume integer literal by default. */
     radix_t rdx = RADIX_DEC; /* Assume decimal by default. */
@@ -252,7 +252,7 @@ static NEO_UNUSED token_t consume_numeric_literal(lexer_t *self) { /* Consumes e
     return tok;
 }
 
-static NEO_AINLINE bool kw_found(const lexer_t *self, toktype_t i) {
+static bool kw_found(const lexer_t *self, toktype_t i) {
     return *tok_lexemes[i] == *self->tok_start
         && tok_lens[i] == llabs(self->needle-self->tok_start)
         && memcmp(tok_lexemes[i], self->tok_start, tok_lens[i]) == 0;

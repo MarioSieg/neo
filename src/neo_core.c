@@ -194,3 +194,14 @@ unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { 
     *ppos = len;
     return NEO_UNIERR_OK;
 }
+
+uint32_t neo_hash_x17(const void *key, size_t len)
+{
+    uint32_t r = 0x1505;
+    const uint8_t *p = (const uint8_t*)key;
+    for (size_t i = 0; i < len; ++i) {
+        r = 17 * r + (p[i] - ' ');
+    }
+    return r^(r>>16);
+}
+
