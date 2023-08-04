@@ -548,8 +548,19 @@ extern NEO_EXPORT const neo_osi_t *neo_osi;
 #ifndef neo_dealloc
 #   define neo_dealloc(blk) free(blk)
 #endif
-extern void *neo_defmemalloc(void *blk, size_t len);
+extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 #define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
+
+typedef struct neo_mempool_t {
+    void *needle;
+    size_t len;
+    size_t cap;
+} neo_mempool_t;
+
+extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *pool, size_t cap);
+extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *pool, size_t len);
+extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align);
+extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *pool);
 
 /* ---- Types ---- */
 
@@ -587,6 +598,8 @@ typedef enum { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* a
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
 typedef enum { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } unicode_err_t;
 extern NEO_EXPORT unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
+
+extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 
 #ifdef __cplusplus
 }

@@ -94,11 +94,15 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_OP_BIT_OR_ASSIGN, "|=")__\
     _(TOK_OP_BIT_XOR_ASSIGN, "^=")__\
     _(TOK_OP_BIT_ASHL, "<<")__\
-    _(TOK_OP_BIT_ASHR, ">>")__\
-    _(TOK_OP_BIT_LSHR, ">>>")__\
+    _(TOK_OP_BIT_ASHR, ">>")__  \
+    _(TOK_OP_BIT_ROL, "<<<")__\
+    _(TOK_OP_BIT_ROR, ">>>")__\
+    _(TOK_OP_BIT_LSHR, ">>>>")__\
     _(TOK_OP_BIT_ASHL_ASSIGN, "<<=")__\
-    _(TOK_OP_BIT_ASHR_ASSIGN, ">>=")__\
-    _(TOK_OP_BIT_LSHR_ASSIGN, ">>>=")__\
+    _(TOK_OP_BIT_ASHR_ASSIGN, ">>=")__ \
+    _(TOK_OP_BIT_ROL_ASSIGN, "<<<=")__\
+    _(TOK_OP_BIT_ROR_ASSIGN, ">>>=")__\
+    _(TOK_OP_BIT_LSHR_ASSIGN, ">>>>=")__\
     _(TOK_OP_BIT_COMPL, "~")__\
     _(TOK_OP_LOG_AND, "and")__\
     _(TOK_OP_LOG_OR, "or")__\
@@ -125,6 +129,7 @@ typedef struct srcspan_t {
 } srcspan_t;
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
 #define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
+#define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */

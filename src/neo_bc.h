@@ -1,4 +1,5 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* BC (Bytecode) instructions and encoding. */
 
 #ifndef NEO_BC_H
 #define NEO_BC_H

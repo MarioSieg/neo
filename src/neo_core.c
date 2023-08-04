@@ -69,6 +69,41 @@ void *neo_defmemalloc(void *blk, size_t len) {
     }
 }
 
+void neo_mempool_init(neo_mempool_t *pool, size_t cap) {
+    neo_asd(pool);
+    memset(pool, 0, sizeof(*pool));
+    cap = cap ? cap : 1<<9;
+    pool->cap = cap;
+    pool->needle = neo_memalloc(NULL, cap);
+}
+
+void *neo_mempool_alloc(neo_mempool_t *pool, size_t len) {
+    neo_asd(pool);
+    if (!neo_unlikely(len)) { return NULL; }
+    size_t total = pool->len+len;
+    if (total >= pool->cap) {
+        do { pool->cap<<=1; }
+        while (pool->cap < total);
+        pool->needle = neo_memalloc(pool->needle, pool->cap);
+    }
+    void *p = (uint8_t *)pool->needle+pool->len;
+    pool->len += len;
+    return p;
+}
+
+void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align) {
+    neo_asd(pool);
+    neo_as(align && align>=sizeof(void*) && !(align&(align-1)));
+    uintptr_t off = (uintptr_t)align-1+sizeof(void *);
+    void *p = neo_mempool_alloc(pool, len+off);
+    return (void *)(((uintptr_t)p+off)&~(align-1));
+}
+
+void neo_mempool_free(neo_mempool_t *pool) {
+    neo_asd(pool);
+    neo_memalloc(pool->needle, 0);
+}
+
 #define get_fmodstr(_)\
     if (mode == NEO_FMODE_R) { modstr = _##"r"; }\
     else if (mode == NEO_FMODE_W) { modstr = _##"w"; }\
@@ -159,3 +194,14 @@ unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { 
     *ppos = len;
     return NEO_UNIERR_OK;
 }
+
+uint32_t neo_hash_x17(const void *key, size_t len)
+{
+    uint32_t r = 0x1505;
+    const uint8_t *p = (const uint8_t*)key;
+    for (size_t i = 0; i < len; ++i) {
+        r = 17 * r + (p[i] - ' ');
+    }
+    return r^(r>>16);
+}
+

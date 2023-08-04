@@ -219,7 +219,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
     return tok;
 }
 
-static NEO_UNUSED token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
+static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
     neo_asd(self);
     toktype_t type = TOK_LI_INT; /* Assume integer literal by default. */
     radix_t rdx = RADIX_DEC; /* Assume decimal by default. */
@@ -252,7 +252,7 @@ static NEO_UNUSED token_t consume_numeric_literal(lexer_t *self) { /* Consumes e
     return tok;
 }
 
-static NEO_AINLINE bool kw_found(const lexer_t *self, toktype_t i) {
+static bool kw_found(const lexer_t *self, toktype_t i) {
     return *tok_lexemes[i] == *self->tok_start
         && tok_lens[i] == llabs(self->needle-self->tok_start)
         && memcmp(tok_lexemes[i], self->tok_start, tok_lens[i]) == 0;
@@ -345,7 +345,11 @@ token_t lexer_scan_next(lexer_t *self) {
         }
         case '<': {
             if (ismatch(self, '<')) {
-                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ASHL_ASSIGN : TOK_OP_BIT_ASHL, 0);
+                if (ismatch(self, '<')) {
+                    return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ROL_ASSIGN : TOK_OP_BIT_ROL, 0);
+                } else {
+                    return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ASHL_ASSIGN : TOK_OP_BIT_ASHL, 0);
+                }
             } else if (ismatch(self, '=')) {
                 return mktok(self, TOK_OP_LESS_EQUAL, 0);
             } else {
@@ -359,8 +363,13 @@ token_t lexer_scan_next(lexer_t *self) {
                     if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ASHR_ASSIGN, 0); }
                     else {
                         if (ismatch(self, '>')) {
-                            if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
-                            else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                            if (ismatch(self, '>')) {
+                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
+                                else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                            } else {
+                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ROR_ASSIGN, 0); }
+                                else { return mktok(self, TOK_OP_BIT_ROR, 0); }
+                            }
                         }
                         else { return mktok(self, TOK_OP_BIT_ASHR, 0); }
                     }
