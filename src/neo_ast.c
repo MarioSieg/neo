@@ -83,7 +83,7 @@ void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *
         block->nodes = neo_mempool_alloc(pool, (block->cap=1<<8)*sizeof(astnode_t *));
         *block->nodes = node;
     } else if (block->len >= block->cap) { /* Reallocate if necessary. */
-        block->nodes = neo_mempool_alloc(pool, (block->cap<<=1)*sizeof(astnode_t *)); /* Wasting a lot of memory here, but we can't free the individual pool. :/ */
+        block->nodes = neo_mempool_alloc(pool, (block->cap<<=2)*sizeof(astnode_t *)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
         block->nodes[block->len++] = node;
     } else { /* Otherwise, just push. */
         block->nodes[block->len++] = node;
@@ -93,3 +93,110 @@ void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *
 #undef impl_ast_node_literal_factory
 #undef impl_ast_node_hull_factory
 #undef impl_ast_node_factory
+
+static void astnode_visit_root_impl(astnode_t *root, void (*visitor)(astnode_t *node, void *user), void *user, size_t *c) {
+    if (neo_unlikely(!root)) { return; } /* Skip NULL nodes. */
+    neo_asd(visitor && c);
+    ++*c; /* Increment counter. */
+    switch (root->type) { /* Leafs have no children, so they are skipped. */
+        case ASTNODE_ERROR:
+        case ASTNODE_BREAK:
+        case ASTNODE_CONTINUE:
+        case ASTNODE_INT_LIT:
+        case ASTNODE_FLOAT_LIT:
+        case ASTNODE_CHAR_LIT:
+        case ASTNODE_BOOL_LIT:
+        case ASTNODE_STRING_LIT:
+        case ASTNODE_IDENT_LIT: {
+            neo_asd(!!(ASTNODE_LEAF_MASK&astmask(root->type)));
+        } return; /* Visitor invocation is redundant. */
+
+        case ASTNODE_GROUP: {
+            const node_group_t *data = &root->dat.n_group;
+            astnode_visit_root_impl(data->child_expr, visitor, user, c);
+        } break;
+
+        case ASTNODE_UNARY_OP: {
+            const node_unary_op_t *data = &root->dat.n_unary_op;
+            astnode_visit_root_impl(data->expr, visitor, user, c);
+        } break;
+
+        case ASTNODE_BINARY_OP: {
+            const node_binary_op_t *data = &root->dat.n_binary_op;
+            astnode_visit_root_impl(data->left_expr, visitor, user, c);
+            astnode_visit_root_impl(data->right_expr, visitor, user, c);
+        } break;
+
+        case ASTNODE_METHOD: {
+            const node_method_t *data = &root->dat.n_method;
+            astnode_visit_root_impl(data->ident, visitor, user, c);
+            astnode_visit_root_impl(data->params, visitor, user, c);
+            astnode_visit_root_impl(data->ret_type, visitor, user, c);
+            astnode_visit_root_impl(data->body, visitor, user, c);
+        } break;
+
+        case ASTNODE_BLOCK: {
+            const node_block_t *data = &root->dat.n_block;
+            for (uint32_t i = 0; i < data->len; ++i) {
+                astnode_visit_root_impl(data->nodes[i], visitor, user, c);
+            }
+        } break;
+
+        case ASTNODE_VARIABLE: {
+            const node_variable_t *data = &root->dat.n_variable;
+            astnode_visit_root_impl(data->ident, visitor, user, c);
+            astnode_visit_root_impl(data->type, visitor, user, c);
+            astnode_visit_root_impl(data->init_expr, visitor, user, c);
+        } break;
+
+        case ASTNODE_RETURN: {
+            const node_return_t *data = &root->dat.n_return;
+            astnode_visit_root_impl(data->child_expr, visitor, user, c);
+        } break;
+
+        case ASTNODE_BRANCH: {
+            const node_branch_t *data = &root->dat.n_branch;
+            astnode_visit_root_impl(data->cond_expr, visitor, user, c);
+            astnode_visit_root_impl(data->true_block, visitor, user, c);
+            astnode_visit_root_impl(data->false_block, visitor, user, c);
+        } break;
+
+        case ASTNODE_LOOP: {
+            const node_loop_t *data = &root->dat.n_loop;
+            astnode_visit_root_impl(data->cond_expr, visitor, user, c);
+            astnode_visit_root_impl(data->true_block, visitor, user, c);
+        } break;
+
+        case ASTNODE_CLASS: {
+            const node_class_t *data = &root->dat.n_class;
+            astnode_visit_root_impl(data->ident, visitor, user, c);
+            astnode_visit_root_impl(data->body, visitor, user, c);
+        } break;
+
+        case ASTNODE_MODULE: {
+            const node_module_t *data = &root->dat.n_module;
+            astnode_visit_root_impl(data->name, visitor, user, c);
+            astnode_visit_root_impl(data->body, visitor, user, c);
+        } break;
+
+        default: {
+            neo_panic("invalid node type: %d", root->type);
+        }
+    }
+    (*visitor)(root, user);
+}
+
+size_t astnode_visit(astnode_t *root, void (*visitor)(astnode_t *node, void *user), void *user) {
+    size_t c = 0;
+    astnode_visit_root_impl(root, visitor, user, &c);
+    return c;
+}
+
+static void ast_validator(astnode_t *node, void *user) {
+    (void)node;
+    (void)user;
+}
+
+void astnode_validate(astnode_t *root) {
+    astnode_visit(root, &ast_validator, NULL);
+}

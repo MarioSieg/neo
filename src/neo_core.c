@@ -15,7 +15,7 @@
 #endif
 
 void neo_assert_impl(const char *expr, const char *file, int line) {
-    neo_panic("%s:%d <- Fatal internal NEO error! Assertion failed: '%s'", file, line, expr);
+    neo_panic("%s:%d fatal internal NEO compiler/runtime error - expression: '%s'", file, line, expr);
 }
 
 void neo_panic(const char *msg, ...) {
