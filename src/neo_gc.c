@@ -13,7 +13,7 @@ static const uint32_t prime_lut[24] = {
 
 #define hash_ptr(p) ((uintptr_t)(p)>>3)
 
-static NEO_AINLINE size_t probe(const gc_context_t *self, size_t i, gchash_t h) {
+static NEO_AINLINE size_t probe_dist(const gc_context_t *self, size_t i, gchash_t h) { /* Calculate probing distance on collision. */
     neo_asd(self);
     int64_t delta = (int64_t)i-(int64_t)h-1;
     if (delta < 0) { delta += (int64_t)self->nslots; }
@@ -33,63 +33,8 @@ static size_t compute_ideal_size(const gc_context_t *self, size_t size) {
     }
 }
 
-static void attach_ptr(gc_context_t *self, void *p, size_t size, gc_objflags_t flags, void (*dtor)(void *ptr)) {
-    neo_asd(self);
-    gchash_t i = hash_ptr(p) % self->nslots;
-    gc_fatptr_t fat_ptr;
-    fat_ptr.ptr = p;
-    fat_ptr.flags = flags;
-    fat_ptr.size = size;
-    fat_ptr.hash = i+1;
-    fat_ptr.dtor = dtor;
-    for (size_t j = 0; ; ++j) {
-        gchash_t h = self->items[i].hash;
-        if (!h) { self->items[i] = fat_ptr; return; }
-        else if (neo_unlikely(self->items[i].ptr == p)) { return; }
-        size_t pr = probe(self, i, h);
-        if (j >= pr) {
-            gc_fatptr_t tmp = self->items[i];
-            self->items[i] = fat_ptr;
-            fat_ptr = tmp;
-            j = pr;
-        }
-        i = (i+1) % self->nslots;
-    }
-}
-
-static void detach_ptr(gc_context_t *self, void *p) {
-    neo_asd(self);
-    if (neo_unlikely(!p || !self->nitems)) { return; }
-    for (size_t i = 0; i < self->nfrees; ++i) {
-        if (self->frees[i].ptr == p) { self->frees[i].ptr = NULL; return; }
-    }
-    gchash_t i = hash_ptr(p) % self->nslots;
-    for (size_t j = 0; ; ++j) {
-        gchash_t h = self->items[i].hash;
-        if (!h || j > probe(self, i, h)) { return; }
-        else if (self->items[i].ptr == p) {
-            memset(self->items+i, 0, sizeof(*self->items));
-            j = i;
-            for (;;) {
-                size_t nj = (j+1) % self->nslots;
-                gchash_t nh = self->items[nj].hash;
-                if (nh && probe(self, nj, nh) > 0) {
-                    memcpy(self->items+j, self->items+nj, sizeof(*self->items));
-                    memset(self->items+nj, 0, sizeof(*self->items));
-                    j = nj;
-                } else {
-                    break;
-                }
-            }
-            --self->nitems;
-            return;
-        }
-        i = (i+1) % self->nslots;
-    }
-}
-
+static void attach_ptr(gc_context_t *self, void *p, size_t size, gc_objflags_t flags, void (*dtor)(void *ptr));
 static void rehash(gc_context_t *self, size_t new_size) {
-    neo_asd(self && new_size);
     gc_fatptr_t *prev = self->items;
     size_t nprev = self->nslots;
     self->nslots = new_size;
@@ -115,14 +60,69 @@ static void resize_shrink(gc_context_t *self) {
     if (new_size < self->nslots) { rehash(self, new_size); }
 }
 
-static void mark_ptr(gc_context_t *self, void *p) {
+static void attach_ptr(gc_context_t *self, void *p, size_t size, gc_objflags_t flags, void (*dtor)(void *ptr)) {
+    neo_asd(self);
+    gchash_t i = hash_ptr(p) % self->nslots;
+    gc_fatptr_t fat_ptr;
+    fat_ptr.ptr = p;
+    fat_ptr.flags = flags;
+    fat_ptr.size = size;
+    fat_ptr.hash = i+1;
+    fat_ptr.dtor = dtor;
+    for (size_t j = 0; ; ++j) {
+        gchash_t h = self->items[i].hash;
+        if (!h) { self->items[i] = fat_ptr; return; }
+        else if (self->items[i].ptr == p) { return; }
+        size_t pr = probe_dist(self, i, h);
+        if (j >= pr) {
+            gc_fatptr_t tmp = self->items[i];
+            self->items[i] = fat_ptr;
+            fat_ptr = tmp;
+            j = pr;
+        }
+        i = (i+1) % self->nslots;
+    }
+}
+
+static void detach_ptr(gc_context_t *self, void *p) {
+    neo_asd(self);
+    if (neo_unlikely(!p || !self->nitems)) { return; }
+    for (size_t i = 0; i < self->nfrees; ++i) {
+        if (self->frees[i].ptr == p) { self->frees[i].ptr = NULL; return; }
+    }
+    gchash_t i = hash_ptr(p) % self->nslots;
+    for (size_t j = 0; ; ++j) {
+        gchash_t h = self->items[i].hash;
+        if (!h || j > probe_dist(self, i, h)) { return; }
+        else if (self->items[i].ptr == p) {
+            memset(self->items+i, 0, sizeof(*self->items));
+            j = i;
+            for (;;) {
+                size_t nj = (j+1) % self->nslots;
+                gchash_t nh = self->items[nj].hash;
+                if (nh && probe_dist(self, nj, nh) > 0) {
+                    memcpy(self->items+j, self->items+nj, sizeof(*self->items));
+                    memset(self->items+nj, 0, sizeof(*self->items));
+                    j = nj;
+                } else {
+                    break;
+                }
+            }
+            --self->nitems;
+            return;
+        }
+        i = (i+1) % self->nslots;
+    }
+}
+
+static void mark_ptr(gc_context_t *self, const void *p) {
     neo_asd(self);
     if (neo_unlikely((uintptr_t)p < self->minptr
         || (uintptr_t)p > self->maxptr)) { return; } /* Out of bounds. */
     size_t i = hash_ptr(p) % self->nslots;
     for (size_t j = 0; ; ++j) {
         gchash_t h = self->items[i].hash;
-        if (neo_unlikely(!h || j > probe(self, i, h))) { return; }
+        if (!h || j > probe_dist(self, i, h)) { return; }
         else if (self->items[i].ptr == p) {
             if (self->items[i].flags & GCS_MARK) { return; } /* Already marked. */
             self->items[i].flags |= GCS_MARK; /* Set as marked. */
@@ -137,16 +137,16 @@ static void mark_ptr(gc_context_t *self, void *p) {
 
 static void mark_stack(gc_context_t *self) {
     neo_asd(self);
-    void *top = self->stktop;
-    void *bot = self->stkbot;
+    const void *top = self->stktop;
+    const void *bot = self->stkbot;
     neo_as(top && bot && top != bot);
     if ((uintptr_t)bot < (uintptr_t)top) {
-        for (void *p = top; p >= bot; p = ((uint8_t *)p)-sizeof(void*)) {
-            mark_ptr(self, *((void **)p));
+        for (const void *p = top; p >= bot; p = ((const uint8_t *)p)-sizeof(void*)) {
+            mark_ptr(self, *((const void **)p));
         }
     } else if ((uintptr_t)bot > (uintptr_t)top) {
-        for (void *p = top; p <= bot; p = ((uint8_t *)p)+sizeof(void*)) {
-            mark_ptr(self, *((void **)p));
+        for (const void *p = top; p <= bot; p = ((const uint8_t *)p)+sizeof(void*)) {
+            mark_ptr(self, *((const void **)p));
         }
     }
 }
@@ -156,10 +156,10 @@ static void mark(gc_context_t *self) {
     if (neo_unlikely(!self->nitems)) { return; }
     for (size_t i = 0; i < self->nitems; ++i) {
         if (neo_unlikely(!self->items[i].hash)) { continue; }
-        else if (neo_unlikely(self->items[i].flags & GCS_MARK)) { continue; }
-        else if (neo_unlikely(self->items[i].flags & GCS_ROOT)) {
+        else if (self->items[i].flags & GCS_MARK) { continue; }
+        else if (self->items[i].flags & GCS_ROOT) {
             self->items[i].flags |= GCS_MARK;
-            if (neo_unlikely(self->items[i].flags & GCS_LEAF)) { continue; }
+            if (self->items[i].flags & GCS_LEAF) { continue; }
             for (size_t k = 0; k < self->items[i].size>>3; ++k) {
                 mark_ptr(self, ((void **)self->items[i].ptr)[k]);
             }
@@ -174,12 +174,12 @@ static void sweep(gc_context_t *self) {
     if (neo_unlikely(!self->nitems)) { return; }
     self->nfrees = 0;
     for (size_t i = 0; i < self->nslots; ++i) {
-        if (neo_unlikely(!self->items[i].hash || (self->items[i].flags & (GCS_MARK|GCS_ROOT)))) { continue; }
+        if (!self->items[i].hash || (self->items[i].flags & (GCS_MARK|GCS_ROOT))) { continue; }
         ++self->nfrees;
     }
     self->frees = neo_memalloc(self->frees, self->nfrees*sizeof(*self->frees));
     for (size_t i = 0, k = 0; i < self->nslots; --self->nitems) {
-        if (neo_unlikely(!self->items[i].hash || (self->items[i].flags & (GCS_MARK|GCS_ROOT)))) { ++i; continue; }
+        if (!self->items[i].hash || (self->items[i].flags & (GCS_MARK|GCS_ROOT))) { ++i; continue; }
         self->frees[k] = self->items[i];
         ++k;
         memset(self->items+i, 0, sizeof(*self->items));
@@ -187,7 +187,7 @@ static void sweep(gc_context_t *self) {
         for (;;) {
             size_t nj = (j+1) % self->nslots;
             size_t nh = self->items[nj].hash;
-            if (nh && probe(self, nj, nh) > 0) {
+            if (nh && probe_dist(self, nj, nh) > 0) {
                 memcpy(self->items+j, self->items+nj, sizeof(*self->items));
                 memset(self->items+nj, 0, sizeof(*self->items));
                 j = nj;
@@ -222,7 +222,7 @@ static void *attach(gc_context_t *self, void *p, size_t size, gc_objflags_t flag
     self->minptr = (uintptr_t)p < self->minptr ? (uintptr_t)p : self->minptr;
     resize_grow(self);
     attach_ptr(self, p, size, flags, dtor);
-    if (neo_likely(!self->is_paused && self->nitems > self->mitems)) {
+    if (!self->is_paused && self->nitems > self->mitems) {
         gc_collect(self);
     }
     return p;
@@ -234,26 +234,26 @@ static void detach(gc_context_t *self, void *p) {
     self->mitems = self->nitems+(self->nitems>>1)+1;
 }
 
-
 gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *p) {
     neo_asd(self && p);
     size_t i = hash_ptr(p) % self->nslots;
     for (size_t j = 0; ; ++j) {
         gchash_t h = self->items[i].hash;
-        if (neo_unlikely(!h || j > probe(self, i, h))) { return NULL; }
+        if (!h || j > probe_dist(self, i, h)) { return NULL; }
         else if (self->items[i].ptr == p) { return &self->items[i]; }
         i = (i+1) % self->nslots;
     }
 }
 
-void gc_init(gc_context_t *self, void *stk_top, void *stk_bot) {
-    neo_asd(self && stk_bot && stk_top && stk_top != stk_top);
+void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot) {
+    neo_asd(self && stk_bot && stk_top && stk_top != stk_bot);
     memset(self, 0, sizeof(*self));
     self->stktop = stk_top;
     self->stkbot = stk_bot;
+    self->delta = llabs((const uint8_t *)stk_bot-(const uint8_t *)stk_top);
     self->minptr = UINTPTR_MAX;
-    self->loadfactor = 0.9;
-    self->sweepfactor = 0.5;
+    self->loadfactor = GC_LOADFACTOR;
+    self->sweepfactor = GC_SWEEPFACTOR;
 }
 
 void gc_pause(gc_context_t *self) {

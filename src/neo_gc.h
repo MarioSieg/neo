@@ -32,6 +32,9 @@ extern "C" {
 ** It can also be run manually with gc_collect.
 */
 
+#define GC_LOADFACTOR 0.9 /* GC must be 90 % full before resizing. */
+#define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocated items exceeds 50% of the maximum capacity. */
+
 typedef enum gc_objflags_t {
     GCS_NONE = 0u<<0,
     GCS_MARK = 1u<<0,
@@ -45,19 +48,23 @@ typedef struct NEO_ALIGN(8) gc_fatptr_t { /* Fat object pointer. */
     size_t size;
     gchash_t hash;
     void (*dtor)(void *ptr); /* Destructor or NULL. */
+#if NEO_DBG
+    uint64_t usr; /* User data. */
+#endif
 } gc_fatptr_t;
-neo_static_assert(sizeof(gc_fatptr_t) == 40);
+neo_static_assert(sizeof(gc_fatptr_t) == 40+(sizeof((struct gc_fatptr_t){}.usr)*NEO_DBG));
+neo_static_assert(sizeof(gc_fatptr_t) % 8 == 0);
 neo_static_assert(sizeof(void *) == 8);
 neo_static_assert(sizeof(void *)>>3 == 1);
 
 /* Thread-local GC context. */
 typedef struct gc_context_t {
-    void *stktop; /* Stack start. */
-    void *stkbot /* Stack bottom. */;
+    const void *stktop; /* Stack start. */
+    const void *stkbot /* Stack bottom. */;
     bool is_paused;
     uintptr_t minptr;
     uintptr_t maxptr;
-    uintptr_t delta;
+    ptrdiff_t delta;
     gc_fatptr_t *items; /* Root set. */
     gc_fatptr_t *frees;
     size_t nitems;
@@ -68,15 +75,15 @@ typedef struct gc_context_t {
     double sweepfactor;
 } gc_context_t;
 
-extern NEO_EXPORT void gc_init(gc_context_t *self, void *stk_top, void *stk_bot);
+extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);
 extern NEO_EXPORT void gc_collect(gc_context_t *self);
 extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *p);
-extern NEO_EXPORT void *gc_vmalloc(gc_context_t *self, size_t size, void (*dtor)(void *)); /* Allocate garbage collected memory. Must be referenced on VM stack or self-allocation. */
-extern NEO_EXPORT void *gc_vmrealloc(gc_context_t *self, void *blk, size_t size);  /* Re-allocate garbage collected memory. Must be referenced on VM stack or self-allocation. */
-extern NEO_EXPORT void gc_vmfree(gc_context_t *self, void **blk); /* Manually free allocated block (must not be called by default). */
+extern NEO_EXPORT void *gc_vmalloc(gc_context_t *self, size_t size, void (*dtor)(void *));
+extern NEO_EXPORT void *gc_vmrealloc(gc_context_t *self, void *blk, size_t size);
+extern NEO_EXPORT void gc_vmfree(gc_context_t *self, void **blk);
 extern NEO_EXPORT gc_objflags_t gc_fatptr_get_flags(gc_context_t *self, void *p);
 extern NEO_EXPORT void gc_fatptr_set_flags(gc_context_t *self, void *p, gc_objflags_t flags);
 extern NEO_EXPORT void (*gc_fatptr_get_dtor(gc_context_t *self, void *p))(void *ptr);
