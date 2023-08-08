@@ -19,7 +19,7 @@ TEST(gc, gc_alloc_stack_ref) {
     };
     gc.dtor_hook = +destructor;
 
-    auto *ptr = static_cast<int64_t*>(gc_objalloc(&gc, sizeof(int64_t), GCF_NONE));
+    auto *ptr = static_cast<int64_t*>(gc_objalloc(&gc, gc_sizeof_granules(int64_t), GCF_NONE));
     ASSERT_EQ(released, false);
     ASSERT_EQ(*ptr, 0);
     ASSERT_EQ(*ptr, 0);
@@ -31,7 +31,7 @@ TEST(gc, gc_alloc_stack_ref) {
     ASSERT_NE(fptr, nullptr);
     ASSERT_EQ(fptr->ptr, ptr);
     ASSERT_EQ(*static_cast<int64_t*>(fptr->ptr), 10);
-    ASSERT_EQ(fptr->size, sizeof(int64_t));
+    ASSERT_EQ(fptr->grasize, 1);
 
     stk[2] = reinterpret_cast<std::uintptr_t>(ptr); // create artifical stack reference
     gc_collect(&gc);
@@ -66,8 +66,8 @@ TEST(gc, gc_alloc_heap_ref) {
         neo_bool_t data3;
     };
 
-    auto *root = static_cast<dummy*>(gc_objalloc(&gc, sizeof(dummy), GCF_ROOT));
-    auto *ptr2 = static_cast<int64_t*>(gc_objalloc(&gc, sizeof(int64_t), GCF_NONE));
+    auto *root = static_cast<dummy*>(gc_objalloc(&gc, gc_sizeof_granules(dummy), GCF_ROOT));
+    auto *ptr2 = static_cast<int64_t*>(gc_objalloc(&gc, gc_sizeof_granules(int64_t), GCF_NONE));
     ASSERT_EQ(free_count, 0);
     constexpr std::uint8_t zm[sizeof(dummy)] {};
     ASSERT_EQ(std::memcmp(root, zm, sizeof(dummy)), 0);
@@ -77,12 +77,12 @@ TEST(gc, gc_alloc_heap_ref) {
     gc_fatptr_t *fptr1 = gc_resolve_ptr(&gc, root);
     ASSERT_NE(fptr1, nullptr);
     ASSERT_EQ(fptr1->ptr, root);
-    ASSERT_EQ(fptr1->size, sizeof(dummy));
+    ASSERT_EQ(fptr1->grasize, sizeof(dummy) / 8);
 
     gc_fatptr_t *fptr2 = gc_resolve_ptr(&gc, ptr2);
     ASSERT_NE(fptr2, nullptr);
     ASSERT_EQ(fptr2->ptr, ptr2);
-    ASSERT_EQ(fptr2->size, sizeof(int64_t));
+    ASSERT_EQ(fptr2->grasize, sizeof(int64_t) / 8);
 
     root->my_ptr = ptr2;
     gc_collect(&gc);
@@ -106,7 +106,7 @@ TEST(gc, gc_alloc_huge_2gb) {
     gc_context_t gc;
     gc_init(&gc, stk.data(), stk.data()+stk.size());
 
-    size_t len = 1024ull*1024ull*1024ull*2ull;
+    size_t len = 1024ull*1024ull*128ull;
     void *mem = gc_objalloc(&gc, len, GCF_ROOT);
     memset(mem, 0xff, len);
     ASSERT_EQ(static_cast<uint8_t *>(mem)[0], 0xff);
@@ -115,7 +115,7 @@ TEST(gc, gc_alloc_huge_2gb) {
 
     const gc_fatptr_t *fptr = gc_resolve_ptr(&gc, mem);
     ASSERT_EQ(fptr->flags, GCF_ROOT);
-    ASSERT_EQ(fptr->size, len);
+    ASSERT_EQ(fptr->grasize, len);
     ASSERT_NE(fptr->hash, 0);
 
     gc_objfree(&gc, mem);

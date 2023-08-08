@@ -39,22 +39,54 @@ extern "C" {
 #define GC_LOADFACTOR 0.9 /* GC must be 90 % full before resizing. */
 #define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocations exceeds 50% of the maximum capacity. */
 #define GC_ALLOC_GRANULARITY 8 /* Allocation granularity. */
-neo_static_assert(GC_ALLOC_GRANULARITY >= sizeof(void*) && GC_ALLOC_GRANULARITY && ((GC_ALLOC_GRANULARITY)&(GC_ALLOC_GRANULARITY-1)) == 0 && "GC_ALLOC_GRANULARITY must be a power of two and at least the size of a pointer.");
+#define gc_bytesize_isvalid(s) ((s)>=GC_ALLOC_GRANULARITY&&(s)<=GC_ALLOC_MAX&&(((s)&(GC_ALLOC_GRANULARITY-1))==0)) /* Is the size in bytes valid? */
+typedef uint32_t gc_grasize_t; /* Size of a memory allocation in granules. Each granule is 8 bytes large. So the smallest allocation in bytes is 8. */
+#define GC_ALLOC_MAX (~0u) /* Max allocation granules. */
+#define gc_grasize_valid(gra) ((gra)>0&&(gra<=GC_ALLOC_MAX))
+#define gc_granules2bytes(s) ((size_t)(s)<<3) /* S / GC_ALLOC_GRANULARITY. Granules to bytes. */
+#define gc_bytes2granules(g) ((size_t)(g)>>3) /* S * GC_ALLOC_GRANULARITY. Bytes to granules. */
+#define gc_sizeof_granules(obj) (gc_bytes2granules(sizeof(obj))) /* Size of an C structure in granules. */
+#define gc_granule_align(p) (((p)+((GC_ALLOC_GRANULARITY)-1))&~((GC_ALLOC_GRANULARITY)-1))
+neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);
+neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);
+neo_static_assert(GC_ALLOC_GRANULARITY >= sizeof(void*)
+    && GC_ALLOC_GRANULARITY
+    && ((GC_ALLOC_GRANULARITY)&(GC_ALLOC_GRANULARITY-1)) == 0
+    && "GC_ALLOC_GRANULARITY must be a power of two and at least the size of a pointer.");
+#if NEO_GC_HASH47
+neo_static_assert(sizeof(uint64_t) == sizeof(uintptr_t));
+static inline uint32_t gc_hash(const void *ptr) {
+    uintptr_t p = (uintptr_t)ptr>>3;
+    p &= ((1ull<<48)-1); /* Extract 48-bit address value. */
+    p = (p>>32)^(p&((1ull<<32)-1)); /* Try to combine the high 16-bit with the low 32-bit of the 47/48-bit pointer. */
+    return (uint32_t)p;
+}
+#else
+#   define gc_hash(p) ((uintptr_t)(p)>>3)
+#endif
 
 typedef enum gc_flags_t {
     GCF_NONE = 0,
     GCF_MARK = 1<<0,
     GCF_ROOT = 1<<1,
-    GCF_LEAF = 1<<2
+    GCF_LEAF = 1<<2,
+    GCF__MAX
 } gc_flags_t;
-
-typedef NEO_ALIGN(8) struct gc_fatptr_t {
+neo_static_assert(GCF__MAX<=(1<<8)-1);
+typedef struct NEO_ALIGN(8) gc_fatptr_t {
     void *ptr;
-    size_t size;
-    gc_flags_t flags : 8;
-    uint32_t hash;
+    gc_grasize_t grasize; /* Size in granules. */
+    gc_flags_t flags : 8; /* Flags. */
+    uint32_t oid : 24; /* Object layout ID. */
+    uint32_t hash; /* Hashcode. */
+    uint32_t reserved; /* Reserved. */
 } gc_fatptr_t;
-neo_static_assert(sizeof(gc_fatptr_t) % 8 == 0);
+neo_static_assert(sizeof(gc_fatptr_t) == 24);
+neo_static_assert(offsetof(gc_fatptr_t, ptr) == 0);
+neo_static_assert(offsetof(gc_fatptr_t, grasize) == 8);
+#if NEO_COM_GCC ^ NEO_COM_CLANG
+neo_static_assert(__alignof__(gc_fatptr_t) == 8);
+#endif
 
 /* Per-thread GC context. */
 typedef struct gc_context_t {
@@ -80,11 +112,11 @@ extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);
 extern NEO_EXPORT NEO_HOTPROC void gc_collect(gc_context_t *self);
 extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr);
-extern NEO_EXPORT NEO_HOTPROC void *gc_objalloc(gc_context_t *self, size_t size, gc_flags_t flags);
+extern NEO_EXPORT NEO_HOTPROC void *gc_objalloc(gc_context_t *self, gc_grasize_t size, gc_flags_t flags);
 extern NEO_EXPORT void gc_objfree(gc_context_t *self, void *ptr);
 extern NEO_EXPORT void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags);
 extern NEO_EXPORT gc_flags_t gc_get_flags(gc_context_t *self, void *ptr);
-extern NEO_EXPORT size_t gc_get_size(gc_context_t *self, void *ptr);
+extern NEO_EXPORT gc_grasize_t gc_get_size(gc_context_t *self, void *ptr);
 
 #ifdef __cplusplus
 }
