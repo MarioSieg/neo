@@ -152,9 +152,9 @@ static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
             if (self->trackedallocs[i].flags&GCF_MARK) { return; }
             self->trackedallocs[i].flags|=GCF_MARK;
             if (self->trackedallocs[i].flags&GCF_LEAF) { return; }
-            for (size_t k = 0; k < self->trackedallocs[i].size/sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
-            }
+            const void **top = (const void **)self->trackedallocs[i].ptr;
+            const void **end = top+self->trackedallocs[i].size/sizeof(void*);
+            while (top < end) { gc_mark_ptr(self, *top++); }
             return;
         }
         i = (i+1) % self->slots; ++j;
@@ -167,15 +167,8 @@ static void gc_mark_stack(gc_context_t *self) {
     if (neo_unlikely(self->stktop == self->stkbot)) { return; }
     const void **top = (const void **)self->stktop;
     const void **bot = (const void **)self->stkbot;
-    if (bot < top) {
-        while (top >= bot) {
-            gc_mark_ptr(self, *top--);
-        }
-    } else if (bot > top) {
-        while (top <= bot) {
-            gc_mark_ptr(self, *top++);
-        }
-    }
+    if (bot < top) { while (top >= bot) { gc_mark_ptr(self, *top--); } }
+    else { while (top <= bot) { gc_mark_ptr(self, *top++); } }
 }
 
 static void gc_mark(gc_context_t *self) {
@@ -186,9 +179,9 @@ static void gc_mark(gc_context_t *self) {
         if (self->trackedallocs[i].flags&GCF_ROOT) {
             self->trackedallocs[i].flags|=GCF_MARK;
             if (self->trackedallocs[i].flags&GCF_LEAF) { continue; }
-            for (size_t k = 0; k < self->trackedallocs[i].size/sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
-            }
+            const void **top = (const void **)self->trackedallocs[i].ptr;
+            const void **end = top+self->trackedallocs[i].size/sizeof(void*);
+            while (top < end) { gc_mark_ptr(self, *top++); }
             continue;
         }
     }
