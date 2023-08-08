@@ -2,181 +2,171 @@
 
 #include "neo_gc.h"
 
-/* These allocation failtures are essentially the same as neo_memalloc BUT
-** they return NULL on allocation faiure, instead of aborting the program (like neo_memalloc does with panic()).
-*/
+#if GC_DBG
+#   define gctrace(msg, ...) neo_info("[gc] " msg, ## __VA_ARGS__)
+#else
+#   define gctrace(msg, ...)
+#endif
 
-static NEO_AINLINE void *gc_rawmalloc(size_t size) {
-    return calloc(1, size);
-}
-
-static NEO_AINLINE void *gc_rawrealloc(void *blk, size_t size) {
-    return realloc(blk, size);
-}
-
-static NEO_AINLINE void gc_rawfree(void *ptr) {
-    free(ptr);
-}
-
-static NEO_AINLINE size_t probe_dist(gc_context_t* self, size_t i, size_t h) {
+static inline size_t probe_dist(const gc_context_t* self, size_t i, size_t h) {
     neo_asd(self);
     int64_t v = (int64_t)i-((int64_t)h-1);
-    if (v < 0) { v = (int64_t)self->nslots + v; }
+    if (v < 0) { v = (int64_t)self->slots+v; }
     return (size_t)v;
 }
 
-gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *ptr) {
+neo_static_assert(sizeof(uint64_t) == sizeof(uintptr_t));
+static inline uint32_t gc_hash(const void *ptr) {
+    uintptr_t p = (uintptr_t)ptr>>3;
+    p &= ((1ull<<48)-1); /* Extract 48-bit address value. */
+    p = (p>>32)^(p&((1ull<<32)-1)); /* Try to combine the high 16-bit with the low 32-bit of the 47/48-bit pointer. */
+    return (uint32_t)p;
+}
+
+gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr) {
     neo_asd(self);
     size_t i, j, h;
-    i = gc_hash(ptr) % self->nslots; j = 0;
+    i = gc_hash(ptr) % self->slots; j = 0;
     for (;;) {
-        h = self->items[i].hash;
+        h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return NULL; }
-        if (self->items[i].ptr == ptr) { return &self->items[i]; }
-        i = (i+1) % self->nslots; ++j;
+        if (self->trackedallocs[i].ptr == ptr) { return self->trackedallocs+i; }
+        i = (i+1) % self->slots; ++j;
     }
 }
 
-static void attach_ptr(gc_context_t *self, void *ptr, size_t size, gc_flags_t flags, void(*dtor)(void *)) {
+static void attach_ptr(gc_context_t *self, void *ptr, size_t size, gc_flags_t flags) {
     neo_asd(self);
     gc_fatptr_t item, tmp;
     size_t h, p, i, j;
-    i = gc_hash(ptr) % self->nslots; j = 0;
+    i = gc_hash(ptr) % self->slots; j = 0;
     item.ptr = ptr;
     item.flags = flags;
     item.size = size;
-    item.hash = i+1;
-    item.dtor = dtor;
+    item.hash = (uint32_t)(i+1);
     for (;;) {
-        h = self->items[i].hash;
-        if (h == 0) { self->items[i] = item; return; }
-        if (self->items[i].ptr == item.ptr) { return; }
+        h = self->trackedallocs[i].hash;
+        if (h == 0) { self->trackedallocs[i] = item; return; }
+        if (self->trackedallocs[i].ptr == item.ptr) { return; }
         p = probe_dist(self, i, h);
         if (j >= p) {
-            tmp = self->items[i];
-            self->items[i] = item;
+            tmp = self->trackedallocs[i];
+            self->trackedallocs[i] = item;
             item = tmp;
             j = p;
         }
-        i = (i+1) % self->nslots; ++j;
+        i = (i+1) % self->slots; ++j;
     }
 }
 
 static void detach_ptr(gc_context_t *self, void *ptr) {
     neo_asd(self);
     size_t i, j, h, nj, nh;
-    if (neo_unlikely(self->nitems == 0)) { return; }
-    for (i = 0; i < self->nfrees; ++i) {
-        if (self->frees[i].ptr == ptr) { self->frees[i].ptr = NULL; }
+    if (neo_unlikely(self->alloc_len == 0)) { return; }
+    for (i = 0; i < self->free_len; ++i) {
+        if (self->freelist[i].ptr == ptr) { self->freelist[i].ptr = NULL; }
     }
-    i = gc_hash(ptr) % self->nslots; j = 0;
+    i = gc_hash(ptr) % self->slots; j = 0;
     for (;;) {
-        h = self->items[i].hash;
+        h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return; }
-        if (self->items[i].ptr == ptr) {
-            memset(&self->items[i], 0, sizeof(gc_fatptr_t));
+        if (self->trackedallocs[i].ptr == ptr) {
+            memset(self->trackedallocs + i, 0, sizeof(*self->trackedallocs));
             j = i;
             for (;;) {
-                nj = (j+1) % self->nslots;
-                nh = self->items[nj].hash;
-                if (nh != 0 && probe_dist(self, nj, nh) > 0) {
-                    memcpy(&self->items[ j], &self->items[nj], sizeof(gc_fatptr_t));
-                    memset(&self->items[nj], 0, sizeof(gc_fatptr_t));
+                nj = (j+1) % self->slots;
+                nh = self->trackedallocs[nj].hash;
+                if (nh && probe_dist(self, nj, nh) > 0) {
+                    memcpy(self->trackedallocs + j, self->trackedallocs + nj, sizeof(*self->trackedallocs));
+                    memset(self->trackedallocs + nj, 0, sizeof(*self->trackedallocs));
                     j = nj;
                 } else {
                     break;
                 }
             }
-            self->nitems--;
+            self->alloc_len--;
             return;
         }
-        i = (i+1) % self->nslots; ++j;
+        i = (i+1) % self->slots; ++j;
     }
 }
 
 static const uint32_t prime_lut[] = {
-    0,       1,       5,       11,
-    23,      53,      101,     197,
-    389,     683,     1259,    2417,
-    4733,    9371,    18617,   37097,
-    74093,   148073,  296099,  592019,
-    1100009, 2200013, 4400021, 8800019
+    0x0,0x1,0x5,0xb,
+    0x17,0x35,0x65,0xc5,
+    0x185, 0x2ab, 0x4eb, 0x971, 0x127d,
+    0x249b,0x48b9,0x90e9,0x1216d, 0x24269,
+    0x484a3, 0x90893, 0x10c8e9, 0x2191cd, 0x432395,0x864713
 };
 
 static size_t gc_ideal_size(const gc_context_t* self, size_t size) {
     neo_asd(self);
     size_t i, last;
-    size = (size_t)((double)(size+1) / self->loadfactor);
-    for (i = 0; i < sizeof(prime_lut) / sizeof(*prime_lut); ++i) {
+    size = (size_t)((double)(size+1)/self->loadfactor);
+    for (i = 0; i < sizeof(prime_lut)/sizeof(*prime_lut); ++i) {
         if (prime_lut[i] >= size) { return prime_lut[i]; }
     }
-    last = prime_lut[sizeof(prime_lut) / sizeof(*prime_lut) - 1];
-    for (i = 0;; ++i) {
-        if (last * i >= size) { return last * i; }
+    last = prime_lut[sizeof(prime_lut)/sizeof(*prime_lut)-1];
+    for (i = 0; ; ++i) {
+        if (last*i >= size) { return last*i; }
     }
 }
 
-static int gc_rehash(gc_context_t* self, size_t new_size) {
+static void rehash_alloc_map(gc_context_t* self, size_t new_size) {
     neo_asd(self);
-    gc_fatptr_t *old_items = self->items;
-    size_t old_size = self->nslots;
-    self->nslots = new_size;
-    self->items = gc_rawmalloc(self->nslots*sizeof(gc_fatptr_t));
-    if (self->items == NULL) {
-        self->nslots = old_size;
-        self->items = old_items;
-        return 0;
-    }
+    gc_fatptr_t *old_items = self->trackedallocs;
+    size_t old_size = self->slots;
+    self->slots = new_size;
+    self->trackedallocs = neo_memalloc(NULL, self->slots * sizeof(gc_fatptr_t));
     for (size_t i = 0; i < old_size; ++i) {
-        if (old_items[i].hash != 0) {
-            attach_ptr(self, old_items[i].ptr, old_items[i].size, old_items[i].flags, old_items[i].dtor);
+        if (neo_likely(old_items[i].hash)) {
+            attach_ptr(self, old_items[i].ptr, old_items[i].size, old_items[i].flags);
         }
     }
-    gc_rawfree(old_items);
-    return 1;
+    neo_memalloc(old_items, 0);
 }
 
-static int gc_resize_more(gc_context_t *self) {
+static void grow_alloc_map(gc_context_t *self) {
     neo_asd(self);
-    size_t new_size = gc_ideal_size(self, self->nitems);
-    size_t old_size = self->nslots;
-    return (new_size > old_size) ? gc_rehash(self, new_size) : 1;
+    size_t new_size = gc_ideal_size(self, self->alloc_len);
+    size_t old_size = self->slots;
+    if (new_size > old_size) { rehash_alloc_map(self, new_size); }
 }
 
-static int gc_resize_less(gc_context_t *self) {
+static void shrink_alloc_map(gc_context_t *self) {
     neo_asd(self);
-    size_t new_size = gc_ideal_size(self, self->nitems);
-    size_t old_size = self->nslots;
-    return (new_size < old_size) ? gc_rehash(self, new_size) : 1;
+    size_t new_size = gc_ideal_size(self, self->alloc_len);
+    size_t old_size = self->slots;
+    if (new_size < old_size) { rehash_alloc_map(self, new_size); }
 }
 
 static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
     neo_asd(self);
     size_t i, j, h;
-    if ((uintptr_t)ptr < self->minptr || (uintptr_t)ptr > self->maxptr) { return; } /* Out of bounds. */
-    i = gc_hash(ptr) % self->nslots; j = 0;
+    if (neo_unlikely((uintptr_t)ptr < self->bndmin || (uintptr_t)ptr > self->bndmax)) { return; } /* Out of bounds. */
+    i = gc_hash(ptr) % self->slots; j = 0;
     for (;;) {
-        h = self->items[i].hash;
+        h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return; }
-        if (ptr == self->items[i].ptr) {
-            if (self->items[i].flags & GCF_MARK) { return; }
-            self->items[i].flags |= GCF_MARK;
-            if (self->items[i].flags & GCF_LEAF) { return; }
-            for (size_t k = 0; k < self->items[i].size / sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void **)self->items[i].ptr)[k]);
+        if (ptr == self->trackedallocs[i].ptr) {
+            if (self->trackedallocs[i].flags & GCF_MARK) { return; }
+            self->trackedallocs[i].flags |= GCF_MARK;
+            if (self->trackedallocs[i].flags & GCF_LEAF) { return; }
+            for (size_t k = 0; k < self->trackedallocs[i].size / sizeof(void*); ++k) {
+                gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
             }
             return;
         }
-        i = (i+1) % self->nslots; ++j;
+        i = (i+1) % self->slots; ++j;
     }
 
 }
 
 static void gc_mark_stack(gc_context_t *self) {
     neo_asd(self);
-    if (neo_unlikely(self->stk_top == self->stk_bot)) { return; }
-    const void **top = (const void **)self->stk_top;
-    const void **bot = (const void **)self->stk_bot;
+    if (neo_unlikely(self->stktop == self->stkbot)) { return; }
+    const void **top = (const void **)self->stktop;
+    const void **bot = (const void **)self->stkbot;
     if (bot < top) {
         while (top >= bot) {
             gc_mark_ptr(self, *top--);
@@ -190,15 +180,14 @@ static void gc_mark_stack(gc_context_t *self) {
 
 static void gc_mark(gc_context_t *self) {
     neo_asd(self);
-    if (self->nitems == 0) { return; }
-    for (size_t i = 0; i < self->nslots; ++i) {
-        if (self->items[i].hash == 0) { continue; }
-        if (self->items[i].flags & GCF_MARK) { continue; }
-        if (self->items[i].flags & GCF_ROOT) {
-            self->items[i].flags |= GCF_MARK;
-            if (self->items[i].flags & GCF_LEAF) { continue; }
-            for (size_t k = 0; k < self->items[i].size / sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void **)self->items[i].ptr)[k]);
+    if (neo_unlikely(!self->alloc_len)) { return; }
+    for (size_t i = 0; i < self->slots; ++i) {
+        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags & GCF_MARK)) { continue; }
+        if (self->trackedallocs[i].flags & GCF_ROOT) {
+            self->trackedallocs[i].flags|=GCF_MARK;
+            if (self->trackedallocs[i].flags & GCF_LEAF) { continue; }
+            for (size_t k = 0; k < self->trackedallocs[i].size / sizeof(void*); ++k) {
+                gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
             }
             continue;
         }
@@ -209,141 +198,137 @@ static void gc_mark(gc_context_t *self) {
 void gc_sweep(gc_context_t *self) {
     neo_asd(self);
     size_t i, j, k, nj, nh;
-
-    if (self->nitems == 0) { return; }
-
-    self->nfrees = 0;
-    for (i = 0; i < self->nslots; ++i) {
-        if (self->items[i].hash == 0) { continue; }
-        if (self->items[i].flags & GCF_MARK) { continue; }
-        if (self->items[i].flags & GCF_ROOT) { continue; }
-        self->nfrees++;
+    if (neo_unlikely(!self->alloc_len)) { return; }
+    self->free_len = 0;
+    for (i = 0; i < self->slots; ++i) {
+        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&(GCF_MARK|GCF_ROOT))) { continue; }
+        ++self->free_len;
     }
-
-    self->frees = gc_rawrealloc(self->frees, sizeof(gc_fatptr_t) * self->nfrees);
-    if (neo_unlikely(self->frees == NULL)) { return; }
-
+    self->freelist = neo_memalloc(self->freelist, sizeof(*self->freelist)*self->free_len);
     i = 0; k = 0;
-    while (i < self->nslots) {
-        if (self->items[i].hash == 0) { ++i; continue; }
-        if (self->items[i].flags & GCF_MARK) { ++i; continue; }
-        if (self->items[i].flags & GCF_ROOT) { ++i; continue; }
-
-        self->frees[k] = self->items[i]; ++k;
-        memset(&self->items[i], 0, sizeof(gc_fatptr_t));
-
+    while (i < self->slots) {
+        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&(GCF_MARK|GCF_ROOT))) { ++i; continue; }
+        self->freelist[k++] = self->trackedallocs[i];
+        memset(self->trackedallocs+i, 0, sizeof(*self->trackedallocs));
         j = i;
         for (;;) {
-            nj = (j+1) % self->nslots;
-            nh = self->items[nj].hash;
-            if (nh != 0 && probe_dist(self, nj, nh) > 0) {
-                memcpy(&self->items[ j], &self->items[nj], sizeof(gc_fatptr_t));
-                memset(&self->items[nj], 0, sizeof(gc_fatptr_t));
+            nj = (j+1) % self->slots;
+            nh = self->trackedallocs[nj].hash;
+            if (nh && probe_dist(self, nj, nh) > 0) {
+                memcpy(self->trackedallocs+j, self->trackedallocs+nj, sizeof(*self->trackedallocs));
+                memset(self->trackedallocs+nj, 0, sizeof(*self->trackedallocs));
                 j = nj;
             } else {
                 break;
             }
         }
-        self->nitems--;
+        ++self->alloc_len;
     }
-
-    for (i = 0; i < self->nslots; ++i) {
-        if (self->items[i].hash == 0) { continue; }
-        if (self->items[i].flags & GCF_MARK) {
-            self->items[i].flags &= ~GCF_MARK&255;
+    for (i = 0; i < self->slots; ++i) {
+        if (self->trackedallocs[i].hash == 0) { continue; }
+        if (self->trackedallocs[i].flags&GCF_MARK) {
+            self->trackedallocs[i].flags&=~GCF_MARK&255;
         }
     }
-
-    gc_resize_less(self);
-
-    self->mitems = self->nitems + (size_t)((double)self->nitems * self->sweepfactor) + 1;
-
-    for (i = 0; i < self->nfrees; ++i) {
-        if (self->frees[i].ptr) {
-            if (self->frees[i].dtor) { self->frees[i].dtor(self->frees[i].ptr); }
-            gc_rawfree(self->frees[i].ptr);
+    shrink_alloc_map(self);
+    self->threshold = self->alloc_len+(size_t)((double)self->alloc_len*self->sweepfactor)+1;
+    for (i = 0; i < self->free_len; ++i) {
+        if (self->freelist[i].ptr) {
+            if (self->dtor_hook) { (*self->dtor_hook)(self->freelist[i].ptr); }
+            neo_memalloc(self->freelist[i].ptr, 0); /* Free individual allocation. */
         }
     }
-
-    gc_rawfree(self->frees);
-    self->frees = NULL;
-    self->nfrees = 0;
-
+    neo_memalloc(self->freelist, 0);
+    self->freelist = NULL;
+    self->free_len = 0;
 }
 
 void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot) {
     neo_asd(self);
     memset(self, 0, sizeof(*self));
-    self->stk_top = stk_top;
-    self->stk_bot = stk_bot;
-    self->items = NULL;
-    self->frees = NULL;
-    self->minptr = UINTPTR_MAX;
+    self->stktop = stk_top;
+    self->stkbot = stk_bot;
+    self->trackedallocs = NULL;
+    self->freelist = NULL;
+    self->bndmin = UINTPTR_MAX;
     self->loadfactor = GC_LOADFACTOR;
     self->sweepfactor = GC_SWEEPFACTOR;
+    gctrace("initialized gc with stack bounds: [%p, %p], delta: %zub", stk_top, stk_bot, (size_t)llabs((intptr_t)stk_bot-(intptr_t)stk_top));
 }
 
 void gc_free(gc_context_t *self) {
     neo_asd(self);
     gc_sweep(self);
-    gc_rawfree(self->items);
-    gc_rawfree(self->frees);
+    for (size_t i = 0; i < self->slots; ++i) { /* Free all roots. */
+        if (self->trackedallocs[i].ptr && self->trackedallocs[i].flags&GCF_ROOT) {
+            neo_warn("root memory allocation still alive: %p, index: %zu, size: %zu", self->trackedallocs[i].ptr, i, self->trackedallocs[i].size);
+            gc_objfree(self, self->trackedallocs[i].ptr);
+        }
+    }
+    neo_memalloc(self->trackedallocs, 0);
+    neo_memalloc(self->freelist, 0);
+    memset(self, 0, sizeof(*self));
+    gctrace("offline");
 }
 
 void gc_pause(gc_context_t *self) {
     neo_asd(self);
-    self->paused = 1;
+    self->is_paused = true;
 }
 
 void gc_resume(gc_context_t *self) {
     neo_asd(self);
-    self->paused = 0;
+    self->is_paused = false;
 }
 
-void gc_collect(gc_context_t *self) {
+NEO_HOTPROC void gc_collect(gc_context_t *self) {
     neo_asd(self);
+    gctrace("collecting garbage...");
     gc_mark(self);
     gc_sweep(self);
 }
 
-static void *gc_add(gc_context_t *self, void *ptr, size_t size, gc_flags_t flags, void(*dtor)(void*)) {
+static void *attach_objptr(gc_context_t *self, void *ptr, size_t size, gc_flags_t flags) {
     neo_asd(self);
-    self->nitems++;
-    self->maxptr = (uintptr_t)ptr + size > self->maxptr ? (uintptr_t)ptr + size : self->maxptr;
-    self->minptr = (uintptr_t)ptr < self->minptr ? (uintptr_t)ptr : self->minptr;
-    if (gc_resize_more(self)) {
-        if (!self->paused && self->nitems > self->mitems) {
-            gc_collect(self);
-        }
-        attach_ptr(self, ptr, size, flags, dtor);
-        return ptr;
-    } else {
-        self->nitems--;
-        gc_rawfree(ptr);
-        return NULL;
+    ++self->alloc_len;
+    self->bndmax = (uintptr_t)ptr+size > self->bndmax ? (uintptr_t)ptr+size : self->bndmax;
+    self->bndmin = (uintptr_t)ptr < self->bndmin ? (uintptr_t)ptr : self->bndmin;
+    grow_alloc_map(self);
+    if (!self->is_paused && self->alloc_len > self->threshold) {
+        gctrace("allocation threshold reached, triggered collection");
+        gc_collect(self);
     }
+    attach_ptr(self, ptr, size, flags);
+    gctrace("allocated %zu bytes at %p, flags: %x", size, ptr, flags);
+    return ptr;
 }
 
-static NEO_UNUSED void gc_rem(gc_context_t *self, void *ptr) {
+static NEO_UNUSED void detach_objptr(gc_context_t *self, void *ptr) {
     neo_asd(self);
     detach_ptr(self, ptr);
-    gc_resize_less(self);
-    self->mitems = self->nitems + self->nitems / 2 + 1;
+    shrink_alloc_map(self);
+    self->threshold = self->alloc_len+(self->alloc_len>>1)+1;
+    gctrace("deallocated %p", ptr);
 }
 
-void *gc_alloc(gc_context_t *self, size_t size, void(*dtor)(void *), bool is_root) {
+NEO_HOTPROC void *gc_objalloc(gc_context_t *self, size_t size, gc_flags_t flags) {
     neo_asd(self);
-    neo_as(size > 0 && "gc allocation size must be > 0");
+    neo_as(size && "gc allocation size must be > 0");
     neo_as((size & (GC_ALLOC_GRANULARITY-1)) == 0 && "gc allocation size must be a multiple of GC_ALLOC_GRANULARITY");
     void *ptr = neo_memalloc(NULL, size);
-    memset(ptr, 0, size);
-    return gc_add(self, ptr, size, is_root ? GCF_ROOT : GCF_NONE, dtor);
+    memset(ptr, 0, size); /* Zero memory and warmup pages. */
+    return attach_objptr(self, ptr, size, flags);
 }
 
-void gc_set_dtor(gc_context_t *self, void *ptr, void(*dtor)(void*)) {
+void gc_objfree(gc_context_t *self, void *ptr) {
     neo_asd(self);
-    gc_fatptr_t *p  = gc_resolve_ptr(self, ptr);
-    if (p) { p->dtor = dtor; }
+    if (neo_unlikely(!ptr)) { return; }
+    const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
+    if (p) {
+        if (self->dtor_hook) { (*self->dtor_hook)(ptr); }
+        neo_memalloc(ptr, 0); /* Free individual allocation. */
+        detach_objptr(self, ptr);
+    }
 }
 
 void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags) {
@@ -354,18 +339,12 @@ void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags) {
 
 gc_flags_t gc_get_flags(gc_context_t *self, void *ptr) {
     neo_asd(self);
-    const gc_fatptr_t *p  = gc_resolve_ptr(self, ptr);
+    const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     return p ? p->flags : GCF_NONE;
-}
-
-void(*gc_get_dtor(gc_context_t *self, void *ptr))(void*) {
-    neo_asd(self);
-    const gc_fatptr_t *p  = gc_resolve_ptr(self, ptr);
-    return p ? p->dtor : NULL;
 }
 
 size_t gc_get_size(gc_context_t *self, void *ptr) {
     neo_asd(self);
-    const gc_fatptr_t *p  = gc_resolve_ptr(self, ptr);
+    const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     return p ? p->size : 0;
 }

@@ -17,7 +17,7 @@ extern "C" {
 **
 ** A memory allocation is considered reachable by the GC if...
 ** -> A pointer points to it, located on the VM stack.
-** -> A pointer points to it, inside memory allocated by gc_alloc and friends.
+** -> A pointer points to it, inside memory allocated by gc_objalloc and friends.
 ** Otherwise, a memory allocation is considered unreachable.
 **
 ** Therefore, some things that don't qualify an allocation as reachable are, if...
@@ -35,56 +35,54 @@ extern "C" {
 ** TODO: Generational GC.
 */
 
+#define GC_DBG NEO_DBG /* Eanble GC debug mode and logging. */
 #define GC_LOADFACTOR 0.9 /* GC must be 90 % full before resizing. */
-#define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocated items exceeds 50% of the maximum capacity. */
+#define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocations exceeds 50% of the maximum capacity. */
 #define GC_ALLOC_GRANULARITY 8 /* Allocation granularity. */
 neo_static_assert(GC_ALLOC_GRANULARITY >= sizeof(void*) && GC_ALLOC_GRANULARITY && ((GC_ALLOC_GRANULARITY)&(GC_ALLOC_GRANULARITY-1)) == 0 && "GC_ALLOC_GRANULARITY must be a power of two and at least the size of a pointer.");
-#define gc_hash(p) ((uintptr_t)(p)>>3)
 
 typedef enum gc_flags_t {
     GCF_NONE = 0,
-    GCF_MARK = 1 << 0,
-    GCF_ROOT = 1 << 1,
-    GCF_LEAF = 1 << 2
+    GCF_MARK = 1<<0,
+    GCF_ROOT = 1<<1,
+    GCF_LEAF = 1<<2
 } gc_flags_t;
 
 typedef struct gc_fatptr_t {
     void *ptr;
     gc_flags_t flags : 8;
     size_t size;
-    size_t hash;
-    void (*dtor)(void*);
+    uint32_t hash;
 } gc_fatptr_t;
 
+/* Per-thread GC context. */
 typedef struct gc_context_t {
-    const void *stk_top;
-    const void *stk_bot;
-    uintptr_t minptr;
-    uintptr_t maxptr;
-    gc_fatptr_t *items;
-    gc_fatptr_t *frees;
-    size_t nitems;
-    size_t nslots;
-    size_t mitems;
-    size_t nfrees;
-    double loadfactor;
-    double sweepfactor;
-    bool paused;
+    const void *stktop; /* Top of the VM stack. (VM stack grows upwards so: top > bot.) */
+    const void *stkbot; /* Bottom of the VM stack. (VM stack grows upwards so: top > bot.) */
+    uintptr_t bndmin; /* Minimum pointer value of memory bounds. */
+    uintptr_t bndmax; /* Maximum pointer value of memory bounds. */
+    gc_fatptr_t *trackedallocs; /* List of tracked allocated objects. */
+    size_t alloc_len; /* Allocated length of <trackedallocs>. */
+    gc_fatptr_t *freelist; /* Contains temporary freed objects. */
+    size_t free_len;
+    size_t slots; /* Number of slots in the hashtable. */
+    size_t threshold; /* Threshold value for triggering a garbage collection. */
+    double loadfactor; /* Load-factor for triggering a resize. E.g., 0.75 means 75 % load of the table. */
+    double sweepfactor; /* Sweep-factor for triggering a sweep. */
+    volatile bool is_paused; /* Is the GC paused? */
+    void (*dtor_hook)(void *); /* Destructor callback hook. */
 } gc_context_t;
 
 extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
 extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);
-extern NEO_EXPORT void gc_collect(gc_context_t *self);
-extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *ptr);
-extern NEO_EXPORT void *gc_alloc(gc_context_t *self, size_t size, void(*dtor)(void *), bool is_root);
-#define gc_vmalloc(self, size, dtor) gc_alloc((self),(size),(dtor),false)
-#define gc_vmalloc_root(self, size, dtor) gc_alloc((self),(size),(dtor),true)
-extern NEO_EXPORT void gc_set_dtor(gc_context_t *self, void *ptr, void(*dtor)(void*));
+extern NEO_EXPORT NEO_HOTPROC void gc_collect(gc_context_t *self);
+extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr);
+extern NEO_EXPORT NEO_HOTPROC void *gc_objalloc(gc_context_t *self, size_t size, gc_flags_t flags);
+extern NEO_EXPORT void gc_objfree(gc_context_t *self, void *ptr);
 extern NEO_EXPORT void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags);
 extern NEO_EXPORT gc_flags_t gc_get_flags(gc_context_t *self, void *ptr);
-extern NEO_EXPORT void(*gc_get_dtor(gc_context_t *self, void *ptr))(void*);
 extern NEO_EXPORT size_t gc_get_size(gc_context_t *self, void *ptr);
 
 #ifdef __cplusplus
