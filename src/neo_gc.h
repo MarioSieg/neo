@@ -48,12 +48,13 @@ typedef enum gc_flags_t {
     GCF_LEAF = 1<<2
 } gc_flags_t;
 
-typedef struct gc_fatptr_t {
+typedef NEO_ALIGN(8) struct gc_fatptr_t {
     void *ptr;
-    gc_flags_t flags : 8;
     size_t size;
+    gc_flags_t flags : 8;
     uint32_t hash;
 } gc_fatptr_t;
+neo_static_assert(sizeof(gc_fatptr_t) % 8 == 0);
 
 /* Per-thread GC context. */
 typedef struct gc_context_t {
