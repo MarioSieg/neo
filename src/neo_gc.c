@@ -77,8 +77,8 @@ static void detach_ptr(gc_context_t *self, void *ptr) {
                 nj = (j+1) % self->slots;
                 nh = self->trackedallocs[nj].hash;
                 if (nh && probe_dist(self, nj, nh) > 0) {
-                    memcpy(self->trackedallocs + j, self->trackedallocs + nj, sizeof(*self->trackedallocs));
-                    memset(self->trackedallocs + nj, 0, sizeof(*self->trackedallocs));
+                    memcpy(self->trackedallocs+j, self->trackedallocs+nj, sizeof(*self->trackedallocs));
+                    memset(self->trackedallocs+nj, 0, sizeof(*self->trackedallocs));
                     j = nj;
                 } else {
                     break;
@@ -149,10 +149,10 @@ static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
         h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return; }
         if (ptr == self->trackedallocs[i].ptr) {
-            if (self->trackedallocs[i].flags & GCF_MARK) { return; }
-            self->trackedallocs[i].flags |= GCF_MARK;
-            if (self->trackedallocs[i].flags & GCF_LEAF) { return; }
-            for (size_t k = 0; k < self->trackedallocs[i].size / sizeof(void*); ++k) {
+            if (self->trackedallocs[i].flags&GCF_MARK) { return; }
+            self->trackedallocs[i].flags|=GCF_MARK;
+            if (self->trackedallocs[i].flags&GCF_LEAF) { return; }
+            for (size_t k = 0; k < self->trackedallocs[i].size/sizeof(void*); ++k) {
                 gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
             }
             return;
@@ -182,11 +182,11 @@ static void gc_mark(gc_context_t *self) {
     neo_asd(self);
     if (neo_unlikely(!self->alloc_len)) { return; }
     for (size_t i = 0; i < self->slots; ++i) {
-        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags & GCF_MARK)) { continue; }
-        if (self->trackedallocs[i].flags & GCF_ROOT) {
+        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&GCF_MARK)) { continue; }
+        if (self->trackedallocs[i].flags&GCF_ROOT) {
             self->trackedallocs[i].flags|=GCF_MARK;
-            if (self->trackedallocs[i].flags & GCF_LEAF) { continue; }
-            for (size_t k = 0; k < self->trackedallocs[i].size / sizeof(void*); ++k) {
+            if (self->trackedallocs[i].flags&GCF_LEAF) { continue; }
+            for (size_t k = 0; k < self->trackedallocs[i].size/sizeof(void*); ++k) {
                 gc_mark_ptr(self, ((void **)self->trackedallocs[i].ptr)[k]);
             }
             continue;
@@ -303,7 +303,7 @@ static void *attach_objptr(gc_context_t *self, void *ptr, size_t size, gc_flags_
     return ptr;
 }
 
-static NEO_UNUSED void detach_objptr(gc_context_t *self, void *ptr) {
+static void detach_objptr(gc_context_t *self, void *ptr) {
     neo_asd(self);
     detach_ptr(self, ptr);
     shrink_alloc_map(self);
