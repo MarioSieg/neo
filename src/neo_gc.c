@@ -2,6 +2,22 @@
 
 #include "neo_gc.h"
 
+/* These allocation failtures are essentially the same as neo_memalloc BUT
+** they return NULL on allocation faiure, instead of aborting the program (like neo_memalloc does with panic()).
+*/
+
+static NEO_AINLINE void *gc_rawmalloc(size_t size) {
+    return calloc(1, size);
+}
+
+static NEO_AINLINE void *gc_rawrealloc(void *blk, size_t size) {
+    return realloc(blk, size);
+}
+
+static NEO_AINLINE void gc_rawfree(void *ptr) {
+    free(ptr);
+}
+
 static NEO_AINLINE size_t probe_dist(gc_context_t* self, size_t i, size_t h) {
     neo_asd(self);
     int64_t v = (int64_t)i-((int64_t)h-1);
@@ -105,7 +121,7 @@ static int gc_rehash(gc_context_t* self, size_t new_size) {
     gc_fatptr_t *old_items = self->items;
     size_t old_size = self->nslots;
     self->nslots = new_size;
-    self->items = calloc(self->nslots, sizeof(gc_fatptr_t));
+    self->items = gc_rawmalloc(self->nslots*sizeof(gc_fatptr_t));
     if (self->items == NULL) {
         self->nslots = old_size;
         self->items = old_items;
@@ -113,12 +129,10 @@ static int gc_rehash(gc_context_t* self, size_t new_size) {
     }
     for (size_t i = 0; i < old_size; ++i) {
         if (old_items[i].hash != 0) {
-            attach_ptr(self,
-                       old_items[i].ptr, old_items[i].size,
-                       old_items[i].flags, old_items[i].dtor);
+            attach_ptr(self, old_items[i].ptr, old_items[i].size, old_items[i].flags, old_items[i].dtor);
         }
     }
-    free(old_items);
+    gc_rawfree(old_items);
     return 1;
 }
 
@@ -136,11 +150,10 @@ static int gc_resize_less(gc_context_t *self) {
     return (new_size < old_size) ? gc_rehash(self, new_size) : 1;
 }
 
-static void gc_mark_ptr(gc_context_t *self, void *ptr) {
+static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
     neo_asd(self);
     size_t i, j, h;
-    if ((uintptr_t)ptr < self->minptr
-        || (uintptr_t)ptr > self->maxptr) { return; }
+    if ((uintptr_t)ptr < self->minptr || (uintptr_t)ptr > self->maxptr) { return; } /* Out of bounds. */
     i = gc_hash(ptr) % self->nslots; j = 0;
     for (;;) {
         h = self->items[i].hash;
@@ -150,7 +163,7 @@ static void gc_mark_ptr(gc_context_t *self, void *ptr) {
             self->items[i].flags |= GCF_MARK;
             if (self->items[i].flags & GCF_LEAF) { return; }
             for (size_t k = 0; k < self->items[i].size / sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void**)self->items[i].ptr)[k]);
+                gc_mark_ptr(self, ((void **)self->items[i].ptr)[k]);
             }
             return;
         }
@@ -161,16 +174,16 @@ static void gc_mark_ptr(gc_context_t *self, void *ptr) {
 
 static void gc_mark_stack(gc_context_t *self) {
     neo_asd(self);
-    void *top = self->stk_top;
-    void *bot = self->stk_bot;
-    if (neo_unlikely(bot == top)) { return; }
+    if (neo_unlikely(self->stk_top == self->stk_bot)) { return; }
+    const void **top = (const void **)self->stk_top;
+    const void **bot = (const void **)self->stk_bot;
     if (bot < top) {
-        for (void *p = top; p >= bot; p = ((uint8_t *)p)-sizeof(void *)) {
-            gc_mark_ptr(self, *((void **)p));
+        while (top >= bot) {
+            gc_mark_ptr(self, *top--);
         }
     } else if (bot > top) {
-        for (void *p = top; p <= bot; p = ((uint8_t *)p)+sizeof(void *)) {
-            gc_mark_ptr(self, *((void **)p));
+        while (top <= bot) {
+            gc_mark_ptr(self, *top++);
         }
     }
 }
@@ -185,7 +198,7 @@ static void gc_mark(gc_context_t *self) {
             self->items[i].flags |= GCF_MARK;
             if (self->items[i].flags & GCF_LEAF) { continue; }
             for (size_t k = 0; k < self->items[i].size / sizeof(void*); ++k) {
-                gc_mark_ptr(self, ((void**)self->items[i].ptr)[k]);
+                gc_mark_ptr(self, ((void **)self->items[i].ptr)[k]);
             }
             continue;
         }
@@ -207,8 +220,8 @@ void gc_sweep(gc_context_t *self) {
         self->nfrees++;
     }
 
-    self->frees = realloc(self->frees, sizeof(gc_fatptr_t) * self->nfrees);
-    if (self->frees == NULL) { return; }
+    self->frees = gc_rawrealloc(self->frees, sizeof(gc_fatptr_t) * self->nfrees);
+    if (neo_unlikely(self->frees == NULL)) { return; }
 
     i = 0; k = 0;
     while (i < self->nslots) {
@@ -248,17 +261,17 @@ void gc_sweep(gc_context_t *self) {
     for (i = 0; i < self->nfrees; ++i) {
         if (self->frees[i].ptr) {
             if (self->frees[i].dtor) { self->frees[i].dtor(self->frees[i].ptr); }
-            free(self->frees[i].ptr);
+            gc_rawfree(self->frees[i].ptr);
         }
     }
 
-    free(self->frees);
+    gc_rawfree(self->frees);
     self->frees = NULL;
     self->nfrees = 0;
 
 }
 
-void gc_init(gc_context_t *self, void *stk_top, void *stk_bot) {
+void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot) {
     neo_asd(self);
     memset(self, 0, sizeof(*self));
     self->stk_top = stk_top;
@@ -273,8 +286,8 @@ void gc_init(gc_context_t *self, void *stk_top, void *stk_bot) {
 void gc_free(gc_context_t *self) {
     neo_asd(self);
     gc_sweep(self);
-    free(self->items);
-    free(self->frees);
+    gc_rawfree(self->items);
+    gc_rawfree(self->frees);
 }
 
 void gc_pause(gc_context_t *self) {
@@ -306,7 +319,7 @@ static void *gc_add(gc_context_t *self, void *ptr, size_t size, gc_flags_t flags
         return ptr;
     } else {
         self->nitems--;
-        free(ptr);
+        gc_rawfree(ptr);
         return NULL;
     }
 }
@@ -320,6 +333,8 @@ static NEO_UNUSED void gc_rem(gc_context_t *self, void *ptr) {
 
 void *gc_alloc(gc_context_t *self, size_t size, void(*dtor)(void *), bool is_root) {
     neo_asd(self);
+    neo_as(size > 0 && "gc allocation size must be > 0");
+    neo_as((size & (GC_ALLOC_GRANULARITY-1)) == 0 && "gc allocation size must be a multiple of GC_ALLOC_GRANULARITY");
     void *ptr = neo_memalloc(NULL, size);
     memset(ptr, 0, size);
     return gc_add(self, ptr, size, is_root ? GCF_ROOT : GCF_NONE, dtor);
@@ -354,4 +369,3 @@ size_t gc_get_size(gc_context_t *self, void *ptr) {
     const gc_fatptr_t *p  = gc_resolve_ptr(self, ptr);
     return p ? p->size : 0;
 }
-

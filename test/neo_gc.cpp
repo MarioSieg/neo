@@ -18,7 +18,7 @@ TEST(gc, gc_alloc_stack_ref) {
         released = true;
     };
 
-    auto *ptr = static_cast<int*>(gc_vmalloc(&gc,sizeof(int), +destructor));
+    auto *ptr = static_cast<int64_t*>(gc_vmalloc(&gc, sizeof(int64_t), +destructor));
     ASSERT_EQ(released, false);
     ASSERT_EQ(*ptr, 0);
     ASSERT_EQ(*ptr, 0);
@@ -29,8 +29,8 @@ TEST(gc, gc_alloc_stack_ref) {
     gc_fatptr_t *fptr = gc_resolve_ptr(&gc, ptr);
     ASSERT_NE(fptr, nullptr);
     ASSERT_EQ(fptr->ptr, ptr);
-    ASSERT_EQ(*static_cast<int*>(fptr->ptr), 10);
-    ASSERT_EQ(fptr->size, sizeof(int));
+    ASSERT_EQ(*static_cast<int64_t*>(fptr->ptr), 10);
+    ASSERT_EQ(fptr->size, sizeof(int64_t));
     ASSERT_EQ(fptr->dtor, destructor);
 
     stk[2] = reinterpret_cast<std::uintptr_t>(ptr); // create artifical stack reference
@@ -71,7 +71,7 @@ TEST(gc, gc_alloc_heap_ref) {
     };
 
     auto *ptr1 = static_cast<dummy*>(gc_vmalloc_root(&gc, sizeof(dummy), +destructor1));
-    auto *ptr2 = static_cast<int*>(gc_vmalloc(&gc, sizeof(int), +destructor2));
+    auto *ptr2 = static_cast<int64_t*>(gc_vmalloc(&gc, sizeof(int64_t), +destructor2));
     ASSERT_EQ(released1, false);
     ASSERT_EQ(released2, false);
     constexpr std::uint8_t zm[sizeof(dummy)] {};
@@ -88,7 +88,7 @@ TEST(gc, gc_alloc_heap_ref) {
     gc_fatptr_t *fptr2 = gc_resolve_ptr(&gc, ptr2);
     ASSERT_NE(fptr2, nullptr);
     ASSERT_EQ(fptr2->ptr, ptr2);
-    ASSERT_EQ(fptr2->size, sizeof(int));
+    ASSERT_EQ(fptr2->size, sizeof(int64_t));
     ASSERT_EQ(fptr2->dtor, destructor2);
 
     ptr1->my_ptr = ptr2;

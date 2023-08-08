@@ -30,11 +30,15 @@ extern "C" {
 ** Given these conditions, tgc will free memory allocations some time after they become unreachable.
 ** To do this, it performs an iteration of mark and sweep when gc_vmalloc is called and the number of memory allocations exceeds some threshold.
 ** It can also be run manually with gc_collect.
+** TODO: Shrink object header (maybe 32-bit hashes are enough?, compressed references, destructors?)
+** TODO: What happends if data looks like a pointer but isn't?
+** TODO: Generational GC.
 */
 
 #define GC_LOADFACTOR 0.9 /* GC must be 90 % full before resizing. */
 #define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocated items exceeds 50% of the maximum capacity. */
-
+#define GC_ALLOC_GRANULARITY 8 /* Allocation granularity. */
+neo_static_assert(GC_ALLOC_GRANULARITY >= sizeof(void*) && GC_ALLOC_GRANULARITY && ((GC_ALLOC_GRANULARITY)&(GC_ALLOC_GRANULARITY-1)) == 0 && "GC_ALLOC_GRANULARITY must be a power of two and at least the size of a pointer.");
 #define gc_hash(p) ((uintptr_t)(p)>>3)
 
 typedef enum gc_flags_t {
@@ -53,22 +57,22 @@ typedef struct gc_fatptr_t {
 } gc_fatptr_t;
 
 typedef struct gc_context_t {
-    void *stk_top;
-    void *stk_bot;
-    bool paused;
+    const void *stk_top;
+    const void *stk_bot;
     uintptr_t minptr;
     uintptr_t maxptr;
     gc_fatptr_t *items;
     gc_fatptr_t *frees;
-    double loadfactor;
-    double sweepfactor;
     size_t nitems;
     size_t nslots;
     size_t mitems;
     size_t nfrees;
+    double loadfactor;
+    double sweepfactor;
+    bool paused;
 } gc_context_t;
 
-extern NEO_EXPORT void gc_init(gc_context_t *self, void *stk_top, void *stk_bot);
+extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
 extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);
