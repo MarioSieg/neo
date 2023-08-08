@@ -20,6 +20,7 @@ typedef struct source_t {
     size_t len; /* In bytes. */
 } source_t;
 extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
+#define source_free(self) neo_memalloc((void *)(self).src, 0)
 
 #define tkdef(_, __)\
     /* Keywords */\

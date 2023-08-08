@@ -520,9 +520,9 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #define SRC_FILE __FILE__ ":" NEO_STRINGIZE(__LINE__)
 
 #if NEO_DBG && !defined(NEO_NO_LOGGING)
-#   define neo_info(msg, ...) fprintf(stdout,  "[neo] " SRC_FILE " " msg "\n", __VA_ARGS__)
-#   define neo_warn(msg, ...) fprintf(stderr,  "[neo] " SRC_FILE " " NEO_CCYELLOW msg NEO_CCRESET "\n", __VA_ARGS__)
-#   define neo_error(msg, ...) fprintf(stderr, "[neo] " SRC_FILE " " NEO_CCRED msg NEO_CCRESET "\n", __VA_ARGS__)
+#   define neo_info(msg, ...) fprintf(stdout,  "[neo] " SRC_FILE " " msg "\n", ## __VA_ARGS__)
+#   define neo_warn(msg, ...) fprintf(stderr,  "[neo] " SRC_FILE " " NEO_CCYELLOW msg NEO_CCRESET "\n", ## __VA_ARGS__)
+#   define neo_error(msg, ...) fprintf(stderr, "[neo] " SRC_FILE " " NEO_CCRED msg NEO_CCRESET "\n", ## __VA_ARGS__)
 #else
 #   define neo_info(msg, ...)
 #   define neo_warn(msg, ...)
@@ -540,7 +540,11 @@ extern NEO_EXPORT const neo_osi_t *neo_osi;
 
 /* ---- Memory ---- */
 #ifndef neo_alloc_malloc
-#   define neo_alloc_malloc(size) calloc(1, size)
+#if NEO_DBG
+#   define neo_alloc_malloc(size) calloc(1, (size))
+#else
+#   define neo_alloc_malloc(size) malloc(size)
+#endif
 #endif
 #ifndef neo_alloc_realloc
 #   define neo_alloc_realloc(blk, size) realloc((blk),(size))

@@ -551,4 +551,5 @@ TEST(lexer, src_load) {
     };;
     ASSERT_EQ(src.len, (sizeof(expected)/sizeof(*expected))-1);
     ASSERT_EQ(std::memcmp(src.src, expected, src.len), 0);
+    source_free(src);
 }

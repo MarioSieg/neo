@@ -35,60 +35,53 @@ extern "C" {
 #define GC_LOADFACTOR 0.9 /* GC must be 90 % full before resizing. */
 #define GC_SWEEPFACTOR 0.5 /* Trigger a sweep when the number of allocated items exceeds 50% of the maximum capacity. */
 
-typedef enum gc_objflags_t {
-    GCS_NONE = 0u<<0,
-    GCS_MARK = 1u<<0,
-    GCS_ROOT = 1u<<1,
-    GCS_LEAF = 1u<<2
-} gc_objflags_t;
-typedef size_t gchash_t;
-typedef struct NEO_ALIGN(8) gc_fatptr_t { /* Fat object pointer. */
-    void *ptr;
-    gc_objflags_t flags : 8;
-    size_t size;
-    gchash_t hash;
-    void (*dtor)(void *ptr); /* Destructor or NULL. */
-#if NEO_DBG
-    uint64_t usr; /* User data. */
-#endif
-} gc_fatptr_t;
-neo_static_assert(sizeof(gc_fatptr_t) == 40+(sizeof((struct gc_fatptr_t){}.usr)*NEO_DBG));
-neo_static_assert(sizeof(gc_fatptr_t) % 8 == 0);
-neo_static_assert(sizeof(void *) == 8);
-neo_static_assert(sizeof(void *)>>3 == 1);
+#define gc_hash(p) ((uintptr_t)(p)>>3)
 
-/* Thread-local GC context. */
+typedef enum gc_flags_t {
+    GCF_NONE = 0,
+    GCF_MARK = 1 << 0,
+    GCF_ROOT = 1 << 1,
+    GCF_LEAF = 1 << 2
+} gc_flags_t;
+
+typedef struct gc_fatptr_t {
+    void *ptr;
+    gc_flags_t flags : 8;
+    size_t size;
+    size_t hash;
+    void (*dtor)(void*);
+} gc_fatptr_t;
+
 typedef struct gc_context_t {
-    const void *stktop; /* Stack start. */
-    const void *stkbot /* Stack bottom. */;
-    bool is_paused;
+    void *stk_top;
+    void *stk_bot;
+    bool paused;
     uintptr_t minptr;
     uintptr_t maxptr;
-    ptrdiff_t delta;
-    gc_fatptr_t *items; /* Root set. */
+    gc_fatptr_t *items;
     gc_fatptr_t *frees;
-    size_t nitems;
-    size_t mitems;
-    size_t nslots;
-    size_t nfrees;
     double loadfactor;
     double sweepfactor;
+    size_t nitems;
+    size_t nslots;
+    size_t mitems;
+    size_t nfrees;
 } gc_context_t;
 
-extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
+extern NEO_EXPORT void gc_init(gc_context_t *self, void *stk_top, void *stk_bot);
+extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);
 extern NEO_EXPORT void gc_collect(gc_context_t *self);
-extern NEO_EXPORT void gc_free(gc_context_t *self);
-extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *p);
-extern NEO_EXPORT void *gc_vmalloc(gc_context_t *self, size_t size, void (*dtor)(void *));
-extern NEO_EXPORT void *gc_vmrealloc(gc_context_t *self, void *blk, size_t size);
-extern NEO_EXPORT void gc_vmfree(gc_context_t *self, void **blk);
-extern NEO_EXPORT gc_objflags_t gc_fatptr_get_flags(gc_context_t *self, void *p);
-extern NEO_EXPORT void gc_fatptr_set_flags(gc_context_t *self, void *p, gc_objflags_t flags);
-extern NEO_EXPORT void (*gc_fatptr_get_dtor(gc_context_t *self, void *p))(void *ptr);
-extern NEO_EXPORT void gc_fatptr_set_dtor(gc_context_t *self, void *p, void (*dtor)(void *));
-extern NEO_EXPORT size_t gc_fatptr_get_size(gc_context_t *self, void *p);
+extern NEO_EXPORT gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, void *ptr);
+extern NEO_EXPORT void *gc_alloc(gc_context_t *self, size_t size, void(*dtor)(void *), bool is_root);
+#define gc_vmalloc(self, size, dtor) gc_alloc((self),(size),(dtor),false)
+#define gc_vmalloc_root(self, size, dtor) gc_alloc((self),(size),(dtor),true)
+extern NEO_EXPORT void gc_set_dtor(gc_context_t *self, void *ptr, void(*dtor)(void*));
+extern NEO_EXPORT void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags);
+extern NEO_EXPORT gc_flags_t gc_get_flags(gc_context_t *self, void *ptr);
+extern NEO_EXPORT void(*gc_get_dtor(gc_context_t *self, void *ptr))(void*);
+extern NEO_EXPORT size_t gc_get_size(gc_context_t *self, void *ptr);
 
 #ifdef __cplusplus
 }
