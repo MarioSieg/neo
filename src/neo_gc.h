@@ -30,7 +30,8 @@ extern "C" {
 ** Given these conditions, tgc will free memory allocations some time after they become unreachable.
 ** To do this, it performs an iteration of mark and sweep when gc_vmalloc is called and the number of memory allocations exceeds some threshold.
 ** It can also be run manually with gc_collect.
-** TODO: Shrink object header (maybe 32-bit hashes are enough?, compressed references, destructors?)
+** TODO: Shrink object header (compressed references, hash?)
+** TODO: Store record directly on header if value type.
 ** TODO: What happends if data looks like a pointer but isn't?
 ** TODO: Generational GC.
 */

@@ -113,16 +113,16 @@ typedef uint32_t bci_instr_t;
 #define bci_switchmod(i) ((bci_instr_t)(((i)^128)&255))
 
 /* Mode 1 macros. */
-#define BCI_MOD1IMM24MAX (0x007fffff)
-#define BCI_MOD1IMM24MIN (-0x00800000)
-#define BCI_MOD1UMM24MAX (0x00ffffff)
-#define BCI_MOD1UMM24MIN (0x00000000)
+#define BCI_MOD1IMM24MAX (0x7fffff)
+#define BCI_MOD1IMM24MIN (-0x800000)
+#define BCI_MOD1UMM24MAX (~0u>>8)
+#define BCI_MOD1UMM24MIN 0u
 #define bci_fits_i24(x) (((int64_t)(x)>=BCI_MOD1IMM24MIN)&&((int64_t)(x)<=BCI_MOD1IMM24MAX))
 #define bci_fits_u24(x) ((int64_t)(x)>=0&&(int64_t)(x)<=BCI_MOD1UMM24MAX)
 #define bci_u24tou32(x) ((uint32_t)(x))
-#define bci_u32tou24(x) ((uint32_t)(x)&0x00ffffffu)
+#define bci_u32tou24(x) ((uint32_t)(x)&(~0u>>8))
 #define bci_i24toi32(x) (((int32_t)(x)<<8)>>8)
-#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23) ? ((int32_t)(x)&~-16777216)|-16777216 : ((int32_t)(x)&0x00ffffff)&~-16777216))
+#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23) ? ((int32_t)(x)&~-16777216)|-16777216 : ((int32_t)(x)&(int32_t)(~0u>>8))&~-16777216))
 #define BCI_MOD1IMM24_BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
 #define bci_mod1unpack_imm24(i) bci_i24toi32((i)>>8)
