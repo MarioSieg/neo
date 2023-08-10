@@ -12,6 +12,7 @@ project(NEO LANGUAGES C)
 message("Configuring NEO...")
 
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
+option(NEO_ENABLE_SSE41 "Enable SSE 4.1 Penryn instructions" ON) # Requires CPU >= x86-64 Intel Core 2 2 (Penryn) CPU.
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     message("Detected release mode")
@@ -27,6 +28,9 @@ if (WIN32)
     set(COMPILE_OPTIONS /W3 /WX /utf-8) # basic compile options
 else()
     set(COMPILE_OPTIONS -std=gnu99 -Wall -Wextra -Werror -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -Wno-error=type-limits) # basic compile options
+    if (${NEO_ENABLE_SSE41})
+        set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -msse -msse2 -msse3 -mssse3 -msse4.1 -mcx16) # Enable advanced instructions
+    endif()
     if (${IS_RELEASE})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -O3 -fvisibility=hidden -fomit-frame-pointer) # advanced options
         if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
