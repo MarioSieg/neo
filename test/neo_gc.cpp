@@ -98,7 +98,7 @@ TEST(gc, gc_alloc_heap_ref) {
     gc_free(&gc);
 }
 
-TEST(gc, gc_alloc_huge_2gb) {
+TEST(gc, gc_alloc_huge) {
     std::array<std::uintptr_t, 8> stk {};
     stk.front() = UINT64_C(0xfe'fe'fe'fe'fe'fe'fe'fe);
     stk.back() = UINT64_C(0xbe'be'be'be'be'be'be'be);
