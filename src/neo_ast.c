@@ -6,7 +6,7 @@
 
 #define impl_ast_node_factory(name, ttype)\
   astnode_t *astnode_new_##name(neo_mempool_t *pool, const node_##name##_t *node) {\
-    neo_asd(pool);\
+    neo_dassert(pool);\
     astnode_t *nn = neo_mempool_alloc(pool, sizeof(*node));\
     nn->type = ASTNODE_##ttype;\
     nn->dat.n_##name = *node;\
@@ -15,7 +15,7 @@
 
 #define impl_ast_node_hull_factory(name, ttype)\
   astnode_t *astnode_new_##name(neo_mempool_t *pool) {\
-    neo_asd(pool);\
+    neo_dassert(pool);\
     astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));\
     nn->type = ASTNODE_##ttype;\
     return nn;\
@@ -23,7 +23,7 @@
 
 #define impl_ast_node_literal_factory(name, ttype)\
   astnode_t *astnode_new_##name(neo_mempool_t *pool, neo_##name##_t value) {\
-    neo_asd(pool);\
+    neo_dassert(pool);\
     astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));\
     nn->type = ASTNODE_##ttype;\
     nn->dat.n_##name##_lit.value = value;\
@@ -51,7 +51,7 @@ impl_ast_node_literal_factory(char, CHAR_LIT)
 impl_ast_node_literal_factory(bool, BOOL_LIT)
 
 astnode_t *astnode_new_string(neo_mempool_t *pool, srcspan_t value) {
-    neo_asd(pool);
+    neo_dassert(pool);
     astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));
     nn->type = ASTNODE_STRING_LIT;
     nn->dat.n_string_lit.span = value;
@@ -75,7 +75,7 @@ static const uint64_t NEO_UNUSED ast_node_block_masks[BLOCK__COUNT] = { /* This 
 };
 
 void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *node) {
-    neo_asd(pool && block);
+    neo_dassert(pool && block);
     if (neo_unlikely(!node)) {
         return;
     } else if (!block->nodes || !block->len) { /* No nodes yet, so allocate. */
@@ -96,7 +96,7 @@ void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *
 
 static void astnode_visit_root_impl(astnode_t *root, void (*visitor)(astnode_t *node, void *user), void *user, size_t *c) {
     if (neo_unlikely(!root)) { return; } /* Skip NULL nodes. */
-    neo_asd(visitor && c);
+    neo_dassert(visitor && c);
     ++*c; /* Increment counter. */
     switch (root->type) { /* Leafs have no children, so they are skipped. */
         case ASTNODE_ERROR:
@@ -108,7 +108,7 @@ static void astnode_visit_root_impl(astnode_t *root, void (*visitor)(astnode_t *
         case ASTNODE_BOOL_LIT:
         case ASTNODE_STRING_LIT:
         case ASTNODE_IDENT_LIT: {
-            neo_asd(!!(ASTNODE_LEAF_MASK&astmask(root->type)));
+            neo_dassert(!!(ASTNODE_LEAF_MASK&astmask(root->type)));
         } return; /* Visitor invocation is redundant. */
 
         case ASTNODE_GROUP: {

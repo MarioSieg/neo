@@ -36,7 +36,7 @@ static neo_osi_t osi_data; /* Global OSI data. Only set once inneo_osi_init(). *
 void neo_osi_init(void) {
     memset(&osi_data, 0, sizeof(osi_data));
 #if NEO_OS_WINDOWS
-    neo_as(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+    neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 1<<12;
@@ -60,17 +60,17 @@ void *neo_defmemalloc(void *blk, size_t len) {
         return NULL;
     } else if(!blk) {  /* allocation */
         blk = neo_alloc_malloc(len);
-        neo_as(blk && "allocation failed");
+        neo_assert(blk && "allocation failed");
         return blk;
     } else { /* reallocation */
         void *newblock = neo_alloc_realloc(blk, len);
-        neo_as(newblock && "reallocation failed");
+        neo_assert(newblock && "reallocation failed");
         return newblock;
     }
 }
 
 void neo_mempool_init(neo_mempool_t *pool, size_t cap) {
-    neo_asd(pool);
+    neo_dassert(pool);
     memset(pool, 0, sizeof(*pool));
     cap = cap ? cap : 1<<9;
     pool->cap = cap;
@@ -78,7 +78,7 @@ void neo_mempool_init(neo_mempool_t *pool, size_t cap) {
 }
 
 void *neo_mempool_alloc(neo_mempool_t *pool, size_t len) {
-    neo_asd(pool);
+    neo_dassert(pool);
     if (!neo_unlikely(len)) { return NULL; }
     size_t total = pool->len+len;
     if (total >= pool->cap) {
@@ -92,15 +92,15 @@ void *neo_mempool_alloc(neo_mempool_t *pool, size_t len) {
 }
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align) {
-    neo_asd(pool);
-    neo_as(align && align>=sizeof(void*) && !(align&(align-1)));
+    neo_dassert(pool);
+    neo_assert(align && align>=sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
     void *p = neo_mempool_alloc(pool, len+off);
     return (void *)(((uintptr_t)p+off)&~(align-1));
 }
 
 void neo_mempool_free(neo_mempool_t *pool) {
-    neo_asd(pool);
+    neo_dassert(pool);
     neo_memalloc(pool->needle, 0);
 }
 
@@ -117,7 +117,7 @@ void neo_mempool_free(neo_mempool_t *pool) {
     else { neo_panic("Invalid file mode: %d", mode); }
 
 bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
-    neo_asd(fp && filepath && mode);
+    neo_dassert(fp && filepath && mode);
     *fp = NULL;
 #if NEO_OS_WINDOWS
     int len = MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, NULL, 0);
@@ -144,7 +144,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 #undef get_fmodstr
 
 unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
-    neo_asd(buf && ppos);
+    neo_dassert(buf && ppos);
     size_t pos = 0;
     uint32_t cp;
     while (pos < len) {

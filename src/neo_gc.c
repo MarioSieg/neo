@@ -9,14 +9,14 @@
 #endif
 
 static inline size_t probe_dist(const gc_context_t* self, size_t i, size_t h) {
-    neo_asd(self);
+    neo_dassert(self);
     int64_t v = (int64_t)i-((int64_t)h-1);
     if (v < 0) { v = (int64_t)self->slots+v; }
     return (size_t)v;
 }
 
 gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t i, j, h;
     i = gc_hash(ptr) % self->slots; j = 0;
     for (;;) {
@@ -28,7 +28,7 @@ gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr) {
 }
 
 static void attach_ptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
-    neo_asd(self);
+    neo_dassert(self);
     gc_fatptr_t item, tmp;
     size_t h, p, i, j;
     i = gc_hash(ptr) % self->slots; j = 0;
@@ -52,7 +52,7 @@ static void attach_ptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flag
 }
 
 static void detach_ptr(gc_context_t *self, void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t i, j, h, nj, nh;
     if (neo_unlikely(self->alloc_len == 0)) { return; }
     for (i = 0; i < self->free_len; ++i) {
@@ -63,7 +63,7 @@ static void detach_ptr(gc_context_t *self, void *ptr) {
         h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return; }
         if (self->trackedallocs[i].ptr == ptr) {
-            memset(self->trackedallocs + i, 0, sizeof(*self->trackedallocs));
+            memset(self->trackedallocs+i, 0, sizeof(*self->trackedallocs));
             j = i;
             for (;;) {
                 nj = (j+1) % self->slots;
@@ -92,7 +92,7 @@ static const uint32_t prime_lut[] = {
 };
 
 static size_t gc_ideal_size(const gc_context_t* self, size_t size) {
-    neo_asd(self);
+    neo_dassert(self);
     size = (size_t)((double)(size+1)/self->loadfactor);
     for (size_t i = 0; i < sizeof(prime_lut)/sizeof(*prime_lut); ++i) {
         if (prime_lut[i] >= size) { return prime_lut[i]; }
@@ -104,7 +104,7 @@ static size_t gc_ideal_size(const gc_context_t* self, size_t size) {
 }
 
 static void rehash_alloc_map(gc_context_t* self, size_t new_size) {
-    neo_asd(self);
+    neo_dassert(self);
     gc_fatptr_t *old_items = self->trackedallocs;
     size_t old_size = self->slots;
     self->slots = new_size;
@@ -118,21 +118,21 @@ static void rehash_alloc_map(gc_context_t* self, size_t new_size) {
 }
 
 static void grow_alloc_map(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t new_size = gc_ideal_size(self, self->alloc_len);
     size_t old_size = self->slots;
     if (new_size > old_size) { rehash_alloc_map(self, new_size); }
 }
 
 static void shrink_alloc_map(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t new_size = gc_ideal_size(self, self->alloc_len);
     size_t old_size = self->slots;
     if (new_size < old_size) { rehash_alloc_map(self, new_size); }
 }
 
 static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t i, j, h;
     if (neo_unlikely((uintptr_t)ptr < self->bndmin || (uintptr_t)ptr > self->bndmax)) { return; } /* Out of bounds. */
     i = gc_hash(ptr) % self->slots; j = 0;
@@ -154,7 +154,7 @@ static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
 }
 
 static void gc_mark_stack(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     if (neo_unlikely(self->stktop == self->stkbot)) { return; }
     const void **top = (const void **)self->stktop;
     const void **bot = (const void **)self->stkbot;
@@ -163,7 +163,7 @@ static void gc_mark_stack(gc_context_t *self) {
 }
 
 static void gc_mark(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     if (neo_unlikely(!self->alloc_len)) { return; }
     for (size_t i = 0; i < self->slots; ++i) {
         if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&GCF_MARK)) { continue; }
@@ -180,7 +180,7 @@ static void gc_mark(gc_context_t *self) {
 }
 
 void gc_sweep(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     size_t i, j, k, nj, nh;
     if (neo_unlikely(!self->alloc_len)) { return; }
     self->free_len = 0;
@@ -229,7 +229,7 @@ void gc_sweep(gc_context_t *self) {
 }
 
 void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot) {
-    neo_asd(self);
+    neo_dassert(self);
     memset(self, 0, sizeof(*self));
     self->stktop = stk_top;
     self->stkbot = stk_bot;
@@ -242,7 +242,7 @@ void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot) {
 }
 
 void gc_free(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     gc_sweep(self);
     for (size_t i = 0; i < self->slots; ++i) { /* Free all roots. */
         if (self->trackedallocs[i].ptr && self->trackedallocs[i].flags&GCF_ROOT) {
@@ -257,24 +257,24 @@ void gc_free(gc_context_t *self) {
 }
 
 void gc_pause(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     self->is_paused = true;
 }
 
 void gc_resume(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     self->is_paused = false;
 }
 
 NEO_HOTPROC void gc_collect(gc_context_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     gctrace("collecting garbage...");
     gc_mark(self);
     gc_sweep(self);
 }
 
 static void *attach_objptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
-    neo_asd(self);
+    neo_dassert(self);
     ++self->alloc_len;
     self->bndmax = (uintptr_t)ptr+gc_granules2bytes(size) > self->bndmax ? (uintptr_t)ptr+gc_granules2bytes(size) : self->bndmax;
     self->bndmin = (uintptr_t)ptr < self->bndmin ? (uintptr_t)ptr : self->bndmin;
@@ -289,7 +289,7 @@ static void *attach_objptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_
 }
 
 static void detach_objptr(gc_context_t *self, void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     detach_ptr(self, ptr);
     shrink_alloc_map(self);
     self->threshold = 1+self->alloc_len+(self->alloc_len>>1);
@@ -297,15 +297,15 @@ static void detach_objptr(gc_context_t *self, void *ptr) {
 }
 
 NEO_HOTPROC void *gc_objalloc(gc_context_t *self, gc_grasize_t size, gc_flags_t flags) {
-    neo_asd(self);
-    neo_as(gc_grasize_valid(size) && "invalid gc allocation granule size, must be > 0 and <= 2^32-1");
+    neo_dassert(self);
+    neo_assert(gc_grasize_valid(size) && "invalid gc allocation granule size, must be > 0 and <= 2^32-1");
     void *ptr = neo_memalloc(NULL, gc_granules2bytes(size));
     memset(ptr, 0, gc_granules2bytes(size)); /* Zero memory and warmup pages. */
     return attach_objptr(self, ptr, size, flags);
 }
 
 void gc_objfree(gc_context_t *self, void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     if (neo_unlikely(!ptr)) { return; }
     const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     if (p) {
@@ -316,19 +316,19 @@ void gc_objfree(gc_context_t *self, void *ptr) {
 }
 
 void gc_set_flags(gc_context_t *self, void *ptr, gc_flags_t flags) {
-    neo_asd(self);
+    neo_dassert(self);
     gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     if (p) { p->flags = flags; }
 }
 
 gc_flags_t gc_get_flags(gc_context_t *self, void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     return p ? p->flags : GCF_NONE;
 }
 
 gc_grasize_t gc_get_size(gc_context_t *self, void *ptr) {
-    neo_asd(self);
+    neo_dassert(self);
     const gc_fatptr_t *p = gc_resolve_ptr(self, ptr);
     return p ? p->grasize : 0;
 }

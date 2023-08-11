@@ -3,7 +3,7 @@
 #include "neo_vm.h"
 
 bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode) {
-    neo_as(isolate && bcode);
+    neo_assert(isolate && bcode);
     const bci_instr_t *code = bcode->p;
     size_t len = bcode->len;
     if (neo_unlikely(!code || !len)) {
@@ -127,7 +127,7 @@ neo_int_t vmop_ipow64_no_ov(register neo_int_t x, register neo_int_t k) {
 #define umulov(x, y, rr) if (neo_unlikely(u64_mul_overflow((x), (y), (rr)))) { *r = 0; return true; /* Overflow happened. */ }
 
 bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
-    neo_asd(r);
+    neo_dassert(r);
     neo_uint_t y;
     if (neo_unlikely(k == 0)) { return 1; }
     for (; (k & 1) == 0; k >>= 1) { umulov(x, x, &x) }
@@ -145,7 +145,7 @@ bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
     return false;
 }
 bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by squaring. */
-    neo_asd(r);
+    neo_dassert(r);
     if (neo_unlikely(k == 0)) { *r = 1; return false; }
     else if (neo_unlikely(k < 0)) {
         switch (x) {
@@ -203,9 +203,9 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
     }
 
 NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
-    neo_as(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
-    neo_as(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
-    neo_as(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
+    neo_assert(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
+    neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
+    neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
 
     const uintptr_t ipb = (uintptr_t)bcode->p; /* Instruction pointer backup for delta computation. */
     const uintptr_t spb = (uintptr_t)isolate->stack.p; /* Stack pointer backup for delta computation. */

@@ -14,7 +14,7 @@ bool record_eq(record_t a, record_t b, rtag_t tag) {
 }
 
 void constpool_init(constpool_t *self, uint32_t cap) {
-    neo_asd(self);
+    neo_dassert(self);
     memset(self, 0, sizeof(*self));
     self->cap = cap ? cap : 1<<9;
     self->p = neo_memalloc(NULL, self->cap*sizeof(*self->p));
@@ -22,8 +22,8 @@ void constpool_init(constpool_t *self, uint32_t cap) {
 }
 
 cpkey_t constpool_put(constpool_t *self, rtag_t tag, record_t value) {
-    neo_asd(self);
-    neo_as(self->len <= CONSTPOOL_MAX && "constant pool overflow");
+    neo_dassert(self);
+    neo_assert(self->len <= CONSTPOOL_MAX && "constant pool overflow");
     if (self->len >= self->cap) {
         self->cap <<= 1;
         self->p = neo_memalloc(self->p, self->cap*sizeof(*self->p));
@@ -41,12 +41,12 @@ cpkey_t constpool_put(constpool_t *self, rtag_t tag, record_t value) {
 }
 
 bool constpool_has(const constpool_t *self, cpkey_t idx) {
-    neo_asd(self);
+    neo_dassert(self);
     return idx < self->len;
 }
 
 bool constpool_get(constpool_t *self, cpkey_t idx, record_t *value, rtag_t *tag) {
-    neo_asd(self && value && tag);
+    neo_dassert(self && value && tag);
     if (neo_unlikely(!constpool_has(self, idx))) {
         return false;
     }
@@ -56,7 +56,7 @@ bool constpool_get(constpool_t *self, cpkey_t idx, record_t *value, rtag_t *tag)
 }
 
 void constpool_free(constpool_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     neo_memalloc(self->p, 0);
     neo_memalloc(self->tags, 0);
 }

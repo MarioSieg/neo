@@ -39,7 +39,7 @@ bool bci_validate_instr(bci_instr_t instr) {
 }
 
 void bci_dump_instr(bci_instr_t instr, FILE *out) {
-    neo_asd(out);
+    neo_dassert(out);
     int mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);

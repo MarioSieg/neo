@@ -53,7 +53,7 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
 }
 
 bool source_load(source_t *self, const uint8_t *path) {
-    neo_asd(self && path);
+    neo_dassert(self && path);
     FILE *f = NULL;
     if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R | NEO_FMODE_BIN))) {
         neo_error("Failed to open file '%s'.", path);
@@ -132,7 +132,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
 }
 
 static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
-    neo_asd(self && self->src && self->needle);
+    neo_dassert(self && self->src && self->needle);
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -142,7 +142,7 @@ static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
 #define peek_next(l) ((l)->cp_next)
 #define is_done(l) (peek(l) == 0)
 static void consume(lexer_t *self) {
-    neo_asd(self && self->src && self->needle);
+    neo_dassert(self && self->src && self->needle);
     if (neo_unlikely(is_done(self))) { /* We're done here. */
         self->line_end = self->src+self->src_dat.len;
         return;
@@ -157,13 +157,13 @@ static void consume(lexer_t *self) {
     } else { /* No special event, just increment column. */
         ++self->col;
     }
-    neo_asd(neo_bnd_check(self->needle, self->src, self->src_dat.len));
+    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_dat.len));
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
     decode_cached_tmp(self); /* Decode cached codepoints. */
 }
 
 static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) {
-    neo_asd(self);
+    neo_dassert(self);
     if (peek(self) == c) {
         consume(self);
         return true;
@@ -196,20 +196,20 @@ static void consume_whitespace(lexer_t *self) {
 }
 
 static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
-    neo_asd(self);
+    neo_dassert(self);
     (void)pdelta; /* TODO */
     token_t tok;
     memset(&tok, 0, sizeof(tok));
     tok.type = type;
     if (neo_likely(type != TOK_ME_EOF)) { /* Regular token case. */
         ptrdiff_t delta = self->needle-self->tok_start;
-        neo_as(delta >= 0 && "invalid lexeme length");
+        neo_assert(delta >= 0 && "invalid lexeme length");
         const uint8_t *lp = self->needle-delta;
-        neo_as(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
+        neo_assert(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
         tok.col = (uint32_t)abs((int32_t)self->col-(int32_t)delta);
         delta = self->line_end-self->line_start; /* Line delta */
-        neo_as(delta >= 0 && "invalid lexeme line length");
+        neo_assert(delta >= 0 && "invalid lexeme line length");
         tok.lexeme_line = (srcspan_t){.p=self->line_start,.len=(uint32_t)delta};
     } else { /* EOF or empty token case. */
         tok.lexeme = (srcspan_t){.p=(const uint8_t *)"",.len=0};
@@ -220,7 +220,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
 }
 
 static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
-    neo_asd(self);
+    neo_dassert(self);
     toktype_t type = TOK_LI_INT; /* Assume integer literal by default. */
     radix_t rdx = RADIX_DEC; /* Assume decimal by default. */
     if (peek(self) == '0') { /* Check for radix prefix. */
@@ -259,7 +259,7 @@ static bool kw_found(const lexer_t *self, toktype_t i) {
 }
 
 static token_t consume_keyword_or_identifier(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     while (c32_is_ident_cont(peek(self))) {
         consume(self);
     }
@@ -277,12 +277,12 @@ static token_t consume_keyword_or_identifier(lexer_t *self) {
 }
 
 void lexer_init(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     memset(self, 0, sizeof(*self));
 }
 
 void lexer_set_src(lexer_t *self, const source_t *src) {
-    neo_asd(self && src);
+    neo_dassert(self && src);
     self->src_dat = *src;
     self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_dat.src;
     self->line = self->col = 1;
@@ -294,7 +294,7 @@ void lexer_set_src(lexer_t *self, const source_t *src) {
 }
 
 token_t lexer_scan_next(lexer_t *self) {
-    neo_asd(self && self->src);
+    neo_dassert(self && self->src);
     consume_whitespace(self); /* Consume whitespace and comments. */
     if (neo_unlikely(is_done(self))) { /* EOF? */
         return mktok(self, TOK_ME_EOF, 0);
@@ -387,7 +387,7 @@ token_t lexer_scan_next(lexer_t *self) {
 }
 
 size_t lexer_drain(lexer_t *self, token_t **tok) {
-    neo_asd(self && tok);
+    neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
     *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {
@@ -402,12 +402,12 @@ size_t lexer_drain(lexer_t *self, token_t **tok) {
 }
 
 void lexer_free(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     (void)self;
 }
 
 void token_dump(const token_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     printf("%" PRIu32 ":%" PRIu32 " Type: %s, Lexeme: %.*s\n",
         self->line,
         self->col,

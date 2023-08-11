@@ -497,11 +497,11 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
 extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, const char *file, int line);
 #define NEO_SEP ,
 
-#define neo_as(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* Assert for debug and release builds. */
+#define neo_assert(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* Assert for debug and release builds. */
 #if NEO_DBG
-#   define neo_asd(ex) neo_as(ex) /* Assert for debug only builds. */
+#   define neo_dassert(ex) neo_assert(ex) /* Assert for debug only builds. */
 #else
-#   define neo_asd(ex) /* Assert for debug only builds. */
+#   define neo_dassert(ex) /* Assert for debug only builds. */
 #endif
 
 /* ---- Logging ---- */
