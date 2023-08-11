@@ -55,7 +55,7 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
 bool source_load(source_t *self, const uint8_t *path) {
     neo_dassert(self && path);
     FILE *f = NULL;
-    if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R | NEO_FMODE_BIN))) {
+    if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R|NEO_FMODE_BIN))) {
         neo_error("Failed to open file '%s'.", path);
         return false;
     }
@@ -79,13 +79,31 @@ bool source_load(source_t *self, const uint8_t *path) {
         return false;
     }
     uint8_t *buf = (uint8_t *)neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
-    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) {
+    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) { /* Read file into buffer */
         neo_memalloc(buf, 0);
         fclose(f);
         neo_error("Failed to read source file: '%s'", path);
+        return false; /* Failed to read all bytes or read error. */
+    }
+    fclose(f); /* Close file */
+    /* Verify that the file is valid UTF-8. */
+    size_t pos = 0;
+    neo_unicode_err_t result = neo_utf8_validate(buf, size, &pos);
+    const char *msg;
+    switch (result) {
+        case NEO_UNIERR_OK: break;
+        case NEO_UNIERR_TOO_SHORT: msg = "UTF-8 Sequence too short."; break;
+        case NEO_UNIERR_TOO_LONG: msg = "UTF-8 Sequence too long."; break;
+        case NEO_UNIERR_TOO_LARGE: msg = "UTF-8 Codepoint too large."; break;
+        case NEO_UNIERR_OVERLONG: msg = "UTF-8 Codepoint too long."; break;
+        case NEO_UNIERR_HEADER_BITS: msg = "UTF-8 Sequence contains invalid header bits."; break;
+        case NEO_UNIERR_SURROGATE: msg = "UTF-8 Sequence contains invalid surrogate bytes."; break;
+    }
+    if (result != NEO_UNIERR_OK) {
+        neo_memalloc(buf, 0);
+        neo_error("Source file '%s' is not valid UTF-8. Error at position %zu: %s", path, pos, msg);
         return false;
     }
-    fclose(f);
 #if NEO_OS_WINDOWS
     /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
     for (size_t i = 0; i < size; ++i) {
@@ -151,7 +169,7 @@ static void consume(lexer_t *self) {
         ++self->line;
         self->col = 1; /* Reset */
         self->line_start = self->needle+1;
-        /* Find next line ending. */
+        /* Find the next line ending. */
         do { ++self->line_end; }
         while (*self->line_end && *self->line_end != '\n');
     } else { /* No special event, just increment column. */
@@ -287,7 +305,7 @@ void lexer_set_src(lexer_t *self, const source_t *src) {
     self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_dat.src;
     self->line = self->col = 1;
     decode_cached_tmp(self); /* Decode cached codepoints. */
-    /* Find first line ending. */
+    /* Find the first line ending. */
     while (*self->line_end && *self->line_end != '\n') {
         ++self->line_end;
     }
@@ -295,7 +313,7 @@ void lexer_set_src(lexer_t *self, const source_t *src) {
 
 token_t lexer_scan_next(lexer_t *self) {
     neo_dassert(self && self->src);
-    consume_whitespace(self); /* Consume whitespace and comments. */
+    consume_whitespace(self); /* Consume space and comments. */
     if (neo_unlikely(is_done(self))) { /* EOF? */
         return mktok(self, TOK_ME_EOF, 0);
     }

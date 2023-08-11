@@ -15,7 +15,7 @@
 #endif
 
 void neo_assert_impl(const char *expr, const char *file, int line) {
-    neo_panic("%s:%d fatal internal NEO compiler/runtime error - expression: '%s'", file, line, expr);
+    neo_panic("%s:%d Internal NEO ERROR - expression: '%s'", file, line, expr);
 }
 
 void neo_panic(const char *msg, ...) {
@@ -143,7 +143,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 
 #undef get_fmodstr
 
-unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
+neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
     neo_dassert(buf && ppos);
     size_t pos = 0;
     uint32_t cp;

@@ -161,17 +161,17 @@ typedef struct node_block_t {
     union {
         struct {
             symtab_t *class_table; /* Global symbol table. */
-        } comunit; /* BLOCK_MODULE */
+        } sc_module; /* Scope of: BLOCK_MODULE */
         struct {
             symtab_t *var_table; /* Class variables (static and local). */
             symtab_t *method_table; /* Class methods (static and local). */
-        } klass; /* BLOCK_CLASS */
+        } sc_class; /* Scope of: BLOCK_CLASS */
         struct {
             symtab_t *var_table; /* Local variables. */
-        } local; /* BLOCK_LOCAL */
+        } sc_local; /* Scope of: BLOCK_LOCAL */
         struct {
             symtab_t *var_table; /* Local parameter variables. */
-        } paramlist; /* BLOCK_PARAMLIST */
+        } sc_params; /* Scope of: BLOCK_PARAMLIST */
     } symtabs;
     astnode_t **nodes; /* Child nodes. */
     uint32_t len;
@@ -190,18 +190,18 @@ typedef enum var_type_t {
 typedef struct node_variable_t {
     var_type_t vartype : 8; /* Variable type. */
     astnode_t *ident;      /* Required variable ident. */
-    astnode_t *type;       /* Required variable tag. */
+    astnode_t *type;       /* Required variable type. */
     astnode_t *init_expr;  /* Required variable initializer. */
 } node_variable_t;
 
 typedef struct node_return_t {
-    astnode_t *child_expr;
+    astnode_t *child_expr/*opt*/;
 } node_return_t;
 
 typedef struct node_branch_t {
     astnode_t *cond_expr;
     astnode_t *true_block;
-    astnode_t *false_block;
+    astnode_t *false_block/*opt*/;
 } node_branch_t;
 
 typedef struct node_loop_t {
@@ -211,11 +211,11 @@ typedef struct node_loop_t {
 
 typedef struct node_class_t {
     astnode_t *ident;
-    astnode_t *body;
+    astnode_t *body/*opt*/;
 } node_class_t;
 
 typedef struct node_module_t {
-    astnode_t *name;
+    astnode_t *ident;
     astnode_t *body/*opt*/;
 } node_module_t;
 

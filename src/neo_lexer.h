@@ -122,7 +122,7 @@ neo_static_assert(TOK__COUNT <= 255);
 #define KWR_START TOK_KW_METHOD /* First keyword token */
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
-neo_static_assert(KWR_START>=0 && KWR_END < TOK__COUNT && KWR_LEN>0 && KWR_LEN <= 255 && KWR_END - KWR_START > 0);
+neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
 
 typedef struct srcspan_t {
     const uint8_t *p;
@@ -139,6 +139,7 @@ typedef enum radix_t {
     RADIX_HEX = 16 /* Literal Prefix: 0x */
 } radix_t;
 
+/* Represents a token. */
 typedef struct token_t {
     toktype_t type : 8;
     radix_t radix : 8; /* Only used if type == TOK_LI_INT */
@@ -150,6 +151,7 @@ typedef struct token_t {
 } token_t;
 extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
 
+/* Represents the lexer context for a single source file. */
 typedef struct lexer_t {
     source_t src_dat;
     const uint8_t *src;
@@ -163,7 +165,7 @@ typedef struct lexer_t {
     uint32_t col;
 } lexer_t;
 
-#define KW_MAPPING_CUSTOM_N 5 /* Number of custom keywords mapping. Currently, 5: true, false, and, or, not */
+#define KW_MAPPING_CUSTOM_N 5 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not */
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
 extern NEO_EXPORT NEO_COLDPROC void lexer_init(lexer_t *self);

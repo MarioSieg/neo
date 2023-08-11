@@ -522,10 +522,14 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #if NEO_DBG && !defined(NEO_NO_LOGGING)
 #   define neo_info(msg, ...) fprintf(stdout,  "[neo] " SRC_FILE " " msg "\n", ## __VA_ARGS__)
 #   define neo_warn(msg, ...) fprintf(stderr,  "[neo] " SRC_FILE " " NEO_CCYELLOW msg NEO_CCRESET "\n", ## __VA_ARGS__)
-#   define neo_error(msg, ...) fprintf(stderr, "[neo] " SRC_FILE " " NEO_CCRED msg NEO_CCRESET "\n", ## __VA_ARGS__)
 #else
 #   define neo_info(msg, ...)
 #   define neo_warn(msg, ...)
+#endif
+
+#ifndef NEO_NO_LOGGING /* By default, error logging is enabled in production. */
+#   define neo_error(msg, ...) fprintf(stderr, "[neo] " SRC_FILE " " NEO_CCRED msg NEO_CCRESET "\n", ## __VA_ARGS__)
+#else
 #   define neo_error(msg, ...)
 #endif
 
@@ -598,10 +602,10 @@ neo_static_assert(NEO_INT_MIN == INT64_MIN && NEO_INT_MIN < 0);
 
 /* ---- Misc ---- */
 
-typedef enum { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* append */, NEO_FMODE_BIN /* read */, NEO_FMODE_TXT /* text */ } neo_fmode_t;
+typedef enum neo_fmode_t { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* append */, NEO_FMODE_BIN /* read */, NEO_FMODE_TXT /* text */ } neo_fmode_t;
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
-typedef enum { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } unicode_err_t;
-extern NEO_EXPORT unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
+typedef enum neo_unicode_err_t { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } neo_unicode_err_t;
+extern NEO_EXPORT neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 
