@@ -1,6 +1,6 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
-#include "neo_datamodel.h"
+#include "neo_object.h"
 
 bool record_eq(record_t a, record_t b, rtag_t tag) {
     switch (tag) {

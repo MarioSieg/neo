@@ -46,7 +46,7 @@ typedef uint32_t gc_grasize_t; /* Size of a memory allocation in granules. Each 
 #define gc_grasize_valid(gra) ((gra)>0&&(gra<=GC_ALLOC_MAX))
 #define gc_granules2bytes(s) ((size_t)(s)<<3) /* S / GC_ALLOC_GRANULARITY. Granules to bytes. */
 #define gc_bytes2granules(g) ((size_t)(g)>>3) /* S * GC_ALLOC_GRANULARITY. Bytes to granules. */
-#define gc_sizeof_granules(obj) (gc_bytes2granules(sizeof(obj))) /* Size of an C structure in granules. */
+#define gc_sizeof_granules(obj) (gc_bytes2granules(sizeof(obj))) /* Size of a structure in granules. */
 #define gc_granule_align(p) (((p)+((GC_ALLOC_GRANULARITY)-1))&~((GC_ALLOC_GRANULARITY)-1))
 neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);
 neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);

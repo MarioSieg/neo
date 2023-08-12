@@ -4,7 +4,7 @@
 #define NEO_VM_H
 
 #include "neo_core.h"
-#include "neo_datamodel.h"
+#include "neo_object.h"
 
 #ifdef __cplusplus
 extern "C" {
