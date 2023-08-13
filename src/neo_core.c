@@ -205,3 +205,12 @@ uint32_t neo_hash_x17(const void *key, size_t len)
     return r^(r>>16);
 }
 
+uint8_t *neo_strdup(const uint8_t *str) {
+    neo_dassert(str);
+    size_t len = strlen((const char *)str); /* strlen also works with UTF-8 strings to find the end \0. */
+    uint8_t *dup = neo_memalloc(NULL, sizeof(*dup)*(len+1));
+    memcpy(dup, str, len);
+    dup[len] = '\0';
+    return dup;
+}
+

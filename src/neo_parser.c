@@ -20,14 +20,14 @@ bool parse_int(const char *str, size_t len, neo_int_t *o)
     if (len >= 2 && neo_unlikely(*p == '0')) {
         if ((tolower(p[1])) == 'x') { /* hex */
             radix = 16;
+            p += 2;
         } else if (tolower(p[1]) == 'b') { /* bin */
             radix = 2;
+            p += 2;
         } else if (tolower(p[1]) == 'c') { /* oct */
             radix = 8;
-        } else {
-            return false; /* invalid prefix */
+            p += 2;
         }
-        p += 2;
         if (neo_unlikely(p == str+len)) { *o = 0; return false; } /* invalid number */
     }
     switch (radix) {

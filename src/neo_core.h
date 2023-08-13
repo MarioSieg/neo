@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define NEO_VER_MAJOR 0
+#define NEO_VER_MAJOR 2
 #define NEO_VER_MINOR 1
 
 #define NEO_DBG 0
@@ -606,8 +606,8 @@ typedef enum neo_fmode_t { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
 typedef enum neo_unicode_err_t { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } neo_unicode_err_t;
 extern NEO_EXPORT neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
-
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
+extern NEO_EXPORT uint8_t *neo_strdup(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 
 #ifdef __cplusplus
 }

@@ -3,7 +3,8 @@
 
 #include "neo_core.h"
 
-typedef uint8_t mcode_t;
+typedef uint8_t mcode_t; /* Machine code type. */
+
 #define VLA_MAX 15
 
 typedef enum gpr_t { /* General purpose 64/32-bit registers. */
@@ -18,6 +19,7 @@ typedef enum fpr_t { /* SSE 128-bit SIMD floating point registers. */
     FID__LEN
 } fpr_t;
 neo_static_assert(FID__LEN == 16);
+#define RID_MAX RID__LEN+FID__LEN
 
 /* Calling conventions. */
 #if NEO_OS_WINDOWS /* Of course Windows has a different ABI, fuck you again Windows. */
@@ -75,39 +77,3 @@ typedef enum coco_t { /* Condition codes. */
     COCO_NP = 9,  COCO_PO  = 9,  COCO_O  = 10,  COCO_NO  = 11,
     COCO__LEN
 } coco_t;
-
-static void emit_rex(mcode_t **mxp, mcode_t mod, mcode_t idx, mcode_t rmo, bool x64) {
-    neo_dassert(mxp);
-    mcode_t rex = 0x40;
-    rex |= x64 ? (1<<3) : 0; /* REX.W */
-    rex |= !!(mod&~RID_RDI) ? (1<<2) : 0; /* REX.R */
-    rex |= !!(idx&~RID_RDI) ? (1<<1) : 0; /* REX.X */
-    rex |= !!(rmo&~RID_RDI) ? (1<<0) : 0; /* REX.B */
-    if (rex!=0x40) { *--*mxp = rex; }
-}
-
-static void emit_sseop(mcode_t **mxp, sse_opcode_t xo, fpr_t dst, fpr_t src) {
-    neo_dassert(mxp);
-    bool rex = !!(src&~RID_RDI) || !!(dst&~RID_RDI);
-#ifndef SINGLE32
-    if (((xo>>24)&255)==0xaa) { /* No opcode prefix. */
-        if (rex) { emit_rex(mxp, dst, 0, src, false); }
-        *(uint16_t *)mxp[-2] = xo&0xffff;
-        *mxp -= 2;
-    } else
-#endif
-    {
-        mcode_t op;
-        if (rex) {
-            op = (xo>>16)&255;
-            emit_rex(mxp, dst, 0, src, false);
-            ++*mxp;
-            xo = (xo&255)|(**mxp<<8);
-        }
-        *(uint16_t *)mxp[-2] = xo&0xffff;
-        *mxp -= 2;
-        if (rex) { *--*mxp = 0xf; }
-        *--*mxp = rex ? op : (xo>>16)&255;
-    }
-    *--*mxp = emit_modrm(XM_DIRECT, dst, src);
-}

@@ -89,7 +89,7 @@ bool source_load(source_t *self, const uint8_t *path) {
     /* Verify that the file is valid UTF-8. */
     size_t pos = 0;
     neo_unicode_err_t result = neo_utf8_validate(buf, size, &pos);
-    const char *msg;
+    const char *msg = "";
     switch (result) {
         case NEO_UNIERR_OK: break;
         case NEO_UNIERR_TOO_SHORT: msg = "UTF-8 Sequence too short."; break;
