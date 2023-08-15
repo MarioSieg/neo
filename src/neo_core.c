@@ -69,39 +69,54 @@ void *neo_defmemalloc(void *blk, size_t len) {
     }
 }
 
-void neo_mempool_init(neo_mempool_t *pool, size_t cap) {
-    neo_dassert(pool);
-    memset(pool, 0, sizeof(*pool));
+void neo_mempool_init(neo_mempool_t *self, size_t cap) {
+    neo_dassert(self);
+    memset(self, 0, sizeof(*self));
     cap = cap ? cap : 1<<9;
-    pool->cap = cap;
-    pool->needle = neo_memalloc(NULL, cap);
+    self->cap = cap;
+    self->needle = neo_memalloc(NULL, cap);
+    memset(self->needle, 0, cap); /* Zero the memory. */
 }
 
-void *neo_mempool_alloc(neo_mempool_t *pool, size_t len) {
-    neo_dassert(pool);
-    if (!neo_unlikely(len)) { return NULL; }
-    size_t total = pool->len+len;
-    if (total >= pool->cap) {
-        do { pool->cap<<=1; }
-        while (pool->cap < total);
-        pool->needle = neo_memalloc(pool->needle, pool->cap);
+void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
+    neo_dassert(self);
+    neo_assert(len);
+    size_t total = self->len+len;
+    if (total >= self->cap) {
+        size_t old = self->cap;
+        do { self->cap<<=1; }
+        while (self->cap <= total);
+        self->needle = neo_memalloc(self->needle, self->cap);
+        size_t delta = self->cap-old;
+        memset((uint8_t *)self->needle+old, 0, delta); /* Zero the new memory. */
     }
-    void *p = (uint8_t *)pool->needle+pool->len;
-    pool->len += len;
+    void *p = (uint8_t *)self->needle+self->len;
+    self->len += len;
+    ++self->num_allocs;
     return p;
 }
 
-void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align) {
-    neo_dassert(pool);
-    neo_assert(align && align>=sizeof(void*) && !(align&(align-1)));
+void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
+    neo_dassert(self);
+    neo_assert(align && align >= sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
-    void *p = neo_mempool_alloc(pool, len+off);
+    void *p = neo_mempool_alloc(self, len + off);
     return (void *)(((uintptr_t)p+off)&~(align-1));
 }
 
-void neo_mempool_free(neo_mempool_t *pool) {
-    neo_dassert(pool);
-    neo_memalloc(pool->needle, 0);
+void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen) {
+    neo_dassert(self);
+    neo_assert(blk && oldlen && newlen);
+    if (neo_unlikely(oldlen == newlen)) { return blk; }
+    const void *prev = blk; /* We need to copy the old data into the new block. */
+    blk = neo_mempool_alloc(self, newlen);
+    memcpy(blk, prev, oldlen); /* Copy the old data into the new block. This is safe because the old data is still in the self. */
+    return blk;
+}
+
+void neo_mempool_free(neo_mempool_t *self) {
+    neo_dassert(self);
+    neo_memalloc(self->needle, 0);
 }
 
 #define get_fmodstr(_)\

@@ -49,8 +49,8 @@ enum { XM_INDIRECT, XM_SIGNED_DISP8, XN_SIGNED_DISP32, XM_DIRECT }; /* MODRM add
 #define sse_packpd(o) ((uint32_t)(0x00000f66u|((0x##o##u&255)<<16))) /* 66 0f = packed double prec */
 #define sse_packsd(o) ((uint32_t)(0x00000ff2u|((0x##o##u&255)<<16))) /* f2 0f = scalar double prec */
 #ifdef SINGLE32
-#define sse_packps(o) ((uint32_t)(0xaa00000fu|((0x##o##u&0xffu)<<8)))  /*    0f = packed single prec */
-#define sse_packss(o) ((uint32_t)(0x00000ff3u|((0x##o##u&0xffu)<<16))) /* f3 0f = scalar single prec */
+#define sse_packps(o) ((uint32_t)(0xfe00000fu|((0x##o##u&255)<<8)))  /*    0f = packed single prec, 0xfe magic => no opcode prefix required */
+#define sse_packss(o) ((uint32_t)(0x00000ff3u|((0x##o##u&255)<<16))) /* f3 0f = scalar single prec */
 #endif
 
 typedef enum sse_opcode_t {

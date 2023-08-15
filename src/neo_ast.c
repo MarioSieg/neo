@@ -52,7 +52,7 @@ impl_ast_node_literal_factory(bool, BOOL_LIT)
 
 astnode_t *astnode_new_string(neo_mempool_t *pool, srcspan_t value) {
     neo_dassert(pool);
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));
+    astnode_t *nn = neo_mempool_alloc(pool, sizeof(*nn));
     nn->type = ASTNODE_STRING_LIT;
     nn->dat.n_string_lit.span = value;
     nn->dat.n_string_lit.hash = srcspan_hash(value);
@@ -65,7 +65,25 @@ astnode_t *astnode_new_ident(neo_mempool_t *pool, srcspan_t value) {
     return nn;
 }
 
-static const uint64_t NEO_UNUSED ast_node_block_masks[BLOCK__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
+astnode_t *astnode_new_block_with_nodes(neo_mempool_t *pool, block_scope_t type, astnode_t **nodes) {
+    neo_dassert(pool);
+    node_block_t block;
+    memset(&block, 0, sizeof(block));
+    block.blktype = type;
+    for (astnode_t *node_ptr = *nodes; node_ptr; node_ptr = *++nodes) {
+        node_block_push_child(pool, &block, node_ptr);
+    }
+    astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));
+    nn->type = ASTNODE_BLOCK;
+    nn->dat.n_block = block;
+    return nn;
+}
+
+#define _(_1, _2) [_1] = _2
+static const char *const node_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
+#undef _
+
+static const uint64_t NEO_UNUSED block_valid_masks[BLOCK__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCK_MODULE */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCK_CLASS */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCK_LOCAL */
@@ -74,20 +92,34 @@ static const uint64_t NEO_UNUSED ast_node_block_masks[BLOCK__COUNT] = { /* This 
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCK_PARAMLIST */
 };
 
+static const char *const block_names[BLOCK__COUNT] = {
+    "module",
+    "class",
+    "local",
+    "param-list"
+};
+
 void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *node) {
     neo_dassert(pool && block);
     if (neo_unlikely(!node)) {
         return;
-    } else if (!block->nodes || !block->len) { /* No nodes yet, so allocate. */
-        block->len = 1;
-        block->nodes = neo_mempool_alloc(pool, (block->cap=1<<8)*sizeof(astnode_t *));
-        *block->nodes = node;
+    } else if (!block->cap) { /* No nodes yet, so allocate. */
+        block->cap=1<<6;
+        block->nodes = neo_mempool_alloc(pool, block->cap*sizeof(*block->nodes));
     } else if (block->len >= block->cap) { /* Reallocate if necessary. */
-        block->nodes = neo_mempool_alloc(pool, (block->cap<<=2)*sizeof(astnode_t *)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
-        block->nodes[block->len++] = node;
-    } else { /* Otherwise, just push. */
-        block->nodes[block->len++] = node;
+        size_t oldlen = block->cap;
+        block->cap<<=2;
+        block->nodes = neo_mempool_realloc(pool, block->nodes, oldlen*sizeof(*block->nodes), block->cap*sizeof(*block->nodes)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
     }
+    block->nodes[block->len++] = node;
+    uint64_t mask = block_valid_masks[block->blktype];
+    uint64_t node_mask = astmask(node->type);
+#if NEO_DBG
+    if (neo_unlikely((mask & node_mask) == 0)) {
+        neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[node->type], block_names[block->blktype]);
+    }
+    neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
+    #endif
 }
 
 #undef impl_ast_node_literal_factory
@@ -181,7 +213,7 @@ size_t astnode_visit(astnode_t *root, void (*visitor)(astnode_t *node, void *use
     return c;
 }
 
-#define astverify(expr, msg) neo_assert((expr)&&"AST verification failed: " msg)
+#define astverify(expr, msg) neo_assert((expr) && "AST verification failed: " msg)
 #define isexpr(node) (ASTNODE_EXPR_MASK&(astmask((node)->type)))
 
 static void ast_validator(astnode_t *node, void *user) {
@@ -227,14 +259,14 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(data->ident->type == ASTNODE_IDENT_LIT, "Method ident is not an identifier");
             if (data->params) { /* Optional. */
                 astverify(data->params->type == ASTNODE_BLOCK, "Method params is not a block");
-                astverify(data->body->dat.n_block.type == BLOCK_PARAMLIST, "Method params is not a param-list block");
+                astverify(data->body->dat.n_block.blktype == BLOCK_PARAMLIST, "Method params is not a param-list block");
             }
             if (data->ret_type) { /* Optional. */
                 astverify(data->ret_type->type == ASTNODE_IDENT_LIT, "Method return type is not an identifier");
             }
             if (data->body) { /* Optional. */
                 astverify(data->body->type == ASTNODE_BLOCK, "Method body is not a block");
-                astverify(data->body->dat.n_block.type == BLOCK_LOCAL, "Method body is not a local block");
+                astverify(data->body->dat.n_block.blktype == BLOCK_LOCAL, "Method body is not a local block");
             }
         } return;
         case ASTNODE_BLOCK: {
@@ -244,10 +276,16 @@ static void ast_validator(astnode_t *node, void *user) {
             for (uint32_t i = 0; i < data->len; ++i) {
                 const astnode_t *child = data->nodes[i];
                 astverify(child != NULL, "Block node is NULL");
-                uint64_t mask = ast_node_block_masks[data->type];
-                astverify(mask&astmask(node->type), "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
+                uint64_t mask = block_valid_masks[data->blktype];
+                uint64_t node_mask = astmask(node->type);
+#if NEO_DBG
+                if (neo_unlikely((mask & node_mask) == 0)) {
+                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[child->type], block_names[data->blktype]);
+                }
+#endif
+                astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
             }
-            switch (data->type) {
+            switch (data->blktype) {
                 case BLOCK_MODULE: {
                     const symtab_t *class_table = data->symtabs.sc_module.class_table;
                     astverify(class_table != NULL, "Module class table is NULL");
@@ -270,7 +308,7 @@ static void ast_validator(astnode_t *node, void *user) {
                     astverify(var_table != NULL, "Parameter list variable table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
-                default: neo_panic("Invalid block type: %d", data->type);
+                default: neo_panic("Invalid block type: %d", data->blktype);
             }
         } return;
         case ASTNODE_VARIABLE: {
@@ -294,10 +332,10 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(isexpr(data->cond_expr), "Branch condition expr is not an expression");
             astverify(data->true_block != NULL, "Branch true block is NULL");
             astverify(data->true_block->type == ASTNODE_BLOCK, "Branch true block is not a block");
-            astverify(data->true_block->dat.n_block.type == BLOCK_LOCAL, "Branch true block is not a local block");
+            astverify(data->true_block->dat.n_block.blktype == BLOCK_LOCAL, "Branch true block is not a local block");
             if (data->false_block) { /* Else-block is optional. */
                 astverify(data->false_block->type == ASTNODE_BLOCK, "Branch false block is not a block");
-                astverify(data->false_block->dat.n_block.type == BLOCK_LOCAL, "Branch false block is not a local block");
+                astverify(data->false_block->dat.n_block.blktype == BLOCK_LOCAL, "Branch false block is not a local block");
             }
         } return;
         case ASTNODE_LOOP: {
@@ -306,7 +344,7 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(isexpr(data->cond_expr), "Loop condition expr is not an expression");
             astverify(data->true_block != NULL, "Loop true block is NULL");
             astverify(data->true_block->type == ASTNODE_BLOCK, "Loop true block is not a block");
-            astverify(data->true_block->dat.n_block.type == BLOCK_LOCAL, "Loop true block is not a local block");
+            astverify(data->true_block->dat.n_block.blktype == BLOCK_LOCAL, "Loop true block is not a local block");
         } return;
         case ASTNODE_CLASS: {
             const node_class_t *data = &node->dat.n_class;
@@ -314,7 +352,7 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(data->ident->type == ASTNODE_IDENT_LIT, "Class ident is not an identifier");
             if (data->body) {
                 astverify(data->body->type == ASTNODE_BLOCK, "Class body is not a block");
-                astverify(data->body->dat.n_block.type == BLOCK_CLASS, "Class body is not a class block");
+                astverify(data->body->dat.n_block.blktype == BLOCK_CLASS, "Class body is not a class block");
             }
         } return;
         case ASTNODE_MODULE: {
@@ -323,7 +361,7 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(data->ident->type == ASTNODE_IDENT_LIT, "Module ident is not an identifier");
             if (data->body) {
                 astverify(data->body->type == ASTNODE_BLOCK, "Module body is not a block");
-                astverify(data->body->dat.n_block.type == BLOCK_MODULE, "Module body is not a module block");
+                astverify(data->body->dat.n_block.blktype == BLOCK_MODULE, "Module body is not a module block");
             }
         } return;
         default: {

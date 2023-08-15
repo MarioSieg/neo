@@ -559,16 +559,23 @@ extern NEO_EXPORT const neo_osi_t *neo_osi;
 extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 #define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
 
+/*
+** Represents a simple bump-pointer allocator.
+** Memory allocation is fast, but individual block deallocation is not possible.
+** All memory is freed simultaneously when the pool is destroyed with neo_mempool_free.
+*/
 typedef struct neo_mempool_t {
     void *needle;
     size_t len;
     size_t cap;
+    size_t num_allocs;
 } neo_mempool_t;
 
-extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *pool, size_t cap);
-extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *pool, size_t len);
-extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align);
-extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *pool);
+extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *self, size_t cap);
+extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *self, size_t len);
+extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align);
+extern NEO_EXPORT void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen);
+extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *self);
 
 /* ---- Types ---- */
 

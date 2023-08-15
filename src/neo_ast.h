@@ -157,7 +157,7 @@ typedef enum block_scope_t {
 } block_scope_t;
 
 typedef struct node_block_t {
-    block_scope_t type : 8;
+    block_scope_t blktype : 8;
     union {
         struct {
             symtab_t *class_table; /* Global symbol table. */
@@ -297,6 +297,7 @@ extern NEO_EXPORT astnode_t *astnode_new_unary_op(neo_mempool_t *pool, const str
 extern NEO_EXPORT astnode_t *astnode_new_binary_op(neo_mempool_t *pool, const node_binary_op_t *node);
 extern NEO_EXPORT astnode_t *astnode_new_method(neo_mempool_t *pool, const node_method_t *node);
 extern NEO_EXPORT astnode_t *astnode_new_block(neo_mempool_t *pool, const node_block_t *node);
+extern NEO_EXPORT astnode_t *astnode_new_block_with_nodes(neo_mempool_t *pool, block_scope_t type, astnode_t **nodes); /* Note: Assign NULL as last element (terminator) in the nodes array! E.g.: astnode_t *block = astnode_new_block_with_nodes(pool, BLOCK_SCOPE_CLASS, (astnode_t*[]){node1, node2, node3, NULL}); */
 extern NEO_EXPORT astnode_t *astnode_new_variable(neo_mempool_t *pool, const node_variable_t *node);
 extern NEO_EXPORT astnode_t *astnode_new_return(neo_mempool_t *pool, const node_return_t *node);
 extern NEO_EXPORT astnode_t *astnode_new_break(neo_mempool_t *pool);
