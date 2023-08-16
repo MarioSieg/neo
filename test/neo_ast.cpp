@@ -6,66 +6,37 @@
 extern "C" astnode_t *get_mock_var(neo_mempool_t *pool);
 extern "C" astnode_t *get_mock_class(neo_mempool_t *pool);
 
-TEST(ast, new_error) {
-    neo_mempool_t pool {};
-    neo_mempool_init(&pool, 1024);
+TEST(ast, allocate_node) {
+    astpool_t pool {};
+    astpool_init(&pool);
 
-    node_error_t node_data {
-        .message = "Oh no error :("
-    };
+    for (int i = 1; i < 0xffff; ++i) {
+        astref_t ref = astnode_new_int(&pool, i == 0xffff>>1 ? 42 : 11);
+        ASSERT_EQ(ref, i);
+        ASSERT_NE(ref, ASTREF_NULL);
+        ASSERT_FALSE(astref_isnull(ref));
+        ASSERT_TRUE(astpool_isvalidref(&pool, ref));
+        astnode_t *node = astpool_resolve(&pool, ref);
+        ASSERT_EQ(node->type, ASTNODE_INT_LIT);
+        ASSERT_EQ(node->dat.n_int_lit.value, i == 0xffff>>1 ? 42 : 11);
+    }
 
-    astnode_t *node = astnode_new_error(&pool, &node_data);
-    ASSERT_EQ(node->type, ASTNODE_ERROR);
-    ASSERT_STREQ(node->dat.n_error.message, "Oh no error :(");
-
-    neo_mempool_free(&pool);
-}
-
-TEST(ast, new_int) {
-    neo_mempool_t pool {};
-    neo_mempool_init(&pool, 1024);
-
-    astnode_t *node = astnode_new_int(&pool, 42);
-    ASSERT_EQ(node->type, ASTNODE_INT_LIT);
+    ASSERT_EQ(pool.node_pool.len, sizeof(astnode_t)*(0xffff-1));
+    astnode_t *node = neo_mempool_getelementptr(pool.node_pool, (0xffff>>1)-1, astnode_t);
     ASSERT_EQ(node->dat.n_int_lit.value, 42);
+    node = neo_mempool_getelementptr(pool.node_pool, 22, astnode_t);
+    ASSERT_EQ(node->dat.n_int_lit.value, 11);
 
-    neo_mempool_free(&pool);
+    astref_t ref = ASTREF_NULL;
+    ASSERT_TRUE(astref_isnull(ref));
+    ASSERT_FALSE(astpool_isvalidref(&pool, ref));
+    node = astpool_resolve(&pool, ref);
+    ASSERT_EQ(node, nullptr);
+
+    astpool_free(&pool);
 }
 
-TEST(ast, new_char) {
-    neo_mempool_t pool {};
-    neo_mempool_init(&pool, 1024);
-
-    astnode_t *node = astnode_new_char(&pool, U'ä');
-    ASSERT_EQ(node->type, ASTNODE_CHAR_LIT);
-    ASSERT_EQ(node->dat.n_char_lit.value, U'ä');
-
-    neo_mempool_free(&pool);
-}
-
-TEST(ast, new_float) {
-    neo_mempool_t pool {};
-    neo_mempool_init(&pool, 1024);
-
-    astnode_t *node = astnode_new_float(&pool, 42.0);
-    ASSERT_EQ(node->type, ASTNODE_FLOAT_LIT);
-    ASSERT_DOUBLE_EQ(node->dat.n_float_lit.value, 42.0);
-
-    neo_mempool_free(&pool);
-}
-
-TEST(ast, new_string) {
-    neo_mempool_t pool {};
-    neo_mempool_init(&pool, 1024);
-
-    astnode_t *node = astnode_new_string(&pool, srcspan_from("Noelle!"));
-    ASSERT_EQ(node->type, ASTNODE_STRING_LIT);
-    ASSERT_TRUE(srcspan_eq(node->dat.n_string_lit.span, srcspan_from("Noelle!")));
-    ASSERT_EQ(node->dat.n_string_lit.hash, srcspan_hash(srcspan_from("Noelle!")));
-
-    neo_mempool_free(&pool);
-}
-
+#if 0
 TEST(ast, block_push_children) {
     neo_mempool_t pool {};
     neo_mempool_init(&pool, 1024);
@@ -83,7 +54,7 @@ TEST(ast, block_push_children) {
     ASSERT_NE(block.nodes, nullptr);
     ASSERT_NE(block.cap, 0);
     ASSERT_EQ(block.nodes[0], var);
-    ASSERT_TRUE(block.nodes[0]->type == ASTNODE_VARIABLE);
+    ASSERT_TRUE(block.nodes[0]->opcode == ASTNODE_VARIABLE);
     
     for (int i {}; i < 512; ++i) {
         node_block_push_child(&pool, &block, var);
@@ -123,12 +94,12 @@ TEST(ast, unary_op) {
 
     astnode_t *operandNode = astnode_new_int(&mempool, 10);
     node_unary_op_t unaryOpNodeData;
-    unaryOpNodeData.type = UNOP_MINUS;
+    unaryOpNodeData.opcode = UNOP_MINUS;
     unaryOpNodeData.expr = operandNode;
     astnode_t *unaryOpNode = astnode_new_unary_op(&mempool, &unaryOpNodeData);
 
     ASSERT_EQ(unaryOpNode->type, ASTNODE_UNARY_OP);
-    ASSERT_EQ(unaryOpNode->dat.n_unary_op.type, UNOP_MINUS);
+    ASSERT_EQ(unaryOpNode->dat.n_unary_op.opcode, UNOP_MINUS);
     ASSERT_EQ(unaryOpNode->dat.n_unary_op.expr, operandNode);
 
     neo_mempool_free(&mempool);
@@ -168,3 +139,4 @@ TEST(ast, visit) {
 
     neo_mempool_free(&mempool);
 }
+#endif

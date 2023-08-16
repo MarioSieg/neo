@@ -5,29 +5,27 @@
 /* Implement AST node factory methods */
 
 #define impl_ast_node_factory(name, ttype)\
-  astnode_t *astnode_new_##name(neo_mempool_t *pool, const node_##name##_t *node) {\
+  astref_t astnode_new_##name(astpool_t *pool, const node_##name##_t *node) {\
     neo_dassert(pool);\
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(*node));\
-    nn->type = ASTNODE_##ttype;\
+    astnode_t *nn = NULL;\
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_##ttype);\
     nn->dat.n_##name = *node;\
-    return nn;\
+    return ref;\
   }
 
 #define impl_ast_node_hull_factory(name, ttype)\
-  astnode_t *astnode_new_##name(neo_mempool_t *pool) {\
+  astref_t astnode_new_##name(astpool_t *pool) {\
     neo_dassert(pool);\
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));\
-    nn->type = ASTNODE_##ttype;\
-    return nn;\
+    return astpool_alloc(pool, NULL,  ASTNODE_##ttype);\
   }
 
 #define impl_ast_node_literal_factory(name, ttype)\
-  astnode_t *astnode_new_##name(neo_mempool_t *pool, neo_##name##_t value) {\
+  astref_t astnode_new_##name(astpool_t *pool, neo_##name##_t value) {\
     neo_dassert(pool);\
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));\
-    nn->type = ASTNODE_##ttype;\
+    astnode_t *nn = NULL;\
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_##ttype);\
     nn->dat.n_##name##_lit.value = value;\
-    return nn;\
+    return ref;\
   }
 
 impl_ast_node_factory(error, ERROR)
@@ -50,33 +48,31 @@ impl_ast_node_literal_factory(float, FLOAT_LIT)
 impl_ast_node_literal_factory(char, CHAR_LIT)
 impl_ast_node_literal_factory(bool, BOOL_LIT)
 
-astnode_t *astnode_new_string(neo_mempool_t *pool, srcspan_t value) {
+astref_t astnode_new_string(astpool_t *pool, srcspan_t value) {
     neo_dassert(pool);
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(*nn));
-    nn->type = ASTNODE_STRING_LIT;
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_STRING_LIT);
     nn->dat.n_string_lit.span = value;
     nn->dat.n_string_lit.hash = srcspan_hash(value);
-    return nn;
+    return ref;
 }
 
-astnode_t *astnode_new_ident(neo_mempool_t *pool, srcspan_t value) {
-    astnode_t *nn = astnode_new_string(pool, value);
-    nn->type = ASTNODE_IDENT_LIT;
-    return nn;
+astref_t astnode_new_ident(astpool_t *pool, srcspan_t value) {
+    astref_t ref = astnode_new_string(pool, value);
+    astpool_resolve(pool, ref)->type = ASTNODE_IDENT_LIT;
+    return ref;
 }
 
-astnode_t *astnode_new_block_with_nodes(neo_mempool_t *pool, block_scope_t type, astnode_t **nodes) {
+astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes) {
     neo_dassert(pool);
-    node_block_t block;
-    memset(&block, 0, sizeof(block));
-    block.blktype = type;
-    for (astnode_t *node_ptr = *nodes; node_ptr; node_ptr = *++nodes) {
-        node_block_push_child(pool, &block, node_ptr);
+    node_block_t block = {.blktype = type};
+    while (astpool_isvalidref(pool, *nodes)) {
+        node_block_push_child(pool, &block, *nodes++);
     }
-    astnode_t *nn = neo_mempool_alloc(pool, sizeof(astnode_t));
-    nn->type = ASTNODE_BLOCK;
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BLOCK);
     nn->dat.n_block = block;
-    return nn;
+    return ref;
 }
 
 #define _(_1, _2) [_1] = _2
@@ -99,8 +95,11 @@ static const char *const block_names[BLOCK__COUNT] = {
     "param-list"
 };
 
-void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *node) {
+void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) {
     neo_dassert(pool && block);
+    (void)node;
+    neo_panic("NYI");
+    #if 0
     if (neo_unlikely(!node)) {
         return;
     } else if (!block->cap) { /* No nodes yet, so allocate. */
@@ -120,15 +119,17 @@ void node_block_push_child(neo_mempool_t *pool, node_block_t *block, astnode_t *
     }
     neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
     #endif
+    #endif
 }
 
 #undef impl_ast_node_literal_factory
 #undef impl_ast_node_hull_factory
 #undef impl_ast_node_factory
 
-static void astnode_visit_root_impl(astnode_t *root, void (*visitor)(astnode_t *node, void *user), void *user, size_t *c) {
+static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
+    neo_dassert(pool && visitor && c);
+    astnode_t *root = astpool_resolve(pool, rootref);
     if (neo_unlikely(!root)) { return; } /* Skip NULL nodes. */
-    neo_dassert(visitor && c);
     ++*c; /* Increment counter. */
     switch (root->type) { /* Leafs have no children, so they are skipped. */
         case ASTNODE_ERROR:
@@ -144,80 +145,97 @@ static void astnode_visit_root_impl(astnode_t *root, void (*visitor)(astnode_t *
         } return; /* Visitor invocation is redundant. */
         case ASTNODE_GROUP: {
             const node_group_t *data = &root->dat.n_group;
-            astnode_visit_root_impl(data->child_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->child_expr, visitor, user, c);
         } break;
         case ASTNODE_UNARY_OP: {
             const node_unary_op_t *data = &root->dat.n_unary_op;
-            astnode_visit_root_impl(data->expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->expr, visitor, user, c);
         } break;
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &root->dat.n_binary_op;
-            astnode_visit_root_impl(data->left_expr, visitor, user, c);
-            astnode_visit_root_impl(data->right_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->left_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->right_expr, visitor, user, c);
         } break;
         case ASTNODE_METHOD: {
             const node_method_t *data = &root->dat.n_method;
-            astnode_visit_root_impl(data->ident, visitor, user, c);
-            astnode_visit_root_impl(data->params, visitor, user, c);
-            astnode_visit_root_impl(data->ret_type, visitor, user, c);
-            astnode_visit_root_impl(data->body, visitor, user, c);
+            astnode_visit_root_impl(pool, data->ident, visitor, user, c);
+            astnode_visit_root_impl(pool, data->params, visitor, user, c);
+            astnode_visit_root_impl(pool, data->ret_type, visitor, user, c);
+            astnode_visit_root_impl(pool, data->body, visitor, user, c);
         } break;
         case ASTNODE_BLOCK: {
             const node_block_t *data = &root->dat.n_block;
             for (uint32_t i = 0; i < data->len; ++i) {
-                astnode_visit_root_impl(data->nodes[i], visitor, user, c);
+                astnode_visit_root_impl(pool, data->nodes[i], visitor, user, c);
             }
         } break;
         case ASTNODE_VARIABLE: {
             const node_variable_t *data = &root->dat.n_variable;
-            astnode_visit_root_impl(data->ident, visitor, user, c);
-            astnode_visit_root_impl(data->type, visitor, user, c);
-            astnode_visit_root_impl(data->init_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->ident, visitor, user, c);
+            astnode_visit_root_impl(pool, data->type, visitor, user, c);
+            astnode_visit_root_impl(pool, data->init_expr, visitor, user, c);
         } break;
         case ASTNODE_RETURN: {
             const node_return_t *data = &root->dat.n_return;
-            astnode_visit_root_impl(data->child_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->child_expr, visitor, user, c);
         } break;
         case ASTNODE_BRANCH: {
             const node_branch_t *data = &root->dat.n_branch;
-            astnode_visit_root_impl(data->cond_expr, visitor, user, c);
-            astnode_visit_root_impl(data->true_block, visitor, user, c);
-            astnode_visit_root_impl(data->false_block, visitor, user, c);
+            astnode_visit_root_impl(pool, data->cond_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->true_block, visitor, user, c);
+            astnode_visit_root_impl(pool, data->false_block, visitor, user, c);
         } break;
         case ASTNODE_LOOP: {
 
             const node_loop_t *data = &root->dat.n_loop;
-            astnode_visit_root_impl(data->cond_expr, visitor, user, c);
-            astnode_visit_root_impl(data->true_block, visitor, user, c);
+            astnode_visit_root_impl(pool, data->cond_expr, visitor, user, c);
+            astnode_visit_root_impl(pool, data->true_block, visitor, user, c);
         } break;
         case ASTNODE_CLASS: {
             const node_class_t *data = &root->dat.n_class;
-            astnode_visit_root_impl(data->ident, visitor, user, c);
-            astnode_visit_root_impl(data->body, visitor, user, c);
+            astnode_visit_root_impl(pool, data->ident, visitor, user, c);
+            astnode_visit_root_impl(pool, data->body, visitor, user, c);
         } break;
         case ASTNODE_MODULE: {
             const node_module_t *data = &root->dat.n_module;
-            astnode_visit_root_impl(data->ident, visitor, user, c);
-            astnode_visit_root_impl(data->body, visitor, user, c);
+            astnode_visit_root_impl(pool, data->ident, visitor, user, c);
+            astnode_visit_root_impl(pool, data->body, visitor, user, c);
         } break;
         default: {
             neo_panic("invalid node type: %d", root->type);
         }
     }
-    (*visitor)(root, user);
+    (*visitor)(pool, rootref, user);
 }
 
-size_t astnode_visit(astnode_t *root, void (*visitor)(astnode_t *node, void *user), void *user) {
+size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user) {
     size_t c = 0;
-    astnode_visit_root_impl(root, visitor, user, &c);
+    astnode_visit_root_impl(pool, root, visitor, user, &c);
     return c;
 }
 
 #define astverify(expr, msg) neo_assert((expr) && "AST verification failed: " msg)
 #define isexpr(node) (ASTNODE_EXPR_MASK&(astmask((node)->type)))
 
-static void ast_validator(astnode_t *node, void *user) {
+static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
+    neo_dassert(pool);
+    astverify(astpool_isvalidref(pool, target), "AST reference is invalid");
+    astnode_t *node = astpool_resolve(pool, target);
+    astverify(node != NULL, "AST reference resolve returned NULL");
+    return node;
+}
+
+#define verify_resolve(ref) verify_resolve_node(pool, (ref))
+#define verify_expr(node) astverify(isexpr((node)), "AST Node is not an expression")
+#define verify_type(node, expected) astverify((node)->type == (expected), "AST Node is not of expected type: " #expected)
+#define verify_block(node, expected)\
+    verify_type((node), ASTNODE_BLOCK); \
+    astverify((node)->dat.n_block.blktype == (expected), "AST Node block type is not of expected block type: " #expected)
+
+static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
     (void)user;
+    neo_dassert(pool);
+    astnode_t *node = astpool_resolve(pool, noderef);
     switch (node->type) {
         case ASTNODE_ERROR: {
             const node_error_t *data = &node->dat.n_error;
@@ -235,38 +253,40 @@ static void ast_validator(astnode_t *node, void *user) {
             return;
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
-            if (data->child_expr != NULL) {
-                astverify(isexpr(data->child_expr), "Group child is not an expression");
-            }
+            const astnode_t *child_expr = verify_resolve(data->child_expr);
+            verify_expr(child_expr);
         } return;
         case ASTNODE_UNARY_OP: {
             const node_unary_op_t *data = &node->dat.n_unary_op;
-            astverify(data->expr != NULL, "Unary op child is NULL");
-            astverify(isexpr(data->expr), "Unary op child is not an expression");
-            astverify(data->type <= UNOP__COUNT, "Unary op operator is invalid");
+            astverify(astpool_isvalidref(pool, data->expr), "Unary op child reference is invalid");
+            const astnode_t *expr = verify_resolve(data->expr);
+            verify_expr(expr);
+            astverify(expr->dat.n_unary_op.opcode < UNOP__COUNT, "Unary op operator is invalid");
         } return;
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &node->dat.n_binary_op;
-            astverify(data->left_expr != NULL, "Binary op left is NULL");
-            astverify(isexpr(data->left_expr), "Binary op left is not an expression");
-            astverify(data->right_expr != NULL, "Binary op right is NULL");
-            astverify(isexpr(data->right_expr), "Binary op right is not an expression");
-            astverify(data->type <= BINOP__COUNT, "Binary op operator is invalid");
+            const astnode_t *lhs = verify_resolve(data->left_expr);
+            verify_expr(lhs);
+            astverify(lhs->dat.n_binary_op.opcode < BINOP__COUNT, "Binary op left operator is invalid");
+            const astnode_t *rhs = verify_resolve(data->right_expr);
+            verify_expr(rhs);
+            astverify(rhs->dat.n_binary_op.opcode < BINOP__COUNT, "Binary op right operator is invalid");
         } return;
         case ASTNODE_METHOD: {
             const node_method_t *data = &node->dat.n_method;
-            astverify(data->ident != NULL, "Method ident is NULL");
-            astverify(data->ident->type == ASTNODE_IDENT_LIT, "Method ident is not an identifier");
-            if (data->params) { /* Optional. */
-                astverify(data->params->type == ASTNODE_BLOCK, "Method params is not a block");
-                astverify(data->body->dat.n_block.blktype == BLOCK_PARAMLIST, "Method params is not a param-list block");
+            const astnode_t *ident = verify_resolve(data->ident);
+            verify_type(ident, ASTNODE_IDENT_LIT);
+            if (!astref_isnull(data->params)) { /* Optional. */
+                const astnode_t *params = verify_resolve(data->params);
+                verify_block(params, BLOCK_PARAMLIST);
             }
-            if (data->ret_type) { /* Optional. */
-                astverify(data->ret_type->type == ASTNODE_IDENT_LIT, "Method return type is not an identifier");
+            if (!astref_isnull(data->ret_type)) { /* Optional. */
+                const astnode_t *ret_type = verify_resolve(data->ret_type);
+                verify_type(ret_type, ASTNODE_IDENT_LIT);
             }
-            if (data->body) { /* Optional. */
-                astverify(data->body->type == ASTNODE_BLOCK, "Method body is not a block");
-                astverify(data->body->dat.n_block.blktype == BLOCK_LOCAL, "Method body is not a local block");
+            if (!astref_isnull(data->body)) { /* Optional. */
+                const astnode_t *body = verify_resolve(data->body);
+                verify_block(body, BLOCK_LOCAL);
             }
         } return;
         case ASTNODE_BLOCK: {
@@ -274,13 +294,13 @@ static void ast_validator(astnode_t *node, void *user) {
             astverify(data->nodes != NULL, "Block nodes array is NULL");
             astverify(data->len > 0, "Block nodes array is empty");
             for (uint32_t i = 0; i < data->len; ++i) {
-                const astnode_t *child = data->nodes[i];
-                astverify(child != NULL, "Block node is NULL");
+                astref_t child = data->nodes[i];
+                const astnode_t *child_node = verify_resolve(child);
                 uint64_t mask = block_valid_masks[data->blktype];
-                uint64_t node_mask = astmask(node->type);
+                uint64_t node_mask = astmask(child_node->type);
 #if NEO_DBG
                 if (neo_unlikely((mask & node_mask) == 0)) {
-                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[child->type], block_names[data->blktype]);
+                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[child_node->type], block_names[data->blktype]);
                 }
 #endif
                 astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
@@ -313,55 +333,41 @@ static void ast_validator(astnode_t *node, void *user) {
         } return;
         case ASTNODE_VARIABLE: {
             const node_variable_t *data = &node->dat.n_variable;
-            astverify(data->ident != NULL, "Variable ident is NULL");
-            astverify(data->ident->type == ASTNODE_IDENT_LIT, "Variable ident is not an identifier");
-            astverify(data->type != NULL, "Variable type is NULL");
-            astverify(data->type->type == ASTNODE_IDENT_LIT, "Variable type is not an identifier");
-            astverify(data->init_expr != NULL, "Variable init expr is NULL");
-            astverify(isexpr(data->init_expr), "Variable init expr is not an expression");
+            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+            verify_type(verify_resolve(data->type), ASTNODE_IDENT_LIT);
+            verify_expr(verify_resolve(data->init_expr));
         } return;
         case ASTNODE_RETURN: {
             const node_return_t *data = &node->dat.n_return;
-            if (data->child_expr) {
-                astverify(isexpr(data->child_expr), "Return child expr is not an expression");
+            if (!astref_isnull(data->child_expr)) { /* Optional. */
+                verify_expr(verify_resolve(data->child_expr));
             }
         } return;
         case ASTNODE_BRANCH: {
             const node_branch_t *data = &node->dat.n_branch;
-            astverify(data->cond_expr != NULL, "Branch condition expr is NULL");
-            astverify(isexpr(data->cond_expr), "Branch condition expr is not an expression");
-            astverify(data->true_block != NULL, "Branch true block is NULL");
-            astverify(data->true_block->type == ASTNODE_BLOCK, "Branch true block is not a block");
-            astverify(data->true_block->dat.n_block.blktype == BLOCK_LOCAL, "Branch true block is not a local block");
-            if (data->false_block) { /* Else-block is optional. */
-                astverify(data->false_block->type == ASTNODE_BLOCK, "Branch false block is not a block");
-                astverify(data->false_block->dat.n_block.blktype == BLOCK_LOCAL, "Branch false block is not a local block");
+            verify_expr(verify_resolve(data->cond_expr));
+            verify_block(verify_resolve(data->true_block), BLOCK_LOCAL);
+            if (!astref_isnull(data->false_block)) { /* Optional. */
+                verify_block(verify_resolve(data->false_block), BLOCK_LOCAL);
             }
         } return;
         case ASTNODE_LOOP: {
             const node_loop_t *data = &node->dat.n_loop;
-            astverify(data->cond_expr != NULL, "Loop condition expr is NULL");
-            astverify(isexpr(data->cond_expr), "Loop condition expr is not an expression");
-            astverify(data->true_block != NULL, "Loop true block is NULL");
-            astverify(data->true_block->type == ASTNODE_BLOCK, "Loop true block is not a block");
-            astverify(data->true_block->dat.n_block.blktype == BLOCK_LOCAL, "Loop true block is not a local block");
+            verify_expr(verify_resolve(data->cond_expr));
+            verify_block(verify_resolve(data->true_block), BLOCK_LOCAL);
         } return;
         case ASTNODE_CLASS: {
             const node_class_t *data = &node->dat.n_class;
-            astverify(data->ident != NULL, "Class ident is NULL");
-            astverify(data->ident->type == ASTNODE_IDENT_LIT, "Class ident is not an identifier");
-            if (data->body) {
-                astverify(data->body->type == ASTNODE_BLOCK, "Class body is not a block");
-                astverify(data->body->dat.n_block.blktype == BLOCK_CLASS, "Class body is not a class block");
+            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+            if (!astref_isnull(data->body)) { /* Optional. */
+                verify_block(verify_resolve(data->body), BLOCK_CLASS);
             }
         } return;
         case ASTNODE_MODULE: {
             const node_module_t *data = &node->dat.n_module;
-            astverify(data->ident != NULL, "Module ident is NULL");
-            astverify(data->ident->type == ASTNODE_IDENT_LIT, "Module ident is not an identifier");
-            if (data->body) {
-                astverify(data->body->type == ASTNODE_BLOCK, "Module body is not a block");
-                astverify(data->body->dat.n_block.blktype == BLOCK_MODULE, "Module body is not a module block");
+            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+            if (!astref_isnull(data->body)) { /* Optional. */
+                verify_block(verify_resolve(data->body), BLOCK_MODULE);
             }
         } return;
         default: {
@@ -370,8 +376,9 @@ static void ast_validator(astnode_t *node, void *user) {
     }
 }
 
-void astnode_validate(astnode_t *root) {
-    astnode_visit(root, &ast_validator, NULL);
+void astnode_validate(astpool_t *pool, astref_t root) {
+    neo_dassert(pool);
+    astnode_visit(pool, root, &ast_validator, NULL);
 }
 
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
@@ -444,3 +451,26 @@ static void my_ast_validator(astnode_t *node, void *user) {
     }
 }
 #endif
+
+astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
+    neo_dassert(self);
+    size_t plen = self->node_pool.len+sizeof(astnode_t);
+    astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(astnode_t));
+    n->type = type & 255;
+    if (o) { *o = n; }
+    plen /= sizeof(astnode_t);
+    neo_assert(plen <= UINT32_MAX && "ast-pool out of nodes");
+    return (astref_t)plen;
+}
+
+void astpool_init(astpool_t *self) {
+    neo_dassert(self);
+    neo_mempool_init(&self->node_pool, sizeof(astnode_t) * 8192);
+    neo_mempool_init(&self->list_pool, sizeof(astref_t) * 8192);
+}
+
+void astpool_free(astpool_t *self) {
+    neo_dassert(self);
+    neo_mempool_free(&self->list_pool);
+    neo_mempool_free(&self->node_pool);
+}

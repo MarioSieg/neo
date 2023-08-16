@@ -26,7 +26,7 @@ astnode_t *get_mock_class(neo_mempool_t *pool) {
                     get_mock_var(pool),
                     astnode_new_return(pool, &(node_return_t) {
                         .child_expr = astnode_new_binary_op(pool, &(node_binary_op_t) {
-                            .type = BINOP_ADD,
+                            .opcode = BINOP_ADD,
                             .left_expr = astnode_new_int(pool, 2),
                             .right_expr = astnode_new_ident(pool, srcspan_from("test"))
                         })

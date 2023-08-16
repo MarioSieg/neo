@@ -3,8 +3,22 @@
 #include <gtest/gtest.h>
 #include <neo_core.h>
 
-TEST(core, neo_mempool_alloc)
-{
+TEST(core, neo_mempool_getelementptr) {
+    neo_mempool_t pool;
+    neo_mempool_init(&pool, 8);
+    int *a = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    int *b = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    int *c = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    int *d = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    ASSERT_EQ(pool.len, sizeof(int)*4);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 0, int), a);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 1, int), b);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 2, int), c);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 3, int), d);
+    neo_mempool_free(&pool);
+}
+
+TEST(core, neo_mempool_alloc) {
     neo_mempool_t pool;
     neo_mempool_init(&pool, 8);
 
@@ -25,8 +39,7 @@ TEST(core, neo_mempool_alloc)
     neo_mempool_free(&pool);
 }
 
-TEST(core, neo_mempool_alloc_aligned)
-{
+TEST(core, neo_mempool_alloc_aligned) {
     neo_mempool_t pool;
     neo_mempool_init(&pool, 8);
 
@@ -45,29 +58,25 @@ TEST(core, neo_mempool_alloc_aligned)
     neo_mempool_free(&pool);
 }
 
-TEST(core, neo_ror64)
-{
+TEST(core, neo_ror64) {
     ASSERT_EQ(neo_ror64(UINT64_C(0x0000000000000001), 0), UINT64_C(0x0000000000000001));
     ASSERT_EQ(neo_ror64(UINT64_C(1), 12), UINT64_C(1)<<52);
     ASSERT_EQ(neo_ror64(UINT64_C(0xffffffffffffffee), 8), UINT64_C(0xeeffffffffffffff));
 }
 
-TEST(core, neo_rol64)
-{
+TEST(core, neo_rol64) {
     ASSERT_EQ(neo_rol64(UINT64_C(0x0000000000000001), 0), UINT64_C(0x0000000000000001));
     ASSERT_EQ(neo_rol64(UINT64_C(1), 12), UINT64_C(1)<<12);
     ASSERT_EQ(neo_rol64(UINT64_C(0xabffffffffffffff), 8), UINT64_C(0xffffffffffffffab));
 }
 
-TEST(core, neo_bswap32)
-{
+TEST(core, neo_bswap32) {
     ASSERT_EQ(neo_bswap32(UINT32_C(0xabcdef12)), UINT32_C(0x12efcdab));
     ASSERT_EQ(neo_bswap32(UINT32_C(0x00000000)), UINT32_C(0x00000000));
     ASSERT_EQ(neo_bswap32(UINT32_C(0xffffffff)), UINT32_C(0xffffffff));
 }
 
-TEST(core, neo_bswap64)
-{
+TEST(core, neo_bswap64) {
     ASSERT_EQ(neo_bswap64(UINT64_C(0xabcdef1234567890)), UINT64_C(0x9078563412efcdab));
     ASSERT_EQ(neo_bswap64(UINT64_C(0x0000000000000000)), UINT64_C(0x0000000000000000));
     ASSERT_EQ(neo_bswap64(UINT64_C(0xffffffffffffffff)), UINT64_C(0xffffffffffffffff));
@@ -79,8 +88,7 @@ TEST(core, osi_page_size) {
     neo_osi_shutdown();
 }
 
-TEST(core, neo_bsf32)
-{
+TEST(core, neo_bsf32) {
     uint32_t x = 0x08040000;
     ASSERT_EQ(neo_bsf32(x), 18);
 
@@ -91,8 +99,7 @@ TEST(core, neo_bsf32)
     ASSERT_EQ(neo_bsf32(x), 0);
 }
 
-TEST(core, neo_bsr32)
-{
+TEST(core, neo_bsr32) {
     ASSERT_EQ(neo_bsr32(0x80000000u), 31);
     ASSERT_EQ(neo_bsr32(0x40000000u), 30);
     ASSERT_EQ(neo_bsr32(0x20000000u), 29);
@@ -107,8 +114,7 @@ TEST(core, neo_bsr32)
     ASSERT_EQ(neo_bsr32(0x00000000u), 0);
 }
 
-TEST(core, neo_atomic_compare_exchange)
-{
+TEST(core, neo_atomic_compare_exchange) {
     bool result;
     volatile int64_t shared_var = 0;
     int64_t expected = 0;
@@ -139,8 +145,7 @@ TEST(core, neo_atomic_compare_exchange)
     ASSERT_EQ(shared_var, 5);
 }
 
-TEST(core, neo_atomic_exchange)
-{
+TEST(core, neo_atomic_exchange) {
     volatile int64_t shared_var = 5;
     volatile int64_t shared_var2 = 3;
 
@@ -169,8 +174,7 @@ TEST(core, neo_atomic_exchange)
     ASSERT_EQ(prev_value, 3);
 }
 
-TEST(core, neo_atomic_fetch_xor)
-{
+TEST(core, neo_atomic_fetch_xor) {
     volatile int64_t shared_var = 5;
     volatile int64_t shared_var2 = 3;
 
@@ -193,8 +197,7 @@ TEST(core, neo_atomic_fetch_xor)
     ASSERT_EQ(shared_var2, 2);
 }
 
-TEST(core, neo_atomic_fetch_or)
-{
+TEST(core, neo_atomic_fetch_or) {
     volatile int64_t shared_var = 0;
     volatile int64_t shared_var2 = 5;
 
@@ -266,8 +269,7 @@ TEST(core, neo_atomic_fetch_sub) {
 
 }
 
-TEST(core, neo_atomic_fetch_add)
-{
+TEST(core, neo_atomic_fetch_add) {
     volatile int64_t shared_var = 0;
     volatile int64_t shared_var2 = 5;
 
