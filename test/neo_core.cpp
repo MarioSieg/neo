@@ -6,12 +6,12 @@
 TEST(core, neo_mempool_getelementptr) {
     neo_mempool_t pool;
     neo_mempool_init(&pool, 32);
-    int *a = (int *)neo_mempool_alloc(&pool, sizeof(int));
-    ASSERT_EQ(a, (int *)pool.needle);
-    int *b = (int *)neo_mempool_alloc(&pool, sizeof(int));
-    int *c = (int *)neo_mempool_alloc(&pool, sizeof(int));
-    int *d = (int *)neo_mempool_alloc(&pool, sizeof(int));
-    int *p = (int *)pool.needle;
+    int *a = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
+    ASSERT_EQ(a, static_cast<int *>(pool.needle));
+    int *b = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
+    int *c = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
+    int *d = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
+    int *p = static_cast<int *>(pool.needle);
     ASSERT_EQ(pool.len, sizeof(int)*4);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 0, int), p+0);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 1, int), p+1);

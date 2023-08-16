@@ -75,10 +75,6 @@ astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astre
     return ref;
 }
 
-#define _(_1, _2) [_1] = _2
-static const char *const node_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
-#undef _
-
 static const uint64_t NEO_UNUSED block_valid_masks[BLOCK__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCK_MODULE */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCK_CLASS */
@@ -88,12 +84,17 @@ static const uint64_t NEO_UNUSED block_valid_masks[BLOCK__COUNT] = { /* This tab
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCK_PARAMLIST */
 };
 
+#if NEO_DBG
+#define _(_1, _2) [_1] = _2
+static const char *const node_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
+#undef _
 static const char *const block_names[BLOCK__COUNT] = {
     "module",
     "class",
     "local",
     "param-list"
 };
+#endif
 
 void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) {
     neo_dassert(pool && block);
