@@ -54,14 +54,14 @@ typedef enum extended_isa_t {
 #define XCR0_AVX512 (7ull<<5) /* 512-bit %zmm* save/restore */
 
 static void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) { /* Query CPUID. */
-#if defined(_MSC_VER)
+#if NEO_COM_MSVC
     int cpu_info[4];
     __cpuidex(cpu_info, *eax, *ecx);
     *eax = cpu_info[0];
     *ebx = cpu_info[1];
     *ecx = cpu_info[2];
     *edx = cpu_info[3];
-#elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
+#elif NEO_COM_GCC && defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
     uint32_t level = *eax;
   __get_cpuid(level, eax, ebx, ecx, edx);
 #else
