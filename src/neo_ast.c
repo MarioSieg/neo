@@ -380,6 +380,29 @@ void astnode_validate(astpool_t *pool, astref_t root) {
     astnode_visit(pool, root, &ast_validator, NULL);
 }
 
+astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
+    neo_dassert(self);
+    size_t plen = self->node_pool.len+sizeof(astnode_t);
+    neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
+    astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(astnode_t));
+    n->type = type & 255;
+    if (o) { *o = n; }
+    plen /= sizeof(astnode_t);
+    return (astref_t)plen;
+}
+
+void astpool_init(astpool_t *self) {
+    neo_dassert(self);
+    neo_mempool_init(&self->node_pool, sizeof(astnode_t) * 8192);
+    neo_mempool_init(&self->list_pool, sizeof(astref_t) * 8192);
+}
+
+void astpool_free(astpool_t *self) {
+    neo_dassert(self);
+    neo_mempool_free(&self->list_pool);
+    neo_mempool_free(&self->node_pool);
+}
+
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
 static void my_ast_validator(astnode_t *node, void *user) {
     (void)user;
@@ -450,26 +473,3 @@ static void my_ast_validator(astnode_t *node, void *user) {
     }
 }
 #endif
-
-astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
-    neo_dassert(self);
-    size_t plen = self->node_pool.len+sizeof(astnode_t);
-    neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
-    astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(astnode_t));
-    n->type = type & 255;
-    if (o) { *o = n; }
-    plen /= sizeof(astnode_t);
-    return (astref_t)plen;
-}
-
-void astpool_init(astpool_t *self) {
-    neo_dassert(self);
-    neo_mempool_init(&self->node_pool, sizeof(astnode_t) * 8192);
-    neo_mempool_init(&self->list_pool, sizeof(astref_t) * 8192);
-}
-
-void astpool_free(astpool_t *self) {
-    neo_dassert(self);
-    neo_mempool_free(&self->list_pool);
-    neo_mempool_free(&self->node_pool);
-}

@@ -12,6 +12,7 @@ extern "C" {
 #endif
 
 typedef uint32_t astref_t;
+#define astref_decl(type) astref_t /* req = required, opt = optional. */
 #define ASTREF_NULL (0u)
 #define astref_isnull(ref) ((ref)==ASTREF_NULL)
 
@@ -25,7 +26,7 @@ typedef struct node_error_t {
 } node_error_t;
 
 typedef struct node_group_t {
-    astref_t child_expr;
+    astref_decl(req) child_expr;
 } node_group_t;
 
 typedef struct node_int_literal_t {
@@ -64,7 +65,7 @@ neo_static_assert(UNOP_ASSIGN_MASK <= UINT64_MAX);
 
 typedef struct node_unary_op_t {
     unary_op_type_t opcode : 8;
-    astref_t expr/*req*/;
+    astref_decl(req) expr;
 } node_unary_op_t;
 
 typedef enum binary_op_type_t {
@@ -141,15 +142,15 @@ neo_static_assert(BINOP_ASSIGN_MASK <= UINT64_MAX);
 
 typedef struct node_binary_op_t {
     binary_op_type_t opcode : 8;
-    astref_t left_expr;
-    astref_t right_expr;
+    astref_decl(req) left_expr;
+    astref_decl(req) right_expr;
 } node_binary_op_t;
 
 typedef struct node_method_t {
-    astref_t ident;
-    astref_t params/*opt*/;
-    astref_t ret_type/*opt*/;
-    astref_t body/*opt*/;
+    astref_decl(req) ident;
+    astref_decl(opt) params;
+    astref_decl(opt) ret_type;
+    astref_decl(opt) body;
 } node_method_t;
 
 typedef enum block_scope_t {
@@ -178,11 +179,11 @@ typedef struct node_block_t {
             symtab_t *var_table; /* Local parameter variables. */
         } sc_params; /* Scope of: BLOCK_PARAMLIST */
     } symtabs;
-    astref_t *nodes; /* Child nodes. */
+    astref_decl(req) *nodes; /* Child nodes. */
     uint32_t len;
     uint32_t cap;
 } node_block_t;
-extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node);
+extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *block, astref_decl(req) node);
 
 /* Variable type */
 typedef enum var_type_t {
@@ -193,35 +194,35 @@ typedef enum var_type_t {
 } var_type_t;
 
 typedef struct node_variable_t {
-    var_type_t vartype : 8; /* Variable type. */
-    astref_t ident;      /* Required variable ident. */
-    astref_t type;       /* Required variable type. */
-    astref_t init_expr;  /* Required variable initializer. */
+    astref_decl(req) vartype : 8; /* Variable type. */
+    astref_decl(req) ident;      /* Required variable ident. */
+    astref_decl(req) type;       /* Required variable type. */
+    astref_decl(req) init_expr;  /* Required variable initializer. */
 } node_variable_t;
 
 typedef struct node_return_t {
-    astref_t child_expr/*opt*/;
+    astref_decl(opt) child_expr;
 } node_return_t;
 
 typedef struct node_branch_t {
-    astref_t cond_expr;
-    astref_t true_block;
-    astref_t false_block/*opt*/;
+    astref_decl(req) cond_expr;
+    astref_decl(req) true_block;
+    astref_decl(opt) false_block;
 } node_branch_t;
 
 typedef struct node_loop_t {
-    astref_t cond_expr;
-    astref_t true_block;
+    astref_decl(req) cond_expr;
+    astref_decl(req) true_block;
 } node_loop_t;
 
 typedef struct node_class_t {
-    astref_t ident;
-    astref_t body/*opt*/;
+    astref_decl(req) ident;
+    astref_decl(opt) body;
 } node_class_t;
 
 typedef struct node_module_t {
-    astref_t ident;
-    astref_t body/*opt*/;
+    astref_decl(req) ident;
+    astref_decl(opt) body;
 } node_module_t;
 
 #define nodedef(_, __)/* Leaf-nodes first. */\
