@@ -117,7 +117,6 @@ static extended_isa_t detect_cpu_isa() {
 }
 
 typedef uint8_t mcode_t; /* Machine code type. */
-
 #define VLA_MAX 15
 
 typedef enum gpr_t { /* General purpose 64/32-bit registers. */
