@@ -1,7 +1,120 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
-/* x86-64/AMD64 machine code emitter. Code generation is done in reverse. */
+/* x86-64/AMD64 machine code emitter and CPU detector. Code generation is done in reverse. */
 
 #include "neo_core.h"
+
+#if NEO_COM_GCC /* Undefine these if your GCC is old and doesn't support cpuid.h. */
+    #define HAVE_GCC_GET_CPUID
+    #define USE_GCC_GET_CPUID
+#endif
+
+#if NEO_COM_MSVC
+#   include <intrin.h>
+#elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
+#   include <cpuid.h>
+#endif
+
+typedef enum extended_isa_t {
+    AMD64ISA_DEFAULT = 0,
+    AMD64ISA_AVX2 = 1<<0,
+    AMD64ISA_SSE42 = 1<<1,
+    AMD64ISA_PCLMULQDQ = 1<<2,
+    AMD64ISA_BMI1 = 1<<3,
+    AMD64ISA_BMI2 = 1<<4,
+    AMD64ISA_AVX512F = 1<<5,
+    AMD64ISA_AVX512DQ = 1<<6,
+    AMD64ISA_AVX512IFMA = 1<<7,
+    AMD64ISA_AVX512PF = 1<<8,
+    AMD64ISA_AVX512ER = 1<<9,
+    AMD64ISA_AVX512CD = 1<<10,
+    AMD64ISA_AVX512BW = 1<<11,
+    AMD64ISA_AVX512VL = 1<<12,
+    AMD64ISA_AVX512VBMI2 = 1<<13,
+    AMD64ISA_AVX512VPOPCNTDQ = 1<<14
+} extended_isa_t;
+#define ECX_PCLMULDQD (1u<<1)
+#define ECX_SSE42 (1u<<20)
+#define ECX_OSXSAVE ((1u<<26)|(1u<<27))
+#define ECX_AVX512VBMI (1u<<1)
+#define ECX_AVX512VBMI2 (1u<<6)
+#define ECX_AVX512VNNI (1u<<11)
+#define ECX_AVX512BITALG (1u<<12)
+#define ECX_AVX512VPOPCNT (1u<<14)
+#define EBX_BMI1 (1u<<3)
+#define EBX_AVX2 (1u<<5)
+#define EBX_BMI2 (1u<<8)
+#define EBX_AVX512F (1u<<16)
+#define EBX_AVX512DQ (1u<<17)
+#define EBX_AVX512IFMA (1u<<21)
+#define EBX_AVX512CD (1u<<28)
+#define EBX_AVX512BW (1u<<30)
+#define EBX_AVX512VL (1u<<31)
+#define EDX_AVX512VP2INTERSECT (1u<<8)
+#define XCR0_AVX256 (1ull<<2) /* 256-bit %ymm* save/restore */
+#define XCR0_AVX512 (7ull<<5) /* 512-bit %zmm* save/restore */
+
+static void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) { /* Query CPUID. */
+#if defined(_MSC_VER)
+    int cpu_info[4];
+    __cpuidex(cpu_info, *eax, *ecx);
+    *eax = cpu_info[0];
+    *ebx = cpu_info[1];
+    *ecx = cpu_info[2];
+    *edx = cpu_info[3];
+#elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
+    uint32_t level = *eax;
+  __get_cpuid(level, eax, ebx, ecx, edx);
+#else
+    uint32_t a = *eax, b, c = *ecx, d;
+    __asm__ __volatile__("cpuid\n\t" : "+a"(a), "=b"(b), "+c"(c), "=d"(d));
+    *eax = a;
+    *ebx = b;
+    *ecx = c;
+    *edx = d;
+#endif
+}
+
+static inline uint64_t xgetbv() { /* Query extended control register value. */
+#if NEO_COM_MSVC
+    return _xgetbv(0);
+#else
+    uint32_t lo, hi;
+    __asm__ __volatile__("xgetbv\n\t" : "=a" (lo), "=d" (hi) : "c" (0));
+    return lo | ((uint64_t)hi << 32); /* Combine lo and high words. */
+#endif
+}
+
+static extended_isa_t detect_cpu_isa() {
+    uint32_t eax;
+    uint32_t ebx = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    uint32_t host_isa = AMD64ISA_DEFAULT;
+    eax = 0x1;
+    cpuid(&eax, &ebx, &ecx, &edx);
+    if (ecx & ECX_SSE42) { host_isa |= AMD64ISA_SSE42; }
+    if (ecx & ECX_PCLMULDQD) { host_isa |= AMD64ISA_PCLMULQDQ; }
+    if ((ecx & ECX_OSXSAVE) != ECX_OSXSAVE) { return (extended_isa_t)host_isa; }
+    uint64_t xcr0 = xgetbv(); /* Required to check kernel support for extended 256-bit %ymm* register save/restore. */
+    /* AVX, BMI detection. */
+    if ((xcr0 & XCR0_AVX256) == 0) { return (extended_isa_t)host_isa; } /* OS does not support AVX-256 bit YMM contexts, the hardware features don't matter now. */
+    eax = 0x7;
+    ecx = 0x0;
+    cpuid(&eax, &ebx, &ecx, &edx);
+    if (ebx & EBX_AVX2) { host_isa |= AMD64ISA_AVX2; }
+    if (ebx & EBX_BMI1) { host_isa |= AMD64ISA_BMI1; }
+    if (ebx & EBX_BMI2) { host_isa |= AMD64ISA_BMI2; }
+    /* AVX 512* detection. */
+    if ((xcr0 & XCR0_AVX512) != XCR0_AVX512) { return (extended_isa_t)host_isa; }/* OS does not support AVX-512 bit ZMM contexts, the hardware features don't matter now. */
+    if (ebx & EBX_AVX512F) { host_isa |= AMD64ISA_AVX512F; }
+    if (ebx & EBX_AVX512BW) { host_isa |= AMD64ISA_AVX512BW; }
+    if (ebx & EBX_AVX512CD) { host_isa |= AMD64ISA_AVX512CD; }
+    if (ebx & EBX_AVX512DQ) { host_isa |= AMD64ISA_AVX512DQ; }
+    if (ebx & EBX_AVX512VL) { host_isa |= AMD64ISA_AVX512VL; }
+    if (ecx & ECX_AVX512VBMI2) { host_isa |= AMD64ISA_AVX512VBMI2; }
+    if (ecx & ECX_AVX512VPOPCNT) { host_isa |= AMD64ISA_AVX512VPOPCNTDQ; }
+    return (extended_isa_t)host_isa;
+}
 
 typedef uint8_t mcode_t; /* Machine code type. */
 
