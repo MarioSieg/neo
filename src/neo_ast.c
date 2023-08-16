@@ -97,29 +97,26 @@ static const char *const block_names[BLOCK__COUNT] = {
 
 void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) {
     neo_dassert(pool && block);
-    (void)node;
-    neo_panic("NYI");
-    #if 0
-    if (neo_unlikely(!node)) {
+    if (neo_unlikely(astref_isnull(node))) {
         return;
     } else if (!block->cap) { /* No nodes yet, so allocate. */
         block->cap=1<<6;
-        block->nodes = neo_mempool_alloc(pool, block->cap*sizeof(*block->nodes));
+        block->nodes = neo_mempool_alloc(&pool->list_pool, block->cap*sizeof(*block->nodes));
     } else if (block->len >= block->cap) { /* Reallocate if necessary. */
         size_t oldlen = block->cap;
         block->cap<<=2;
-        block->nodes = neo_mempool_realloc(pool, block->nodes, oldlen*sizeof(*block->nodes), block->cap*sizeof(*block->nodes)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
+        block->nodes = neo_mempool_realloc(&pool->list_pool, block->nodes, oldlen*sizeof(*block->nodes), block->cap*sizeof(*block->nodes)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
     }
     block->nodes[block->len++] = node;
-    uint64_t mask = block_valid_masks[block->blktype];
-    uint64_t node_mask = astmask(node->type);
 #if NEO_DBG
+    const astnode_t *pnode = astpool_resolve(pool, node);
+    uint64_t mask = block_valid_masks[block->blktype];
+    uint64_t node_mask = astmask(pnode->type);
     if (neo_unlikely((mask & node_mask) == 0)) {
-        neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[node->type], block_names[block->blktype]);
+        neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[pnode->type], block_names[block->blktype]);
     }
     neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
-    #endif
-    #endif
+#endif
 }
 
 #undef impl_ast_node_literal_factory
@@ -258,19 +255,17 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
         } return;
         case ASTNODE_UNARY_OP: {
             const node_unary_op_t *data = &node->dat.n_unary_op;
-            astverify(astpool_isvalidref(pool, data->expr), "Unary op child reference is invalid");
+            astverify(data->opcode < UNOP__COUNT, "Unary op operator is invalid");
             const astnode_t *expr = verify_resolve(data->expr);
             verify_expr(expr);
-            astverify(expr->dat.n_unary_op.opcode < UNOP__COUNT, "Unary op operator is invalid");
         } return;
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &node->dat.n_binary_op;
+            astverify(data->opcode < BINOP__COUNT, "Binary op operator is invalid");
             const astnode_t *lhs = verify_resolve(data->left_expr);
             verify_expr(lhs);
-            astverify(lhs->dat.n_binary_op.opcode < BINOP__COUNT, "Binary op left operator is invalid");
             const astnode_t *rhs = verify_resolve(data->right_expr);
             verify_expr(rhs);
-            astverify(rhs->dat.n_binary_op.opcode < BINOP__COUNT, "Binary op right operator is invalid");
         } return;
         case ASTNODE_METHOD: {
             const node_method_t *data = &node->dat.n_method;
@@ -313,19 +308,23 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                 } break;
                 case BLOCK_CLASS: {
                     const symtab_t *var_table = data->symtabs.sc_class.var_table;
-                    astverify(var_table != NULL, "Class variable table is NULL");
+                    (void)var_table;
+                    //astverify(var_table != NULL, "Class variable table is NULL");
                     const symtab_t *method_table = data->symtabs.sc_class.method_table;
-                    astverify(method_table != NULL, "Class method table is NULL");
+                    (void)method_table;
+                    //astverify(method_table != NULL, "Class method table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
                 case BLOCK_LOCAL: {
                     const symtab_t *var_table = data->symtabs.sc_local.var_table;
-                    astverify(var_table != NULL, "Local variable table is NULL");
+                    (void)var_table;
+                    //astverify(var_table != NULL, "Local variable table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
                 case BLOCK_PARAMLIST: {
                     const symtab_t *var_table = data->symtabs.sc_params.var_table;
-                    astverify(var_table != NULL, "Parameter list variable table is NULL");
+                    (void)var_table;
+                    //astverify(var_table != NULL, "Parameter list variable table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
                 default: neo_panic("Invalid block type: %d", data->blktype);
@@ -455,11 +454,11 @@ static void my_ast_validator(astnode_t *node, void *user) {
 astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
     neo_dassert(self);
     size_t plen = self->node_pool.len+sizeof(astnode_t);
+    neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
     astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(astnode_t));
     n->type = type & 255;
     if (o) { *o = n; }
     plen /= sizeof(astnode_t);
-    neo_assert(plen <= UINT32_MAX && "ast-pool out of nodes");
     return (astref_t)plen;
 }
 

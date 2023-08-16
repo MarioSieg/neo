@@ -5,12 +5,18 @@
 
 TEST(core, neo_mempool_getelementptr) {
     neo_mempool_t pool;
-    neo_mempool_init(&pool, 8);
+    neo_mempool_init(&pool, 32);
     int *a = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    ASSERT_EQ(a, (int *)pool.needle);
     int *b = (int *)neo_mempool_alloc(&pool, sizeof(int));
     int *c = (int *)neo_mempool_alloc(&pool, sizeof(int));
     int *d = (int *)neo_mempool_alloc(&pool, sizeof(int));
+    int *p = (int *)pool.needle;
     ASSERT_EQ(pool.len, sizeof(int)*4);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 0, int), p+0);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 1, int), p+1);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 2, int), p+2);
+    ASSERT_EQ(neo_mempool_getelementptr(pool, 3, int), p+3);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 0, int), a);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 1, int), b);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 2, int), c);

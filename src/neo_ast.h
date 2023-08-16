@@ -326,6 +326,9 @@ static NEO_AINLINE bool astpool_isvalidref(astpool_t *self, astref_t ref) {
     neo_dassert(self);
     return neo_likely(!astref_isnull(ref) && ((size_t)ref*sizeof(astnode_t))-sizeof(astnode_t) < self->node_pool.len);
 }
+/* Resolves AST reference to node pointer! Do NOT keep the node pointer alive, it might be invalidated on reallocation.
+** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
+*/
 static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
     neo_dassert(self);
 #if NEO_DBG

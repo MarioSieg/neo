@@ -571,8 +571,8 @@ typedef struct neo_mempool_t {
     size_t num_allocs;
 } neo_mempool_t;
 
-#define neo_mempool_getelementptr(self, idx, type) (&((type *)(uint8_t *)((self).needle))[idx])
-#define neo_mempool_top(self, type) ((type *)(uint8_t *)(self).needle) 
+#define neo_mempool_getelementptr(self, idx, type) (((type *)((self).needle))+(idx))
+#define neo_mempool_top(self, type) ((type *)(self).needle)
 extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *self, size_t cap);
 extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *self, size_t len);
 extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align);
