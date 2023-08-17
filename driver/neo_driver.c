@@ -6,7 +6,7 @@
 #define PROMPTCHAR ">"
 
 static bool show_exit(void) {
-    return true;
+    return false;
 }
 
 static bool show_help(void) {

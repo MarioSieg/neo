@@ -34,6 +34,7 @@ extern "C" {
 ** TODO: Store record directly on header if value type.
 ** TODO: What happends if data looks like a pointer but isn't?
 ** TODO: Generational GC.
+** TODO: Define object layout with reference types first for faster scanning.
 */
 
 #define GC_DBG NEO_DBG /* Eanble GC debug mode and logging. */
