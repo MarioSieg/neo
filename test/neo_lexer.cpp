@@ -170,6 +170,8 @@ generic_lexer_test(rbracket, "]", TOK_PU_R_BRACKET)
 generic_lexer_test(lbrace, "{", TOK_PU_L_BRACE)
 generic_lexer_test(rbrace, "}", TOK_PU_R_BRACE)
 generic_lexer_test(comma, ",", TOK_PU_COMMA)
+generic_lexer_test(colon, ":", TOK_PU_COLON)
+generic_lexer_test(at, "@", TOK_PU_AT)
 generic_lexer_test(arrow, "->", TOK_PU_ARROW)
 generic_lexer_test(newline, "\n", TOK_PU_NEWLINE)
 

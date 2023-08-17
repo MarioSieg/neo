@@ -331,6 +331,8 @@ token_t lexer_scan_next(lexer_t *self) {
         case '{': return mktok(self, TOK_PU_L_BRACE, 0);
         case '}': return mktok(self, TOK_PU_R_BRACE, 0);
         case ',': return mktok(self, TOK_PU_COMMA, 0);
+        case ':': return mktok(self, TOK_PU_COLON, 0);
+        case '@': return mktok(self, TOK_PU_AT, 0);
         case '\n': return mktok(self, TOK_PU_NEWLINE, 0);
 
         case '.': return mktok(self, TOK_OP_DOT, 0);

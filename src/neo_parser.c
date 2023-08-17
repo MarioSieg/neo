@@ -54,14 +54,7 @@ bool parse_int(const char *str, size_t len, neo_int_t *o)
                 r = (r<<4)+digit*sign;
             }
         } break;
-        cas        /* Find existing command. */
-        for (size_t i = 0; i < sizeof(CMD_LIST)/sizeof(*CMD_LIST); ++i) {
-            if (neo_likely(!strcmp((const char*)input, CMD_LIST[i].kw))) {
-                if (!(*CMD_LIST[i].cmd)()) { return; }
-                promt = true;
-                continue;
-            }
-        }e 2: { /* bin */
+        case 2: { /* bin */
             unsigned bits = 0;
             neo_uint_t v = 0;
             for (; neo_likely(p < pe) && *p; ++p) {

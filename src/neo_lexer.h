@@ -56,6 +56,8 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_PU_R_BRACE, "}")__\
     _(TOK_PU_COMMA, ",")__\
     _(TOK_PU_ARROW, "->")__\
+    _(TOK_PU_COLON, ":")__\
+    _(TOK_PU_AT, "@")__\
     _(TOK_PU_NEWLINE, "\\n")__\
     /* Operators */\
     _(TOK_OP_DOT, ".")__\
@@ -168,11 +170,11 @@ typedef struct lexer_t {
 #define KW_MAPPING_CUSTOM_N 5 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not */
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
-extern NEO_EXPORT NEO_COLDPROC void lexer_init(lexer_t *self);
-extern NEO_EXPORT NEO_COLDPROC void lexer_set_src(lexer_t *self, const source_t *src);
+extern NEO_EXPORT void lexer_init(lexer_t *self);
+extern NEO_EXPORT void lexer_set_src(lexer_t *self, const source_t *src);
 extern NEO_EXPORT NEO_HOTPROC token_t lexer_scan_next(lexer_t *self);
-extern NEO_EXPORT NEO_COLDPROC size_t lexer_drain(lexer_t *self, token_t **tok);
-extern NEO_EXPORT NEO_COLDPROC void lexer_free(lexer_t *self);
+extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
+extern NEO_EXPORT void lexer_free(lexer_t *self);
 
 #ifdef __cplusplus
 }
