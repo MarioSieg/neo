@@ -215,14 +215,14 @@ static void consume_whitespace(lexer_t *self) {
 
 static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
     neo_dassert(self);
-    (void)pdelta; /* TODO */
     token_t tok;
     memset(&tok, 0, sizeof(tok));
     tok.type = type;
     if (neo_likely(type != TOK_ME_EOF)) { /* Regular token case. */
         ptrdiff_t delta = self->needle-self->tok_start;
         neo_assert(delta >= 0 && "invalid lexeme length");
-        const uint8_t *lp = self->needle-delta;
+        const uint8_t *lp = self->needle-delta+pdelta;
+        if (delta > 0) { delta -= pdelta<<1; }
         neo_assert(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
         tok.col = (uint32_t)abs((int32_t)self->col-(int32_t)delta);
@@ -292,6 +292,18 @@ static token_t consume_keyword_or_identifier(lexer_t *self) {
         }
     }
     return mktok(self, TOK_LI_IDENT, 0); /* No builtin keyword found, return identifier. */
+}
+
+static token_t consume_string(lexer_t *self) {
+    neo_dassert(self);
+    while (!is_done(self) && peek(self) != '"') {
+        consume(self);
+    }
+    if (neo_unlikely(peek(self) != '"')) { /* Unterminated string literal. */
+        return mktok(self, TOK_ME_ERR, 0);
+    }
+    consume(self); /* Consume closing quote. */
+    return mktok(self, TOK_LI_STRING, 1);
 }
 
 void lexer_init(lexer_t *self) {
@@ -396,6 +408,7 @@ token_t lexer_scan_next(lexer_t *self) {
                 } else { return mktok(self, TOK_OP_GREATER, 0); }
             }
         }
+        case '"': return consume_string(self);
         default: {
             if (neo_likely(c32_is_ident_start(c))) { /* Identifier ? */
                 return consume_keyword_or_identifier(self);

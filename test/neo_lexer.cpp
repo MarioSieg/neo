@@ -364,6 +364,50 @@ TEST(lexer, int_literal_octal) {
     lexer_free(&lexer);
 }
 
+TEST(lexer, string_literal) {
+    source_t src {};
+    src.src = reinterpret_cast<const std::uint8_t*>("\"I'm in Vienna on vacations and damn this city is beautiful!\"");
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
+    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
+
+    lexer_t lexer;
+    lexer_init(&lexer);
+
+    lexer_set_src(&lexer, &src);
+    token_t tok = lexer_scan_next(&lexer);
+    ASSERT_EQ(tok.type, TOK_LI_STRING);
+    ASSERT_EQ(tok.lexeme.len, sizeof("I'm in Vienna on vacations and damn this city is beautiful!")-1); /* Quotes must be removed. */
+    ASSERT_EQ(std::memcmp(tok.lexeme.p, "I'm in Vienna on vacations and damn this city is beautiful!", sizeof("I'm in Vienna on vacations and damn this city is beautiful!")-1), 0);
+
+    ASSERT_TRUE(is_done(&lexer));
+
+    lexer_free(&lexer);
+}
+
+TEST(lexer, string_literal_sandwitch) {
+    source_t src {};
+    src.src = reinterpret_cast<const std::uint8_t*>("3\"hey!\" 1.5");
+    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
+    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
+
+    lexer_t lexer;
+    lexer_init(&lexer);
+
+    lexer_set_src(&lexer, &src);
+    token_t tok = lexer_scan_next(&lexer);
+    ASSERT_EQ(tok.type, TOK_LI_INT);
+    tok = lexer_scan_next(&lexer);
+    ASSERT_EQ(tok.type, TOK_LI_STRING);
+    ASSERT_EQ(tok.lexeme.len, sizeof("hey!")-1); /* Quotes must be removed. */
+    ASSERT_EQ(std::memcmp(tok.lexeme.p, "hey!", sizeof("hey!")-1), 0);
+    tok = lexer_scan_next(&lexer);
+    ASSERT_EQ(tok.type, TOK_LI_FLOAT);
+
+    ASSERT_TRUE(is_done(&lexer));
+
+    lexer_free(&lexer);
+}
+
 TEST(lexer, consume_whitespace) {
     static constexpr const char8_t* srcstr {u8"A \t\r\vB#   ad\tssF         \nC#*noelle\nssv\t       *#D"};
 
