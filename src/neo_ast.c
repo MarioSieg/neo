@@ -75,20 +75,20 @@ astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astre
     return ref;
 }
 
-static const uint64_t NEO_UNUSED block_valid_masks[BLOCK__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCK_MODULE */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCK_CLASS */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCK_LOCAL */
-    |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCK_LOCAL */
-    |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCK_LOCAL */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCK_PARAMLIST */
+static const uint64_t NEO_UNUSED block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCKSCOPE_LOCAL */
+    |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCKSCOPE_LOCAL */
+    |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCKSCOPE_LOCAL */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCKSCOPE_PARAMLIST */
 };
 
 #if NEO_DBG
 #define _(_1, _2) [_1] = _2
 static const char *const node_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
 #undef _
-static const char *const block_names[BLOCK__COUNT] = {
+static const char *const block_names[BLOCKSCOPE__COUNT] = {
     "module",
     "class",
     "local",
@@ -274,7 +274,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             verify_type(ident, ASTNODE_IDENT_LIT);
             if (!astref_isnull(data->params)) { /* Optional. */
                 const astnode_t *params = verify_resolve(data->params);
-                verify_block(params, BLOCK_PARAMLIST);
+                verify_block(params, BLOCKSCOPE_PARAMLIST);
             }
             if (!astref_isnull(data->ret_type)) { /* Optional. */
                 const astnode_t *ret_type = verify_resolve(data->ret_type);
@@ -282,7 +282,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             }
             if (!astref_isnull(data->body)) { /* Optional. */
                 const astnode_t *body = verify_resolve(data->body);
-                verify_block(body, BLOCK_LOCAL);
+                verify_block(body, BLOCKSCOPE_LOCAL);
             }
         } return;
         case ASTNODE_BLOCK: {
@@ -302,12 +302,12 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                 astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
             }
             switch (data->blktype) {
-                case BLOCK_MODULE: {
+                case BLOCKSCOPE_MODULE: {
                     const symtab_t *class_table = data->symtabs.sc_module.class_table;
                     astverify(class_table != NULL, "Module class table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
-                case BLOCK_CLASS: {
+                case BLOCKSCOPE_CLASS: {
                     const symtab_t *var_table = data->symtabs.sc_class.var_table;
                     (void)var_table;
                     //astverify(var_table != NULL, "Class variable table is NULL");
@@ -316,13 +316,13 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                     //astverify(method_table != NULL, "Class method table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
-                case BLOCK_LOCAL: {
+                case BLOCKSCOPE_LOCAL: {
                     const symtab_t *var_table = data->symtabs.sc_local.var_table;
                     (void)var_table;
                     //astverify(var_table != NULL, "Local variable table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
-                case BLOCK_PARAMLIST: {
+                case BLOCKSCOPE_PARAMLIST: {
                     const symtab_t *var_table = data->symtabs.sc_params.var_table;
                     (void)var_table;
                     //astverify(var_table != NULL, "Parameter list variable table is NULL");
@@ -346,28 +346,28 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
         case ASTNODE_BRANCH: {
             const node_branch_t *data = &node->dat.n_branch;
             verify_expr(verify_resolve(data->cond_expr));
-            verify_block(verify_resolve(data->true_block), BLOCK_LOCAL);
+            verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
             if (!astref_isnull(data->false_block)) { /* Optional. */
-                verify_block(verify_resolve(data->false_block), BLOCK_LOCAL);
+                verify_block(verify_resolve(data->false_block), BLOCKSCOPE_LOCAL);
             }
         } return;
         case ASTNODE_LOOP: {
             const node_loop_t *data = &node->dat.n_loop;
             verify_expr(verify_resolve(data->cond_expr));
-            verify_block(verify_resolve(data->true_block), BLOCK_LOCAL);
+            verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
         } return;
         case ASTNODE_CLASS: {
             const node_class_t *data = &node->dat.n_class;
             verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
             if (!astref_isnull(data->body)) { /* Optional. */
-                verify_block(verify_resolve(data->body), BLOCK_CLASS);
+                verify_block(verify_resolve(data->body), BLOCKSCOPE_CLASS);
             }
         } return;
         case ASTNODE_MODULE: {
             const node_module_t *data = &node->dat.n_module;
             verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
             if (!astref_isnull(data->body)) { /* Optional. */
-                verify_block(verify_resolve(data->body), BLOCK_MODULE);
+                verify_block(verify_resolve(data->body), BLOCKSCOPE_MODULE);
             }
         } return;
         default: {

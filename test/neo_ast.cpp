@@ -52,7 +52,7 @@ TEST(ast, block_push_children) {
     astpool_init(&pool);
 
     node_block_t block {
-        .blktype = BLOCK_LOCAL
+        .blktype = BLOCKSCOPE_LOCAL
     };
     ASSERT_EQ(block.len, 0);
     ASSERT_EQ(block.nodes, nullptr);

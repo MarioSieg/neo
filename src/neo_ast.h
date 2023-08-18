@@ -154,12 +154,11 @@ typedef struct node_method_t {
 } node_method_t;
 
 typedef enum block_scope_t {
-    BLOCK_MODULE,       /* Module (per-file). */
-    BLOCK_CLASS,        /* Class body. */
-    BLOCK_LOCAL,        /* Method or statement body. */
-    BLOCK_PARAMLIST,    /* Method parameter list. */
-
-    BLOCK__COUNT
+    BLOCKSCOPE_MODULE,       /* Module (per-file). */
+    BLOCKSCOPE_CLASS,        /* Class body. */
+    BLOCKSCOPE_LOCAL,        /* Method or statement body. */
+    BLOCKSCOPE_PARAMLIST,    /* Method parameter list. */
+    BLOCKSCOPE__COUNT
 } block_scope_t;
 
 typedef struct node_block_t {
@@ -167,17 +166,17 @@ typedef struct node_block_t {
     union {
         struct {
             symtab_t *class_table; /* Global symbol table. */
-        } sc_module; /* Scope of: BLOCK_MODULE */
+        } sc_module; /* Scope of: BLOCKSCOPE_MODULE */
         struct {
             symtab_t *var_table; /* Class variables (static and local). */
             symtab_t *method_table; /* Class methods (static and local). */
-        } sc_class; /* Scope of: BLOCK_CLASS */
+        } sc_class; /* Scope of: BLOCKSCOPE_CLASS */
         struct {
             symtab_t *var_table; /* Local variables. */
-        } sc_local; /* Scope of: BLOCK_LOCAL */
+        } sc_local; /* Scope of: BLOCKSCOPE_LOCAL */
         struct {
             symtab_t *var_table; /* Local parameter variables. */
-        } sc_params; /* Scope of: BLOCK_PARAMLIST */
+        } sc_params; /* Scope of: BLOCKSCOPE_PARAMLIST */
     } symtabs;
     astref_decl(req) *nodes; /* Child nodes. */
     uint32_t len;
@@ -186,12 +185,13 @@ typedef struct node_block_t {
 extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *block, astref_decl(req) node);
 
 /* Variable type */
-typedef enum var_type_t {
-    VARTYPE_LOCAL,          /* Local variable. */
-    VARTYPE_PARAM,          /* Local function parameter. */
-    VARTYPE_STATIC_FIELD,   /* Static class field. */
-    VARTYPE_FIELD           /* Class field. */
-} var_type_t;
+typedef enum variable_scope_t {
+    VARSCOPE_LOCAL,          /* Local variable. */
+    VARSCOPE_PARAM,          /* Local function parameter. */
+    VARSCOPE_STATIC_FIELD,   /* Static class field. */
+    VARSCOPE_FIELD,          /* Class field. */
+    VARSCOPE__COUNT
+} variable_scope_t;
 
 typedef struct node_variable_t {
     astref_decl(req) vartype : 8; /* Variable type. */
