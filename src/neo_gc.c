@@ -131,6 +131,7 @@ static void shrink_alloc_map(gc_context_t *self) {
     if (new_size < old_size) { rehash_alloc_map(self, new_size); }
 }
 
+/* Traces and marks all life objects. */
 static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
     neo_dassert(self);
     size_t i, j, h;
@@ -140,12 +141,13 @@ static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
         h = self->trackedallocs[i].hash;
         if (h == 0 || j > probe_dist(self, i, h)) { return; }
         if (ptr == self->trackedallocs[i].ptr) {
-            if (self->trackedallocs[i].flags&GCF_MARK) { return; }
-            self->trackedallocs[i].flags|=GCF_MARK;
-            if (self->trackedallocs[i].flags&GCF_LEAF) { return; }
+            if (self->trackedallocs[i].flags & GCF_MARK) { return; } /* Already marked. */
+            self->trackedallocs[i].flags |= GCF_MARK; /* Mark object. */
+            if (self->trackedallocs[i].flags & GCF_LEAF) { return; } /* Leaf object, child-scanning is redundant. */
+            /* Scan children nodes. */
             const void **top = (const void **)self->trackedallocs[i].ptr;
             const void **end = top+gc_granules2bytes(self->trackedallocs[i].grasize)/sizeof(void*);
-            while (top < end) { gc_mark_ptr(self, *top++); }
+            while (top < end) { gc_mark_ptr(self, *top++); } /* Scan children nodes. */
             return;
         }
         i = (i+1) % self->slots; ++j;
@@ -153,45 +155,59 @@ static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
 
 }
 
+/* Mark life root objects and their child nodes on the stack. */
 static void gc_mark_stack(gc_context_t *self) {
     neo_dassert(self);
     if (neo_unlikely(self->stktop == self->stkbot)) { return; }
     const void **top = (const void **)self->stktop;
     const void **bot = (const void **)self->stkbot;
-    if (bot < top) { while (top >= bot) { gc_mark_ptr(self, *top--); } }
-    else { while (top <= bot) { gc_mark_ptr(self, *top++); } }
+    if (bot < top) { while (top >= bot) { gc_mark_ptr(self, *top--); } } /* Scan stack addresses from top to bottom. */
+    else { while (top <= bot) { gc_mark_ptr(self, *top++); } } /* Scan stack addresses from bottom to top. */
 }
 
+/*
+** 1. Mark phase: Mark all alive root objects and their children.
+** This phase does the live object tracing.
+** Note that a GC can only reclaim syntactically unreachable objects.
+*/
 static void gc_mark(gc_context_t *self) {
     neo_dassert(self);
     if (neo_unlikely(!self->alloc_len)) { return; }
+    /* 1. Mark all root objects. */
     for (size_t i = 0; i < self->slots; ++i) {
-        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&GCF_MARK)) { continue; }
-        if (self->trackedallocs[i].flags&GCF_ROOT) {
-            self->trackedallocs[i].flags|=GCF_MARK;
-            if (self->trackedallocs[i].flags&GCF_LEAF) { continue; }
+        if (neo_unlikely(!self->trackedallocs[i].hash)) { continue; }
+        if (self->trackedallocs[i].flags & GCF_MARK) { continue; } /* Already marked. */
+        if (self->trackedallocs[i].flags & GCF_ROOT) { /* Root object, scan children. */
+            self->trackedallocs[i].flags |= GCF_MARK; /* Mark object. */
+            if (self->trackedallocs[i].flags & GCF_LEAF) { continue; } /* Leaf object, child-scanning is redundant. */
             const void **top = (const void **)self->trackedallocs[i].ptr;
             const void **end = top+gc_granules2bytes(self->trackedallocs[i].grasize)/sizeof(void*);
-            while (top < end) { gc_mark_ptr(self, *top++); }
+            while (top < end) { gc_mark_ptr(self, *top++); } /* Scan children nodes. */
             continue;
         }
     }
+    /* 2. Mark all stack objects. */
     gc_mark_stack(self);
 }
 
+/*
+** 2. Sweep phase: Reclaim all garbage objects.
+*/
 void gc_sweep(gc_context_t *self) {
     neo_dassert(self);
     size_t i, j, k, nj, nh;
     if (neo_unlikely(!self->alloc_len)) { return; }
     self->free_len = 0;
+    /* 1. Collect all free objects. */
     for (i = 0; i < self->slots; ++i) {
-        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&(GCF_MARK|GCF_ROOT))) { continue; }
-        ++self->free_len;
+        if (neo_unlikely(!self->trackedallocs[i].hash)) { continue; }
+        if (self->trackedallocs[i].flags & (GCF_MARK | GCF_ROOT)) { continue; } /* Alive object, ignore. */
+        ++self->free_len; /* Free object, collect. */
     }
-    self->freelist = neo_memalloc(self->freelist, sizeof(*self->freelist)*self->free_len);
+    self->freelist = neo_memalloc(NULL, sizeof(*self->freelist)*self->free_len); /* Allocate freelist. TODO: reuse buffer */
     i = 0; k = 0;
     while (i < self->slots) {
-        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags&(GCF_MARK|GCF_ROOT))) { ++i; continue; }
+        if (!self->trackedallocs[i].hash || (self->trackedallocs[i].flags & (GCF_MARK | GCF_ROOT))) { ++i; continue; }
         self->freelist[k++] = self->trackedallocs[i];
         memset(self->trackedallocs+i, 0, sizeof(*self->trackedallocs));
         j = i;
@@ -209,13 +225,14 @@ void gc_sweep(gc_context_t *self) {
         ++self->alloc_len;
     }
     for (i = 0; i < self->slots; ++i) {
-        if (self->trackedallocs[i].hash == 0) { continue; }
-        if (self->trackedallocs[i].flags&GCF_MARK) {
-            self->trackedallocs[i].flags&=~GCF_MARK&255;
+        if (neo_unlikely(self->trackedallocs[i].hash == 0)) { continue; }
+        if (self->trackedallocs[i].flags & GCF_MARK) {
+            self->trackedallocs[i].flags &= ~GCF_MARK&255;
         }
     }
     shrink_alloc_map(self);
     self->threshold = self->alloc_len+(size_t)((double)self->alloc_len*self->sweepfactor)+1;
+    /* 2. Free all collected objects. */
     for (i = 0; i < self->free_len; ++i) {
         if (self->freelist[i].ptr) {
             if (self->dtor_hook) { (*self->dtor_hook)(self->freelist[i].ptr); }
@@ -223,7 +240,7 @@ void gc_sweep(gc_context_t *self) {
             neo_memalloc(p, 0); /* Free individual allocation. */
         }
     }
-    neo_memalloc(self->freelist, 0);
+    neo_memalloc(self->freelist, 0); /* Free freelist. */
     self->freelist = NULL;
     self->free_len = 0;
 }

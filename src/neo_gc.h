@@ -11,7 +11,8 @@ extern "C" {
 #endif
 
 /*
-** The current GC is a conservative, thread local, mark and sweep garbage collector.
+** The current GC is a conservative, thread local, (tracing) mark and sweep garbage collector.
+** The GC reclaims syntactic garbage, not semantic garbage, by scanning the VM stack and the heap for pointers.
 ** It could be replaced by a faster generational, concurrent, compacting garbage collector but this requires a lot of work.
 ** The current GC is simple and works.
 **
@@ -33,7 +34,7 @@ extern "C" {
 ** TODO: Shrink object header (compressed references, hash?)
 ** TODO: Store record directly on header if value type.
 ** TODO: What happends if data looks like a pointer but isn't?
-** TODO: Generational GC.
+** TODO: Generational, concurrent, mark-compact GC, which also allows for sequencial allocation instead of free-listing.
 ** TODO: Define object layout with reference types first for faster scanning.
 */
 
