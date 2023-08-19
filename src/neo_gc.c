@@ -16,7 +16,7 @@ static NEO_AINLINE size_t probe_dist(const gc_context_t* self, size_t i, size_t 
 }
 
 static void gc_mark_ptr(gc_context_t *self, const void *ptr);
-static NEO_AINLINE void scan_region(gc_context_t *self, const void *volatile p, size_t len) {
+static NEO_AINLINE void scan_region(gc_context_t *self, const void *p, size_t len) {
     neo_dassert(self && p);
     const void **pp = (const void **)p;
     const void **end = (const void **)p+len;
@@ -269,12 +269,14 @@ void gc_init(gc_context_t *self, const void *stk, size_t stk_spdelta) {
 void gc_free(gc_context_t *self) {
     neo_dassert(self);
     gc_sweep(self);
+#if NEO_DBG
     for (size_t i = 0; i < self->slots; ++i) { /* Free all roots. */
         if (self->trackedallocs[i].ptr && self->trackedallocs[i].flags & GCF_ROOT) {
             neo_warn("root memory allocation still alive: %p, index: %zu, size: %zub" PRIu32, self->trackedallocs[i].ptr, i, gc_bytes2granules(self->trackedallocs[i].grasize));
             gc_objfree(self, self->trackedallocs[i].ptr);
         }
     }
+#endif
     neo_memalloc(self->trackedallocs, 0);
     neo_memalloc(self->freelist, 0);
     memset(self, 0, sizeof(*self));
