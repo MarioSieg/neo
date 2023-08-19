@@ -10,7 +10,7 @@ TEST(gc, gc_alloc_stack_ref) {
     stk.back() = UINT64_C(0xbe'be'be'be'be'be'be'be);
 
     gc_context_t gc;
-    gc_init(&gc, stk.data(), stk.data()+stk.size());
+    gc_init(&gc, stk.data(), stk.size());
 
     static bool released = false;
 
@@ -50,7 +50,7 @@ TEST(gc, gc_alloc_heap_ref) {
     stk.back() = UINT64_C(0xbe'be'be'be'be'be'be'be);
 
     gc_context_t gc;
-    gc_init(&gc, stk.data(), stk.data()+stk.size());
+    gc_init(&gc, stk.data(), stk.size());
 
     static int free_count = 0;
 
@@ -104,7 +104,7 @@ TEST(gc, gc_alloc_huge) {
     stk.back() = UINT64_C(0xbe'be'be'be'be'be'be'be);
 
     gc_context_t gc;
-    gc_init(&gc, stk.data(), stk.data()+stk.size());
+    gc_init(&gc, stk.data(), stk.size());
 
     size_t len = 1024ull*1024ull*128ull;
     void *mem = gc_objalloc(&gc, len, GCF_ROOT);

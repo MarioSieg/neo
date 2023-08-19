@@ -93,8 +93,8 @@ neo_static_assert(__alignof__(gc_fatptr_t) == 8);
 
 /* Per-thread GC context. */
 typedef struct gc_context_t {
-    const void *stktop; /* Top of the VM stack. (VM stack grows upwards so: top > bot.) */
-    const void *stkbot; /* Bottom of the VM stack. (VM stack grows upwards so: top > bot.) */
+    const void *stk; /* Bottom (start) of the VM stack. (VM stack grows upwards) */
+    size_t stk_spdelta; /* VM Stack length (sp delta to stk). */
     uintptr_t bndmin; /* Minimum pointer value of memory bounds. */
     uintptr_t bndmax; /* Maximum pointer value of memory bounds. */
     gc_fatptr_t *trackedallocs; /* List of tracked allocated objects. */
@@ -109,7 +109,7 @@ typedef struct gc_context_t {
     void (*dtor_hook)(void *); /* Destructor callback hook. */
 } gc_context_t;
 
-extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
+extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk, size_t stk_spdelta);
 extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);

@@ -4,6 +4,8 @@
 
 #include <ctype.h>
 
+#if 0
+
 typedef enum precedence_t {
     PREC_NONE,
     PREC_ASSIGNMENT,
@@ -142,6 +144,8 @@ void parser_prepare(parser_t *self) {
     self->error = self->panic = false;
     advance(self); /* Consume first token. */
 }
+
+#endif
 
 bool parse_int(const char *str, size_t len, neo_int_t *o) {
     neo_int_t r = 0;
