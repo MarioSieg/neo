@@ -18,7 +18,32 @@ typedef uint32_t astref_t;
 
 typedef struct astnode_t astnode_t; /* Node. */
 typedef struct astpool_t astpool_t; /* AST memory pool. */
-typedef struct symtab_t symtab_t; /* Symbol table. */
+
+typedef struct symbol_t {
+    uint32_t hash;
+    astref_t node;
+#if NEO_DBG
+    srcspan_t span;
+#endif
+} symbol_t;
+
+/* Represents the symbol table which maps variable names to AST-nodes. */
+typedef struct symtab_t { /* Todo: Replace with hashmap. */
+    symbol_t *p;
+    uint32_t len;
+    uint32_t cap;
+    neo_mempool_t *pool;
+#if NEO_DBG
+    const char *dbg_name;
+#endif
+} symtab_t;
+
+extern NEO_EXPORT void symtab_init(symtab_t *self, neo_mempool_t *pool, const char *dbg_name);
+extern NEO_EXPORT bool symtab_insert(symtab_t *self, const symbol_t *sym, symbol_t **out);
+extern NEO_EXPORT NEO_NODISCARD astref_t symtab_lookup(symtab_t *self, uint32_t hash);
+#if NEO_DBG
+extern NEO_EXPORT void symtab_dump(const symtab_t *self, FILE *f);
+#endif
 
 typedef struct node_error_t {
     const char *message;
@@ -340,6 +365,11 @@ static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
 #endif
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
+
+#ifdef NEO_HAS_GRAPHVIZ
+extern NEO_EXPORT void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
+extern NEO_EXPORT void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
+#endif
 
 #ifdef __cplusplus
 }

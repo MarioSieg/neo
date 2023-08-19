@@ -2,6 +2,60 @@
 
 #include "neo_ast.h"
 
+#ifdef NEO_HAS_GRAPHVIZ
+#   include <time.h>
+#   include <graphviz/gvc.h>
+#endif
+
+void symtab_init(symtab_t *self, neo_mempool_t *pool, const char *dbg_name) {
+    neo_dassert(self && pool);
+    memset(self, 0, sizeof(*self));
+    self->cap = 1<<6;
+    self->p = neo_mempool_alloc(pool, self->cap*(sizeof(*self->p)));
+#if NEO_DBG
+    self->dbg_name = dbg_name ? dbg_name : "Default";
+#else
+    (void)dbg_name;
+#endif
+}
+
+bool symtab_insert(symtab_t *self, const symbol_t *sym, symbol_t **out) {
+    neo_dassert(self && sym);
+    neo_dassert(sym->hash && "Invalid hash");
+    for (uint32_t i = 0; i < self->len; ++i) {
+        if (self->p[i].hash == sym[i].hash) {
+            *out = self->p + i;
+            return false;
+        }
+    }
+    if (self->len >= self->cap) {
+        self->p = neo_mempool_realloc(self->pool, self->p, self->len, self->len + 1);
+    }
+    self->p[self->len++] = *sym;
+    return true;
+}
+
+astref_t symtab_lookup(symtab_t *self, uint32_t hash) {
+    neo_dassert(self && hash);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        if (self->p[i].hash == hash) {
+            return self->p[i].node;
+        }
+    }
+    return ASTREF_NULL;
+}
+
+#if NEO_DBG
+void symtab_dump(const symtab_t *self, FILE *f) {
+    neo_dassert(self && f);
+    fprintf(f, "--- Begin Symbol Table '%s' ----\n", self->dbg_name);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        fprintf(f, "\t\'%.*s\' : %"PRIx32"\n", self->p[i].span.len, self->p[i].span.p, self->p[i].hash);
+    }
+    fprintf(f, "--- End Symbol Table '%s' ----\n", self->dbg_name);
+}
+#endif
+
 /* Implement AST node factory methods */
 
 #define impl_ast_node_factory(name, ttype)\
@@ -403,6 +457,59 @@ void astpool_free(astpool_t *self) {
     neo_mempool_free(&self->list_pool);
     neo_mempool_free(&self->node_pool);
 }
+
+/* GraphViz AST rendering for debugging and visualization. */
+#ifdef NEO_HAS_GRAPHVIZ
+
+#if 0
+static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const char *name, uint32_t c) {
+    neo_dassert(g && target);
+    char buf[(1<<3)+1];
+    snprintf(buf, sizeof(buf), "%" PRIu32, c);
+    Agnode_t *n = agnode(g, buf, 1);
+    name = name && *name ? name : astnode_names[target->type];
+    agsafeset(n, "label", (char*)name, "");
+    agsafeset(n, "style", "filled", ""); /* make it filled */
+    agsafeset(n, "color", "transparent", ""); /* hide outline */
+    if (ASTNODE_LITERAL_MASK & astmask(target->type)) {
+        agsafeset(n, "fillcolor", target->type == ASTNODE_IDENT_LIT ? "lightblue" : "peachpuff", "");
+    } else {
+        bool affect_cf = ASTNODE_CONTROL_FLOW & astmask(target->type); /* node affects control flow? */
+        agsafeset(n, "fillcolor", affect_cf ? "coral1" : "aquamarine1", ""); /* fill color */
+    }
+    return n;
+}
+
+static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const SymTab *tab) {
+    if (neo_unlikely(!tab || !tab->len)) { return; }
+    char buf[(1<<5)+1];
+    snprintf(buf, sizeof(buf), "%p", (const void*)tab);
+    Agnode_t *n = agnode(g, buf, 1);
+    char html[(1<<14)+1];
+    int o = snprintf(html, sizeof(html), "<table>\n");
+    for (uint32_t i = 0; i < tab->len; ++i) {
+        o += snprintf(html+o, sizeof(html)-(size_t)o, "\t<tr><td>%.*s</td></tr>\n", tab->symbols[i].ident.span.len, tab->symbols[i].ident.span.needle);
+    }
+    snprintf(html+o, sizeof(html)-(size_t)o, "</table>");
+    agsafeset(n, "label", agstrdup_html(g, html), "");
+    agsafeset(n, "shape", "box", "");
+    agsafeset(n, "style", "filled", "");
+    agsafeset(n, "color", "transparent", "");
+    agsafeset(n, "fillcolor", "cornsilk2", "");
+    Agedge_t *e = agedge(g, gnode, n, NULL, 1);
+    agsafeset(e, "label", (char*)tab->name, "");
+}
+#endif
+
+void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f) {
+    (void)pool, (void)root, (void)f;
+}
+
+void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename) {
+    (void)pool, (void)root, (void)filename;
+}
+
+#endif
 
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
 static void my_ast_validator(astnode_t *node, void *user) {

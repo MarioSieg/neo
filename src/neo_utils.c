@@ -51,6 +51,7 @@ NEO_COLDPROC void comerror_free(const compile_error_t *self) {
     neo_memalloc((void *)self->lexeme_line, 0);
     neo_memalloc((void *)self->lexeme, 0);
     memset((void *)self, 0, sizeof(*self));
+    neo_memalloc((void *)self, 0);
 }
 
 NEO_COLDPROC void errvec_init(error_vector_t *self) {
