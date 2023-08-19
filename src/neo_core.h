@@ -501,7 +501,7 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, 
 #if NEO_DBG
 #   define neo_dassert(ex) neo_assert(ex) /* Assert for debug only builds. */
 #else
-#   define neo_dassert(ex) /* Assert for debug only builds. */
+#   define neo_dassert(ex) (void)(ex) /* Assert for debug only builds. */
 #endif
 
 /* ---- Logging ---- */

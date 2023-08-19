@@ -9,7 +9,7 @@ astref_t get_mock_var(astpool_t *pool) {
         .ident = astnode_new_ident(pool, srcspan_from("test")),
         .type = astnode_new_ident(pool, srcspan_from("int")),
         .init_expr = astnode_new_int(pool, -22),
-        .vartype = VARSCOPE_LOCAL
+        .var_scope = VARSCOPE_LOCAL
     });
 }
 

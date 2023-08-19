@@ -173,7 +173,7 @@ extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
 extern NEO_EXPORT void lexer_init(lexer_t *self);
 extern NEO_EXPORT void lexer_set_src(lexer_t *self, const source_t *src);
-extern NEO_EXPORT NEO_HOTPROC token_t lexer_scan_next(lexer_t *self);
+extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self);
 extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
 extern NEO_EXPORT void lexer_free(lexer_t *self);
 

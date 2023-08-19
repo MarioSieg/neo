@@ -12,8 +12,6 @@
 extern "C" {
 #endif
 
-#define DEPTH_LIM 16384u /* Max parse depth per block. */
-
 /* Represents the parser context for a single source file. */
 typedef struct parser_t {
     lexer_t lex; /* Lexer for the source file. */
@@ -27,7 +25,7 @@ typedef struct parser_t {
 
 extern NEO_EXPORT void parser_init(parser_t *self, error_vector_t *errors);
 extern NEO_EXPORT void parser_free(parser_t *self);
-extern NEO_EXPORT NEO_HOTPROC astref_t parser_parse(parser_t *self);
+extern NEO_EXPORT NEO_NODISCARD astref_t parser_parse(parser_t *self);
 extern NEO_EXPORT astref_t parser_drain(parser_t *self);
 extern NEO_EXPORT void parser_prepare(parser_t *self);
 

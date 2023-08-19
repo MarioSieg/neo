@@ -194,7 +194,7 @@ typedef enum variable_scope_t {
 } variable_scope_t;
 
 typedef struct node_variable_t {
-    astref_decl(req) vartype : 8; /* Variable type. */
+    astref_decl(req) var_scope : 8; /* Variable type. */
     astref_decl(req) ident;      /* Required variable ident. */
     astref_decl(req) type;       /* Required variable type. */
     astref_decl(req) init_expr;  /* Required variable initializer. */
