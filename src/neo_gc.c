@@ -40,7 +40,7 @@ gc_fatptr_t *gc_resolve_ptr(gc_context_t *self, const void *ptr) {
     }
 }
 
-static void attach_ptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
+static NEO_HOTPROC void attach_ptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
     neo_dassert(self);
     gc_fatptr_t item, tmp;
     size_t h, p, i, j;
@@ -147,7 +147,7 @@ static void shrink_alloc_map(gc_context_t *self) {
 }
 
 /* Traces and marks all life objects. */
-static void gc_mark_ptr(gc_context_t *self, const void *ptr) {
+static NEO_HOTPROC void gc_mark_ptr(gc_context_t *self, const void *ptr) {
     neo_dassert(self);
     size_t i, j, h;
     if (neo_unlikely((uintptr_t)ptr < self->bndmin || (uintptr_t)ptr > self->bndmax)) { return; } /* Out of bounds. */
@@ -178,7 +178,7 @@ static void gc_mark_stack(gc_context_t *self) {
 ** This phase does the live object tracing.
 ** Note that a GC can only reclaim syntactically unreachable objects.
 */
-static void gc_mark(gc_context_t *self) {
+static NEO_HOTPROC void gc_mark(gc_context_t *self) {
     neo_dassert(self);
     if (neo_unlikely(!self->alloc_len)) { return; }
     /* 1. Mark all root objects. */
@@ -199,7 +199,7 @@ static void gc_mark(gc_context_t *self) {
 /*
 ** 2. Sweep phase: Reclaim all garbage objects.
 */
-void gc_sweep(gc_context_t *self) {
+static NEO_HOTPROC void gc_sweep(gc_context_t *self) {
     neo_dassert(self);
     size_t i, j, k, nj, nh;
     if (neo_unlikely(!self->alloc_len)) { return; }
@@ -298,7 +298,7 @@ NEO_HOTPROC void gc_collect(gc_context_t *self) {
     gc_sweep(self);
 }
 
-static void *attach_objptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
+static NEO_HOTPROC void *attach_objptr(gc_context_t *self, void *ptr, gc_grasize_t size, gc_flags_t flags) {
     neo_dassert(self);
     ++self->alloc_len;
     self->bndmax = (uintptr_t)ptr+gc_granules2bytes(size) > self->bndmax ? (uintptr_t)ptr+gc_granules2bytes(size) : self->bndmax;
