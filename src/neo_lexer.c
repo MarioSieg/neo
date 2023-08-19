@@ -403,11 +403,9 @@ token_t lexer_scan_next(lexer_t *self) {
                     else {
                         if (ismatch(self, '>')) {
                             if (ismatch(self, '>')) {
-                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
-                                else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_LSHR_ASSIGN : TOK_OP_BIT_LSHR, 0);
                             } else {
-                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ROR_ASSIGN, 0); }
-                                else { return mktok(self, TOK_OP_BIT_ROR, 0); }
+                                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ROR_ASSIGN : TOK_OP_BIT_ROR, 0);
                             }
                         }
                         else { return mktok(self, TOK_OP_BIT_ASHR, 0); }
