@@ -265,6 +265,7 @@ neo_static_assert(ASTNODE_LITERAL_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_EXPR_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_LEAF_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_CONTROL_FLOW <= UINT64_MAX);
+extern const char *const astnode_names[ASTNODE__COUNT];
 
 struct astnode_t {
     astnode_type_t type : 8;
@@ -337,7 +338,7 @@ static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
         neo_dassert(astpool_isvalidref(self, ref));
     }
 #endif
-    return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref - 1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
+    return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
 
 #ifdef __cplusplus

@@ -84,10 +84,10 @@ static const uint64_t NEO_UNUSED block_valid_masks[BLOCKSCOPE__COUNT] = { /* Thi
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCKSCOPE_PARAMLIST */
 };
 
-#if NEO_DBG
 #define _(_1, _2) [_1] = _2
-static const char *const node_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
+const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
 #undef _
+#if NEO_DBG
 static const char *const block_names[BLOCKSCOPE__COUNT] = {
     "module",
     "class",
@@ -114,7 +114,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) 
     uint64_t mask = block_valid_masks[block->blktype];
     uint64_t node_mask = astmask(pnode->type);
     if (neo_unlikely((mask & node_mask) == 0)) {
-        neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[pnode->type], block_names[block->blktype]);
+        neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[pnode->type], block_names[block->blktype]);
     }
     neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
 #endif
@@ -139,8 +139,8 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
         case ASTNODE_BOOL_LIT:
         case ASTNODE_STRING_LIT:
         case ASTNODE_IDENT_LIT: {
-            neo_dassert(!!(ASTNODE_LEAF_MASK&astmask(root->type)));
-        } return; /* Visitor invocation is redundant. */
+            neo_dassert(!!(ASTNODE_LEAF_MASK & astmask(root->type)));
+        } break; /* Visitor invocation is redundant. */
         case ASTNODE_GROUP: {
             const node_group_t *data = &root->dat.n_group;
             astnode_visit_root_impl(pool, data->child_expr, visitor, user, c);
@@ -296,7 +296,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                 uint64_t node_mask = astmask(child_node->type);
 #if NEO_DBG
                 if (neo_unlikely((mask & node_mask) == 0)) {
-                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", node_names[child_node->type], block_names[data->blktype]);
+                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[child_node->type], block_names[data->blktype]);
                 }
 #endif
                 astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */

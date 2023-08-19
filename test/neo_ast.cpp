@@ -141,18 +141,25 @@ TEST(ast, visit) {
     astref_t mock = get_mock_class(&mempool);
     astnode_validate(&mempool, mock);
 
+    static std::unordered_map<astnode_type_t, int> node_type_counts {};
+
     static astref_t *mmock;
     mmock = &mock;
     static int count {};
     auto visitor = [](astpool_t *pool, astref_t node, void *data) -> void {
         ASSERT_TRUE(astpool_isvalidref(pool, node));
         astnode_t *pnode = astpool_resolve(pool, node);
+        ++node_type_counts[pnode->type];
         ASSERT_NE(pnode, nullptr);
         ASSERT_EQ(data, mmock);
         ++count;
     };
     astnode_visit(&mempool, mock, visitor, &mock);
-    ASSERT_EQ(count, 8);
+    ASSERT_EQ(count, 19);
+
+    for (const auto& [k, v] : node_type_counts) {
+        std::cout << astnode_names[k] << " : " << v << "\n";
+    }
 
     astpool_free(&mempool);
 }
