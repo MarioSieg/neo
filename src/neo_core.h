@@ -560,7 +560,7 @@ extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 #define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
 
 /*
-** Represents a simple bump-pointer allocator.
+** A simple sequential (bump) allocator.
 ** Memory allocation is fast, but individual block deallocation is not possible.
 ** All memory is freed simultaneously when the pool is destroyed with neo_mempool_free.
 */
@@ -616,7 +616,8 @@ extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmod
 typedef enum neo_unicode_err_t { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } neo_unicode_err_t;
 extern NEO_EXPORT neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
-extern NEO_EXPORT uint8_t *neo_strdup(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
+extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
+extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 
 #ifdef __cplusplus
 }

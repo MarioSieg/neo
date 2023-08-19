@@ -6,6 +6,7 @@
 
 #include "neo_ast.h"
 #include "neo_lexer.h"
+#include "neo_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,11 +20,12 @@ typedef struct parser_t {
     astpool_t pool; /* Memory pool for allocations. */
     token_t curr; /* Current token. */
     token_t prev; /* Previous token. */
+    error_vector_t *errors; /* List of errors. */
     bool panic; /* Panic mode. */
     bool error; /* Error mode. */
 } parser_t;
 
-extern NEO_EXPORT void parser_init(parser_t *self);
+extern NEO_EXPORT void parser_init(parser_t *self, error_vector_t *errors);
 extern NEO_EXPORT void parser_free(parser_t *self);
 extern NEO_EXPORT NEO_HOTPROC astref_t parser_parse(parser_t *self);
 extern NEO_EXPORT astref_t parser_drain(parser_t *self);

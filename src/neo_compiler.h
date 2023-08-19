@@ -6,14 +6,11 @@
 
 #include "neo_ast.h"
 #include "neo_core.h"
+#include "neo_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct error_list_t {
-
-} error_list_t;
 
 /* Compiler option flags. */
 typedef enum neo_compiler_flag_t {
@@ -43,7 +40,7 @@ extern NEO_EXPORT void compiler_free(neo_compiler_t **self);
 */
 extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const uint8_t *src, const uint8_t *filename, void *user);
 
-extern NEO_EXPORT const error_list_t *compiler_get_errors(const neo_compiler_t *self);
+extern NEO_EXPORT const error_vector_t *compiler_get_errors(const neo_compiler_t *self);
 extern NEO_EXPORT const astnode_t *compiler_get_ast_root(const neo_compiler_t *self);
 extern NEO_EXPORT neo_compiler_flag_t compiler_get_flags(const neo_compiler_t *self);
 extern NEO_EXPORT bool compiler_has_flags(const neo_compiler_t *self, neo_compiler_flag_t flags);

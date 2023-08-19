@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "neo_compiler.h"
 
 namespace neo {
@@ -22,28 +25,37 @@ namespace neo {
             compiler_free(&m_compiler);
             m_compiler = nullptr;
         }
-        inline const error_list_t &get_errors() const noexcept {
+        [[nodiscard]] inline const error_vector_t &get_errors() const noexcept {
             return *compiler_get_errors(m_compiler);
         }
-        inline const astnode_t *get_ast_root() const noexcept {
+        [[nodiscard]] inline std::vector<const compile_error_t *> get_cloned_error_vec() const {
+            const auto &errors {get_errors()};
+            std::vector<const compile_error_t *> result {};
+            result.reserve(errors.len);
+            for (std::uint32_t i {}; i < errors.len; ++i) {
+                result.emplace_back(errors.p[i]);
+            }
+            return result;
+        }
+        [[nodiscard]] inline const astnode_t *get_ast_root() const noexcept {
             return compiler_get_ast_root(m_compiler);
         }
-        inline neo_compiler_flag_t get_flags() const noexcept {
+        [[nodiscard]] inline neo_compiler_flag_t get_flags() const noexcept {
             return compiler_get_flags(m_compiler);
         }
-        inline bool has_flags(neo_compiler_flag_t flags) const noexcept {
+        [[nodiscard]] inline bool has_flags(neo_compiler_flag_t flags) const noexcept {
             return compiler_has_flags(m_compiler, flags);
         }
-        inline neo_compile_callback_hook_t *get_pre_compile_callback() const noexcept {
+        [[nodiscard]] inline neo_compile_callback_hook_t *get_pre_compile_callback() const noexcept {
             return compiler_get_pre_compile_callback(m_compiler);
         }
-        inline neo_compile_callback_hook_t *get_post_compile_callback() const noexcept {
+        [[nodiscard]] inline neo_compile_callback_hook_t *get_post_compile_callback() const noexcept {
             return compiler_get_post_compile_callback(m_compiler);
         }
-        inline neo_compile_callback_hook_t *get_on_warning_callback() const noexcept {
+        [[nodiscard]] inline neo_compile_callback_hook_t *get_on_warning_callback() const noexcept {
             return compiler_get_on_warning_callback(m_compiler);
         }
-        inline neo_compile_callback_hook_t *get_on_error_callback() const noexcept {
+        [[nodiscard]] inline neo_compile_callback_hook_t *get_on_error_callback() const noexcept {
             return compiler_get_on_error_callback(m_compiler);
         }
         inline void set_flags(neo_compiler_flag_t flag) noexcept {

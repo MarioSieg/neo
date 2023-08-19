@@ -9,8 +9,7 @@ struct neo_compiler_t {
     const uint8_t *filename; /* Filename. */
     const uint8_t *source_code; /* Source code string. */
     neo_mempool_t pool; /* Memory pool for allocations. */
-    error_list_t errors; /* List of errors and warnings. */
-    lexer_t lexer; /* Lexer state. */
+    error_vector_t errors; /* List of errors and warnings. */
     parser_t parser; /* Parser state. */
     astnode_t *ast; /* Root of the AST. */
     neo_compiler_flag_t flags; /* Compiler flags. */
@@ -25,13 +24,15 @@ void compiler_init(neo_compiler_t **self, neo_compiler_flag_t flags) {
     *self = neo_memalloc(NULL, sizeof(**self));
     memset(*self, 0, sizeof(**self));
     neo_mempool_init(&(**self).pool, 8192);
-    lexer_init(&(**self).lexer);
+    errvec_init(&(**self).errors);
+    parser_init(&(**self).parser, &(**self).errors);
     (**self).flags = flags;
 }
 
 void compiler_free(neo_compiler_t **self) {
     neo_assert(self && *self && "Compiler pointer is NULL");
-    lexer_free(&(**self).lexer);
+    parser_free(&(**self).parser);
+    errvec_free(&(**self).errors);
     neo_mempool_free(&(**self).pool);
     neo_memalloc((void *)(**self).filename, 0);
     neo_memalloc((void *)(**self).source_code, 0);
@@ -46,19 +47,13 @@ bool compiler_compile(neo_compiler_t *self, const uint8_t *src, const uint8_t *f
     self->source_code = src;
     self->filename = filename;
     self->ast = NULL;
-    source_t source = { .src = src, .filename = filename, .len = strlen((const char *)src) };
-    lexer_set_src(&self->lexer, &source);
-    token_t *tok = NULL;
-    size_t len = lexer_drain(&self->lexer, &tok);
-    for (size_t i = 0; i < len; ++i) {
-        const token_t *t = tok+i;
-        token_dump(t);
-    }
+    parser_prepare(&self->parser);
+    /* TODO: compile */
     (*self->post_compile_callback)(src, filename, self->flags, user);
     return true;
 }
 
-const error_list_t *compiler_get_errors(const neo_compiler_t *self) {
+const error_vector_t *compiler_get_errors(const neo_compiler_t *self) {
     neo_assert(self && "Compiler pointer is NULL");
     return &self->errors;
 }

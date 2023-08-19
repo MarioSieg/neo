@@ -84,8 +84,9 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
     size_t total = self->len+len;
     if (total >= self->cap) {
         size_t old = self->cap;
-        do { self->cap<<=1; }
-        while (self->cap <= total);
+        do {
+            self->cap<<=1;
+        } while (self->cap <= total);
         self->needle = neo_memalloc(self->needle, self->cap);
         size_t delta = self->cap-old;
         memset((uint8_t *)self->needle+old, 0, delta); /* Zero the new memory. */
@@ -98,7 +99,7 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
     neo_dassert(self);
-    neo_assert(align && align >= sizeof(void*) && !(align&(align-1)));
+    neo_dassert(align && align >= sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
     return (void *)(((uintptr_t)p+off)&~(align-1));
@@ -220,12 +221,20 @@ uint32_t neo_hash_x17(const void *key, size_t len)
     return r^(r>>16);
 }
 
-uint8_t *neo_strdup(const uint8_t *str) {
-    neo_dassert(str);
+uint8_t *neo_strdup2(const uint8_t *str) {
+    neo_assert(str && "Invalid ptr to clone");
     size_t len = strlen((const char *)str); /* strlen also works with UTF-8 strings to find the end \0. */
-    uint8_t *dup = neo_memalloc(NULL, sizeof(*dup)*(len+1));
+    uint8_t *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
     memcpy(dup, str, len);
     dup[len] = '\0';
     return dup;
 }
 
+char *neo_strdup(const char *str) {
+    neo_assert(str && "Invalid ptr to clone");
+    size_t len = strlen(str); /* strlen also works with UTF-8 strings to find the end \0. */
+    char *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
+    memcpy(dup, str, len);
+    dup[len] = '\0';
+    return dup;
+}

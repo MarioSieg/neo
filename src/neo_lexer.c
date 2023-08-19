@@ -3,6 +3,13 @@
 #include "neo_lexer.h"
 #include "neo_core.h"
 
+const uint8_t *srcspan_clone(srcspan_t span) {
+    uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    memcpy(p, span.p, span.len*sizeof(*p));
+    p[span.len] = '\0';
+    return p;
+}
+
 #define _(_1, _2) [_1] = _2
 static const char *tok_lexemes[TOK__COUNT] = { tkdef(_, NEO_SEP) };
 #undef _
@@ -225,7 +232,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
         if (delta > 0) { delta -= pdelta<<1; }
         neo_assert(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
-        tok.col = (uint32_t)abs((int32_t)self->col-(int32_t)delta);
+        tok.col = (uint32_t)abs((int)self->col-(int)delta);
         delta = self->line_end-self->line_start; /* Line delta */
         neo_assert(delta >= 0 && "invalid lexeme line length");
         tok.lexeme_line = (srcspan_t){.p=self->line_start,.len=(uint32_t)delta};

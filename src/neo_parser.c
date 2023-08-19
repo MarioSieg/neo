@@ -5,7 +5,6 @@
 #include <ctype.h>
 
 #if 0
-
 typedef enum precedence_t {
     PREC_NONE,
     PREC_ASSIGNMENT,
@@ -114,8 +113,8 @@ static NEO_AINLINE bool is_line_or_block_done(parser_t *self) {
     return self->curr.type == TOK_KW_END || self->curr.type == TOK_PU_NEWLINE;
 }
 
-void parser_init(parser_t *self) {
-    neo_dassert(self);
+void parser_init(parser_t *self, error_vector_t *errors) {
+    neo_dassert(self && errors);
     memset(self, 0, sizeof(*self));
     lexer_init(&self->lex);
     astpool_init(&self->pool);
@@ -144,9 +143,7 @@ void parser_prepare(parser_t *self) {
     self->error = self->panic = false;
     advance(self); /* Consume first token. */
 }
-
 #endif
-
 bool parse_int(const char *str, size_t len, neo_int_t *o) {
     neo_int_t r = 0;
     neo_int_t sign = 1;

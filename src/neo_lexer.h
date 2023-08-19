@@ -133,6 +133,7 @@ typedef struct srcspan_t {
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
 #define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
 #define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
+extern const uint8_t *srcspan_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
