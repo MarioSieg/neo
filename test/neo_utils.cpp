@@ -5,17 +5,15 @@
 
 #include "neo_lexer.h"
 #include "neo_utils.h"
+#include "neo_compiler.h"
 
 TEST(utils, comerror_from_token) {
-    source_t src {};
-    src.src = reinterpret_cast<const std::uint8_t*>("01234567890_100111");
-    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
-    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test.neo");
+    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
 
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, source);
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
     ASSERT_EQ(tok.lexeme.len, sizeof("01234567890_100111")-1);
@@ -33,18 +31,16 @@ TEST(utils, comerror_from_token) {
     comerror_free(error);
 
     lexer_free(&lexer);
+    source_free(source);
 }
 
 TEST(utils, errvec_push) {
-    source_t src {};
-    src.src = reinterpret_cast<const std::uint8_t*>("01234567890_100111");
-    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
-    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test.neo");
+    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
 
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, source);
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
     ASSERT_EQ(tok.lexeme.len, sizeof("01234567890_100111")-1);
@@ -74,4 +70,5 @@ TEST(utils, errvec_push) {
     errvec_free(&ev);
 
     lexer_free(&lexer);
+    source_free(source);
 }

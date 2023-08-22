@@ -80,6 +80,7 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp test/*.c src/*.hpp)
     add_executable(neo_test ${neo_test_sources})
     target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_options(neo_test PUBLIC "-fpermissive")
     target_link_libraries(neo_test GTest::gtest_main)
     include(GoogleTest)
     gtest_discover_tests(neo_test)

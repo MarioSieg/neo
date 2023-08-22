@@ -81,7 +81,9 @@ static void interactive_shell_input_loop(neo_compiler_t *compiler) {
         size_t len = 0;
         const uint8_t *input = input_cmd(stdin, &len);
         if (neo_unlikely(!len || !input)) { promt = false; continue; }
-        compiler_compile(compiler, input, (const uint8_t *)"stdin", NULL);
+        const source_t *src = source_from_memory((const uint8_t *)"stdin", input);
+        compiler_compile(compiler, src, NULL);
+        source_free(src);
         promt = true;
         neo_memalloc((void*)input, 0); /* Free input buffer. */
     }

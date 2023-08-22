@@ -2,9 +2,10 @@
 
 #include "neo_lexer.h"
 #include "neo_core.h"
+#include "neo_compiler.h"
 
 const uint8_t *srcspan_clone(srcspan_t span) {
-    uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';
     return p;
@@ -59,76 +60,6 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
     return cp;
 }
 
-bool source_load(source_t *self, const uint8_t *path) {
-    neo_dassert(self && path);
-    FILE *f = NULL;
-    if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R|NEO_FMODE_BIN))) {
-        neo_error("Failed to open file '%s'.", path);
-        return false;
-    }
-    /* Check for BOM and skip it if present */
-    uint8_t bom[3];
-    size_t bom_len = fread(bom, sizeof(*bom),  sizeof(bom), f);
-    bool has_bom = false;
-    if (bom_len == sizeof(bom) && memcmp(bom, "\xef\xbb\xbf", sizeof(bom)) == 0) {
-        has_bom = true; /* BOM found */
-    }
-    else { rewind(f); } /* No BOM, rewind to start of file */
-    fseek(f, 0, SEEK_END);
-    size_t size = (size_t)ftell(f);
-    rewind(f);
-    if (has_bom) {
-        fseek(f, sizeof(bom), SEEK_SET); /* BOM detected, skip it */
-        size -= sizeof(bom);
-    }
-    if (neo_unlikely(!size)) { /* File is empty */
-        fclose(f);
-        return false;
-    }
-    uint8_t *buf = (uint8_t *)neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
-    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) { /* Read file into buffer */
-        neo_memalloc(buf, 0);
-        fclose(f);
-        neo_error("Failed to read source file: '%s'", path);
-        return false; /* Failed to read all bytes or read error. */
-    }
-    fclose(f); /* Close file */
-    /* Verify that the file is valid UTF-8. */
-    size_t pos = 0;
-    neo_unicode_err_t result = neo_utf8_validate(buf, size, &pos);
-    const char *msg = "";
-    switch (result) {
-        case NEO_UNIERR_OK: break;
-        case NEO_UNIERR_TOO_SHORT: msg = "UTF-8 Sequence too short."; break;
-        case NEO_UNIERR_TOO_LONG: msg = "UTF-8 Sequence too long."; break;
-        case NEO_UNIERR_TOO_LARGE: msg = "UTF-8 Codepoint too large."; break;
-        case NEO_UNIERR_OVERLONG: msg = "UTF-8 Codepoint too long."; break;
-        case NEO_UNIERR_HEADER_BITS: msg = "UTF-8 Sequence contains invalid header bits."; break;
-        case NEO_UNIERR_SURROGATE: msg = "UTF-8 Sequence contains invalid surrogate bytes."; break;
-    }
-    if (result != NEO_UNIERR_OK) {
-        neo_memalloc(buf, 0);
-        neo_error("Source file '%s' is not valid UTF-8. Error at position %zu: %s", path, pos, msg);
-        return false;
-    }
-#if NEO_OS_WINDOWS
-    /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
-    for (size_t i = 0; i < size; ++i) {
-        if (buf[i] == '\r' && buf[i+1] == '\n') {
-            buf[i] = '\n';
-            memmove(buf+i+1, buf+i+2, size-i-2); /* Fold data downwards. */
-            --size, --i;
-        }
-    }
-#endif
-    buf[size] = '\n'; /* Append final newline */
-    buf[size+1] = '\0'; /* Append terminator */
-    self->filename = path;
-    self->src = buf;
-    self->len = size;
-    return true;
-}
-
 #define c32_is_within(c, min, max) ((c) >= (min) && (c) <= (max))
 #define c32_is_ascii(c) ((c) < 0x80)
 #define c32_is_ascii_whitespace(c) ((c) == ' ' || (c) == '\t' || (c) == '\v' || (c) == '\r') /* \n is no whitespace - it's a punctuation token. */
@@ -169,7 +100,7 @@ static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
 static void consume(lexer_t *self) {
     neo_dassert(self && self->src && self->needle);
     if (neo_unlikely(is_done(self))) { /* We're done here. */
-        self->line_end = self->src+self->src_dat.len;
+        self->line_end = self->src+self->src_data->len;
         return;
     }
     else if (peek(self) == '\n') { /* Newline just started. */
@@ -182,7 +113,7 @@ static void consume(lexer_t *self) {
     } else { /* No special event, just increment column. */
         ++self->col;
     }
-    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_dat.len));
+    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_data->len));
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
     decode_cached_tmp(self); /* Decode cached codepoints. */
 }
@@ -230,7 +161,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
         neo_assert(delta >= 0 && "invalid lexeme length");
         const uint8_t *lp = self->needle-delta+pdelta;
         if (delta > 0) { delta -= pdelta<<1; }
-        neo_assert(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
+        neo_assert(neo_bnd_check(lp, self->src, self->src_data->len) && "invalid lexeme pointer"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
         tok.col = (uint32_t)abs((int)self->col-(int)delta);
         delta = self->line_end-self->line_start; /* Line delta */
@@ -240,7 +171,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
         tok.lexeme = (srcspan_t){.p=(const uint8_t *)"",.len=0};
     }
     tok.line = self->line;
-    tok.file = self->src_dat.filename;
+    tok.file = self->src_data->filename;
     return tok;
 }
 
@@ -318,10 +249,10 @@ void lexer_init(lexer_t *self) {
     memset(self, 0, sizeof(*self));
 }
 
-void lexer_set_src(lexer_t *self, const source_t *src) {
+void lexer_setup_source(lexer_t *self, const source_t *src) {
     neo_dassert(self && src);
-    self->src_dat = *src;
-    self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_dat.src;
+    self->src_data = src;
+    self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_data->src;
     self->line = self->col = 1;
     decode_cached_tmp(self); /* Decode cached codepoints. */
     /* Find the first line ending. */
@@ -427,12 +358,12 @@ token_t lexer_scan_next(lexer_t *self) {
 size_t lexer_drain(lexer_t *self, token_t **tok) {
     neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
-    *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
+    *tok = neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {
         token_t t = lexer_scan_next(self);
         if (neo_unlikely(t.type == TOK_ME_EOF)) { break; }
         if (neo_unlikely(len >= cap)) {
-            *tok = (token_t *)neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
+            *tok = neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
         }
         (*tok)[len++] = t;
     }

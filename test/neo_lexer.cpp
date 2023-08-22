@@ -1,20 +1,20 @@
 // (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
+#include "neo_core.h"
 #include <gtest/gtest.h>
 #include <cstring>
 
 #include "neo_lexer.c"
 
 TEST(lexer, complex_statement) {
-    source_t src {};
-    src.src = reinterpret_cast<const std::uint8_t*>("let x=0x22&129>>>=x\nnew Class()\nlet #*lol*# y class == 23.3%x\n#hello");
-    src.len = std::strlen(reinterpret_cast<const char*>(src.src));
-    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
+    const auto *src = reinterpret_cast<const std::uint8_t*>("let x=0x22&129>>>=x\nnew Class()\nlet #*lol*# y class == 23.3%x\n#hello");
+    const auto *filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
+    const source_t *source = source_from_memory(filename, src);
 
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, source);
     token_t *tok, *t;
     size_t len = lexer_drain(&lexer, &tok);
     t = tok;
@@ -123,19 +123,17 @@ TEST(lexer, complex_statement) {
     ASSERT_TRUE(is_done(&lexer));
     neo_memalloc(t, 0);
     lexer_free(&lexer);
+    source_free(source);
 }
 
 #define generic_lexer_test(name, symbol, tokt)\
 TEST(lexer, tok_##name) {\
-    source_t src {};\
-    src.src = reinterpret_cast<const std::uint8_t*>(symbol);\
-    src.len = std::strlen(reinterpret_cast<const char*>(src.src));\
-    src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");\
+    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp"), reinterpret_cast<const std::uint8_t*>(symbol));\
     \
     lexer_t lexer;\
     lexer_init(&lexer);\
     \
-    lexer_set_src(&lexer, &src);\
+    lexer_setup_source(&lexer, source);\
     ASSERT_EQ(peek(&lexer), symbol[0]);\
     token_t tok = lexer_scan_next(&lexer);\
     ASSERT_EQ(tok.type, tokt);\
@@ -145,6 +143,7 @@ TEST(lexer, tok_##name) {\
     ASSERT_TRUE(is_done(&lexer));\
     \
     lexer_free(&lexer);\
+    source_free(source);\
 }
 
 generic_lexer_test(method, "method", TOK_KW_METHOD)
@@ -263,7 +262,7 @@ TEST(lexer, float_literal) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     ASSERT_EQ(peek(&lexer), U'3');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_FLOAT);
@@ -285,7 +284,7 @@ TEST(lexer, int_literal_dec) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
@@ -307,7 +306,7 @@ TEST(lexer, int_literal_hex) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
@@ -329,7 +328,7 @@ TEST(lexer, int_literal_bin) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
@@ -351,7 +350,7 @@ TEST(lexer, int_literal_octal) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
@@ -373,7 +372,7 @@ TEST(lexer, string_literal) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_STRING);
     ASSERT_EQ(tok.lexeme.len, sizeof("I'm in Vienna on vacations and damn this city is beautiful!")-1); /* Quotes must be removed. */
@@ -393,7 +392,7 @@ TEST(lexer, string_literal_sandwitch) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
     tok = lexer_scan_next(&lexer);
@@ -419,7 +418,7 @@ TEST(lexer, consume_whitespace) {
     lexer_t lexer;
     lexer_init(&lexer);
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
 
     ASSERT_EQ(peek(&lexer), U'A');
     consume(&lexer);
@@ -457,7 +456,7 @@ TEST(lexer, consume) {
     src.len = sizeof(srctext)/sizeof(*srctext)-1;
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
-    lexer_set_src(&lexer, &src);
+    lexer_setup_source(&lexer, &src);
     const uint8_t* n{lexer.needle};
 
     ASSERT_EQ(peek(&lexer), U'H');
@@ -585,17 +584,18 @@ TEST(lexer, null_terminated_string) {
 }
 
 TEST(lexer, src_load) {
-    source_t src = {0};
     static constexpr std::uint8_t path[] = {
         0x74,0x65,0x73,0x74,0x2f,0x66,0x69,0x6c,0x65,0x73,0x2f,0x68,0x61,0x6c,
         0x6c,0xc3,0xb6,0x63,0x68,0x65,0x6e,0x2e,0x6e,0x65,0x6f, '\0'
     };
-    ASSERT_TRUE(source_load(&src, path));
+    const source_t *src = source_from_file(path);
+    ASSERT_NE(src, nullptr);
     std::uint8_t expected[] = {
         0xc3,0x84,0x70,0x66,0xe2,0x82,0xac,0x6c,0x20,0x73,0x69,0x6e,0x64,
         0x20,0x6c,0x65,0x63,0x6b,0x65,0x72,0x21, '\n', '&', '\0'
     };;
-    ASSERT_EQ(src.len, (sizeof(expected)/sizeof(*expected))-1);
-    ASSERT_EQ(std::memcmp(src.src, expected, src.len), 0);
+    ASSERT_EQ(src->len, (sizeof(expected)/sizeof(*expected))-1);
+    ASSERT_EQ(std::memcmp(src->src, expected, src->len), 0);
+    ASSERT_EQ(std::memcmp(src->filename, path, sizeof(path)/sizeof(*path)), 0);
     source_free(src);
 }

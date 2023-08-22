@@ -12,6 +12,29 @@
 extern "C" {
 #endif
 
+typedef struct source_t {
+    const uint8_t *filename; /* Encoded in UTF-8 and terminated. */
+    const uint8_t *src; /* Encoded in UTF-8 and terminated. */
+    bool is_file; /* True if source is loaded from file, false if from memory. */
+    size_t len; /* In bytes. */
+} source_t;
+
+/**
+ * Load source code from UTF-8 file and validate source.
+ * @param path The file path, which is cloned into self.
+ * @return New instance or NULL on failure.
+ */
+extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_file(const uint8_t *path);
+
+/**
+ * Load source code from memory.
+ * @param path The file path, which ownership is moved into self.
+ * @param src The source code, which ownership is moved into self.
+ * @return
+ */
+extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_memory(const uint8_t *path, const uint8_t *src);
+extern NEO_EXPORT void source_free(const source_t *self);
+
 /* Compiler option flags. */
 typedef enum neo_compiler_flag_t {
     COM_FLAG_NONE = 0,
@@ -20,7 +43,7 @@ typedef enum neo_compiler_flag_t {
     COM_FLAG_RENDER_AST = 1<<2,   /* Render AST graphviz code to image file. */
 } neo_compiler_flag_t;
 
-typedef void (neo_compile_callback_hook_t)(const uint8_t *src, const uint8_t *filename, neo_compiler_flag_t flags, void *user);
+typedef void (neo_compile_callback_hook_t)(const source_t *src, neo_compiler_flag_t flags, void *user);
 
 /*
 ** Represents the Neo compiler. SOURCE CODE -> BYTE CODE.
@@ -38,7 +61,7 @@ extern NEO_EXPORT void compiler_free(neo_compiler_t **self);
 ** @param filename Filename of the source code.
 ** @return True if compilation was successful, false otherwise. See compiler_get_errors() for more information.
 */
-extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const uint8_t *src, const uint8_t *filename, void *user);
+extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user);
 
 extern NEO_EXPORT const error_vector_t *compiler_get_errors(const neo_compiler_t *self);
 extern NEO_EXPORT const astnode_t *compiler_get_ast_root(const neo_compiler_t *self);

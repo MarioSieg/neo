@@ -14,13 +14,7 @@
 extern "C" {
 #endif
 
-typedef struct source_t {
-    const uint8_t *filename; /* Encoded in UTF-8 and terminated. */
-    const uint8_t *src; /* Encoded in UTF-8 and terminated. */
-    size_t len; /* In bytes. */
-} source_t;
-extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
-#define source_free(self) neo_memalloc((void *)(self).src, 0)
+typedef struct source_t source_t;
 
 #define tkdef(_, __)\
     /* Keywords */\
@@ -156,7 +150,7 @@ extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
 
 /* Represents the lexer context for a single source file. */
 typedef struct lexer_t {
-    source_t src_dat;
+    const source_t *src_data;
     const uint8_t *src;
     const uint8_t *needle;
     const uint8_t *tok_start;
@@ -172,7 +166,7 @@ typedef struct lexer_t {
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
 extern NEO_EXPORT void lexer_init(lexer_t *self);
-extern NEO_EXPORT void lexer_set_src(lexer_t *self, const source_t *src);
+extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const source_t *src);
 extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self);
 extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
 extern NEO_EXPORT void lexer_free(lexer_t *self);

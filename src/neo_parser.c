@@ -726,6 +726,13 @@ void parser_prepare(parser_t *self) {
     advance(self); /* Consume first token. */
 }
 
+void parser_setup_source(parser_t *self, const source_t *src) {
+    neo_dassert(self && src);
+    lexer_setup_source(&self->lex, src);
+    self->error = self->panic = false;
+    advance(self); /* Consume first token. */
+}
+
 bool parse_int(const char *str, size_t len, neo_int_t *o) {
     neo_int_t r = 0;
     neo_int_t sign = 1;
