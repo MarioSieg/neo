@@ -3,6 +3,26 @@
 #include <gtest/gtest.h>
 #include <neo_core.h>
 
+TEST(core, tls_id) {
+    std::set<std::size_t> ids {};
+    std::mutex mtx {};
+
+    auto thread_func = [&ids, &mtx]() {
+        std::size_t id = neo_tid();
+        std::lock_guard<std::mutex> lock(mtx);
+        ASSERT_TRUE(ids.find(id) == ids.end()); // TID shall not exist!
+        std::cout << "TLS id: " << std::hex << id << std::endl;
+        ids.insert(id);
+    };
+    std::vector<std::thread> threads {};
+    for (std::size_t i {}; i < std::thread::hardware_concurrency(); ++i) {
+        threads.emplace_back(thread_func);
+    }
+    for (auto &thread : threads) {
+        thread.join();
+    }
+}
+
 TEST(core, neo_mempool_getelementptr) {
     neo_mempool_t pool;
     neo_mempool_init(&pool, 32);

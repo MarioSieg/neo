@@ -2,6 +2,8 @@
 
 #include "neo_core.h"
 
+NEO_THREAD_LOCAL void *volatile neo_tls_proxy = NULL;
+
 #if NEO_OS_WINDOWS
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
@@ -168,7 +170,7 @@ neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos
         if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
             uint64_t v1 = *(const uint64_t *)(buf+pos);
             uint64_t v2 = *(const uint64_t *)(buf+pos+sizeof(v1));
-            if (!((v1|v2)&UINT64_C(0x8080808080808080))) {
+            if (!((v1|v2) & UINT64_C(0x8080808080808080))) {
                 pos = np;
                 continue;
             }

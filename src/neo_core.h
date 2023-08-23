@@ -83,7 +83,14 @@ extern "C" {
 #	error "Unknown NEO_COM_?"
 #endif
 
-#if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM)
+#if defined(__arm__) && !defined(__aarch64__)
+#   error "32-bit ARM is not supported. Please use a 64-bit ARM compiler."
+#endif
+#if (defined(_M_IX86) || defined(__i386__)) && (!defined(_M_X64) || defined(__x86_64__))
+#   error "32-bit x86 is not supported. Please use a 64-bit x86 compiler."
+#endif
+
+#if defined(__aarch64__) || defined(_M_ARM)
 #	undef  NEO_CPU_AARCH64
 #	define NEO_CPU_AARCH64 1
 #	define NEO_CACHE_LINE_SIZE 64
@@ -99,7 +106,7 @@ extern "C" {
 #	undef  NEO_CPU_RISCV
 #	define NEO_CPU_RISCV 1
 #	define NEO_CACHE_LINE_SIZE 64
-#elif defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+#elif defined(_M_X64) || defined(__x86_64__)
 #	undef  NEO_CPU_AMD64
 #	define NEO_CPU_AMD64 1
 #	define NEO_CACHE_LINE_SIZE 64
@@ -304,7 +311,7 @@ extern "C" {
 
 /* ---- Compiler Specific Intrinsics ---- */
 
-#if NEO_COM_GCC || NEO_COM_CLANG
+#if NEO_COM_GCC ^ NEO_COM_CLANG
 #   define NEO_EXPORT __attribute__((visibility("default")))
 #   define NEO_NODISCARD __attribute__((warn_unused_result))
 #	define NEO_NORET __attribute__((noreturn))
@@ -338,43 +345,6 @@ static NEO_AINLINE int neo_bsr32(uint32_t x) {
 #   define neo_rol64(x, n) __rolq(x,n)
 #   define neo_ror64(x, n) __rorq(x,n)
 #endif
-typedef enum {
-    NEO_MEMORD_RELX = __ATOMIC_RELAXED,
-    NEO_MEMORD_ACQ = __ATOMIC_ACQUIRE,
-    NEO_MEMORD_REL = __ATOMIC_RELEASE,
-    NEO_MEMORD_ACQ_REL = __ATOMIC_ACQ_REL,
-    NEO_MEMORD_SEQ_CST = __ATOMIC_SEQ_CST
-} neo_MemOrd;
-static NEO_AINLINE void neo_atomic_store(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	__atomic_store_n(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_load(volatile int64_t *ptr, neo_MemOrd order) {
-	return __atomic_load_n(ptr, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_add(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_fetch_add(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_sub(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_fetch_sub(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_and(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_fetch_and(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_or(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_fetch_or(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_xor(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_fetch_xor(ptr, x, (int)order);
-}
-static NEO_AINLINE int64_t neo_atomic_exchange(volatile int64_t *ptr, int64_t x, neo_MemOrd order) {
-	return __atomic_exchange_n(ptr, x, (int)order);
-}
-static NEO_AINLINE bool neo_atomic_compare_exchange_weak(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_MemOrd order_succ, neo_MemOrd order_fail) {
-    return __atomic_compare_exchange(ptr, exp, des, true, (int)order_succ, (int)order_fail);
-}
-static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_MemOrd order_succ, neo_MemOrd order_fail) {
-    return __atomic_compare_exchange(ptr, exp, des, false, (int)order_succ, (int)order_fail);
-}
 #elif defined(_MSC_VER)
 #	include <intrin.h>
 #   define NEO_EXPORT __declspec(dllexport)
@@ -411,68 +381,8 @@ extern uint64_t _byteswap_uint64(uint64_t x);
 #   define neo_bswap64(x) _byteswap_uint64(x)
 #	define neo_rol64(x, n) _rotl64(x,n)
 #	define neo_ror64(x, n) _rotr64(x, n)
-typedef enum
-{
-    NEO_MEMORD_RELX,
-    NEO_MEMORD_ACQ,
-    NEO_MEMORD_REL,
-    NEO_MEMORD_ACQ_REL,
-    NEO_MEMORD_SEQ_CST
-} neo_MemOrd;
-static NEO_AINLINE void neo_atomic_store(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    _InterlockedExchange64(ptr, x);
-}
-static NEO_AINLINE int64_t neo_atomic_load(volatile int64_t *ptr, neo_MemOrd order)
-{
-    (void)order;
-    int64_t r;
-    _InterlockedExchange64(&r, *ptr);
-    return r;
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_add(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedExchangeAdd64(ptr, x);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_sub(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedExchangeAdd64(ptr, -x);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_and(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedAnd64(ptr, x);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_or(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedOr64(ptr, x);
-}
-static NEO_AINLINE int64_t neo_atomic_fetch_xor(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedXor64(ptr, x);
-}
-static NEO_AINLINE int64_t neo_atomic_exchange(volatile int64_t *ptr, int64_t x, neo_MemOrd order)
-{
-    (void)order;
-    return _InterlockedExchange64(ptr, x);
-}
-static NEO_AINLINE bool neo_atomic_compare_exchange_weak(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_MemOrd order_succ, neo_MemOrd order_fail)
-{
-    (void)order_succ;
-    (void)order_fail;
-    return _InterlockedCompareExchange64(ptr, *des, *exp) == *exp;
-}
-static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_MemOrd order_succ, neo_MemOrd order_fail)
-{
-    (void)order_succ;
-    (void)order_fail;
-    return _InterlockedCompareExchange64(ptr, *des, *exp) == *exp;
-}
+#else
+#   error "Unsupported compiler"
 #endif
 
 /* ---- Misc ---- */
@@ -609,11 +519,182 @@ neo_static_assert(-1 == ~0); /* Check for 2's complement integers */
 neo_static_assert(NEO_INT_MAX == INT64_MAX && NEO_INT_MAX > 0);
 neo_static_assert(NEO_INT_MIN == INT64_MIN && NEO_INT_MIN < 0);
 
+/* ---- Thread Implementation ---- */
+#if NEO_COM_GCC ^ NEO_COM_CLANG
+#define NEO_THREAD_LOCAL __thread
+typedef enum neo_memord_t {
+    NEO_MEMORD_RELX = __ATOMIC_RELAXED,
+    NEO_MEMORD_ACQ = __ATOMIC_ACQUIRE,
+    NEO_MEMORD_REL = __ATOMIC_RELEASE,
+    NEO_MEMORD_ACQ_REL = __ATOMIC_ACQ_REL,
+    NEO_MEMORD_SEQ_CST = __ATOMIC_SEQ_CST
+} neo_memord_t;
+static NEO_AINLINE void neo_atomic_store(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    __atomic_store_n(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_load(volatile int64_t *ptr, neo_memord_t order) {
+    return __atomic_load_n(ptr, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_add(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_fetch_add(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_sub(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_fetch_sub(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_and(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_fetch_and(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_or(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_fetch_or(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_xor(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_fetch_xor(ptr, x, (int)order);
+}
+static NEO_AINLINE int64_t neo_atomic_exchange(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    return __atomic_exchange_n(ptr, x, (int)order);
+}
+static NEO_AINLINE bool neo_atomic_compare_exchange_weak(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_memord_t order_succ, neo_memord_t order_fail) {
+    return __atomic_compare_exchange(ptr, exp, des, true, (int)order_succ, (int)order_fail);
+}
+static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_memord_t order_succ, neo_memord_t order_fail) {
+    return __atomic_compare_exchange(ptr, exp, des, false, (int)order_succ, (int)order_fail);
+}
+#if /* We only support 64-bit, remember? */ \
+   (defined(__GLIBC__)   && (NEO_CPU_AMD64 ^ NEO_CPU_AARCH64)) \
+|| (defined(__APPLE__)   && (NEO_CPU_AMD64 ^ NEO_CPU_AARCH64)) \
+|| (defined(__BIONIC__)  && (NEO_CPU_AMD64 ^ NEO_CPU_AARCH64)) \
+|| (defined(__FreeBSD__) && (NEO_CPU_AMD64 ^ NEO_CPU_AARCH64)) \
+|| (defined(__OpenBSD__) && (NEO_CPU_AMD64 ^ NEO_CPU_AARCH64))
+static inline void *neo_tls_get_slot(size_t slot) { /* Lookup thread-local-storage (TLS) slot via specific TLS register at specified index. */
+    void *res;
+    const size_t ofs = slot*sizeof(void *);
+    #if defined(__APPLE__) && defined(NEO_CPU_AMD64)
+        __asm__ __volatile__(
+            "movq %%gs:%1, %0"
+            : "=r" (res) : "m" (*((void **)ofs)) :
+        );  /* x86-64 OSX: %GS */
+    #elif defined(NEO_CPU_AMD64)
+        __asm__ __volatile__(
+            "movq %%fs:%1, %0"
+            : "=r" (res) : "m" (*((void **)ofs)) :
+        );  /* x86-64 Linux and BSD: %FS. */
+    #elif defined(NEO_CPU_AARCH64)
+        void **tcb; (void)ofs;
+        #if defined(__APPLE__) /* M1 fixup. */
+            __asm__ __volatile__ (
+                "mrs %0, tpidrro_el0\n"
+                "bic %0, %0, #7"
+                : "=r" (tcb)
+            );
+        #else
+            __asm__ __volatile__ (
+                "mrs %0, tpidr_el0"
+                : "=r" (tcb)
+            );
+        #endif
+        res = tcb[slot];
+    #else
+    #   error "Unsupported architecture"
+    #endif
+    return res;
+}
+static NEO_AINLINE size_t neo_tid(void) {
+#ifdef __BIONIC__
+    return (uintptr_t)neo_tls_get_slot(1);
+#else
+    return (uintptr_t)neo_tls_get_slot(0);
+#endif
+}
+#else
+extern NEO_EXPORT NEO_THREAD_LOCAL void *volatile neo_tls_proxy;
+/* Portable impl. */
+static NEO_AINLINE size_t neo_tid(void) {
+    return (uintptr_t)&neo_tls_proxy;
+}
+#endif
+
+#elif NEO_COM_MSVC
+#define NEO_THREAD_LOCAL __declspec(thread)
+typedef enum {
+    NEO_MEMORD_RELX,
+    NEO_MEMORD_ACQ,
+    NEO_MEMORD_REL,
+    NEO_MEMORD_ACQ_REL,
+    NEO_MEMORD_SEQ_CST
+} neo_memord_t;
+static NEO_AINLINE void neo_atomic_store(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    _InterlockedExchange64(ptr, x);
+}
+static NEO_AINLINE int64_t neo_atomic_load(volatile int64_t *ptr, neo_memord_t order) {
+    (void)order;
+    int64_t r;
+    _InterlockedExchange64(&r, *ptr);
+    return r;
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_add(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedExchangeAdd64(ptr, x);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_sub(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedExchangeAdd64(ptr, -x);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_and(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedAnd64(ptr, x);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_or(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedOr64(ptr, x);
+}
+static NEO_AINLINE int64_t neo_atomic_fetch_xor(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedXor64(ptr, x);
+}
+static NEO_AINLINE int64_t neo_atomic_exchange(volatile int64_t *ptr, int64_t x, neo_memord_t order) {
+    (void)order;
+    return _InterlockedExchange64(ptr, x);
+}
+static NEO_AINLINE bool neo_atomic_compare_exchange_weak(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_memord_t order_succ, neo_memord_t order_fail) {
+    (void)order_succ;
+    (void)order_fail;
+    return _InterlockedCompareExchange64(ptr, *des, *exp) == *exp;
+}
+static NEO_AINLINE bool neo_atomic_compare_exchange_strong(volatile int64_t *ptr, int64_t *exp, int64_t *des, neo_memord_t order_succ, neo_memord_t order_fail) {
+    (void)order_succ;
+    (void)order_fail;
+    return _InterlockedCompareExchange64(ptr, *des, *exp) == *exp;
+}
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static NEO_AINLINE size_t neo_tid(void) {
+  return (size_t)NtCurrentTeb(); /* x86-64 or AArch64. */
+}
+#else
+#   error "Unsupported compiler"
+#endif
+
 /* ---- Misc ---- */
 
-typedef enum neo_fmode_t { NEO_FMODE_R /* read */, NEO_FMODE_W /* write */, NEO_FMODE_A /* append */, NEO_FMODE_BIN /* read */, NEO_FMODE_TXT /* text */ } neo_fmode_t;
+typedef enum neo_fmode_t {
+    NEO_FMODE_R /* read */,
+    NEO_FMODE_W /* write */,
+    NEO_FMODE_A /* append */,
+    NEO_FMODE_BIN /* read */,
+    NEO_FMODE_TXT /* text */
+} neo_fmode_t;
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
-typedef enum neo_unicode_err_t { NEO_UNIERR_OK, NEO_UNIERR_TOO_SHORT, NEO_UNIERR_TOO_LONG, NEO_UNIERR_TOO_LARGE, NEO_UNIERR_OVERLONG, NEO_UNIERR_HEADER_BITS, NEO_UNIERR_SURROGATE } neo_unicode_err_t;
+
+typedef enum neo_unicode_err_t {
+    NEO_UNIERR_OK,
+    NEO_UNIERR_TOO_SHORT,
+    NEO_UNIERR_TOO_LONG,
+    NEO_UNIERR_TOO_LARGE,
+    NEO_UNIERR_OVERLONG,
+    NEO_UNIERR_HEADER_BITS,
+    NEO_UNIERR_SURROGATE
+} neo_unicode_err_t;
 extern NEO_EXPORT neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
