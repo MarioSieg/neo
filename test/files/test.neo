@@ -1,5 +1,14 @@
 class Test
-    method f(x: int) -> int
-        return x + 1
+    static method fib(lim: int) -> int
+        let a: int = 0
+        let b: int = 0
+        let n: int = 0
+        while n < lim do
+            # print(a)
+            let c: int = a + b
+            a = b
+            b = c
+            n += 1
+        end
     end
 end

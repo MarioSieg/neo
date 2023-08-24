@@ -107,13 +107,13 @@ TEST(ast, unary_op) {
     astref_t operand_ode = astnode_new_int(&mempool, 10);
     node_unary_op_t unary_op_node_data;
     unary_op_node_data.opcode = UNOP_MINUS;
-    unary_op_node_data.expr = operand_ode;
+    unary_op_node_data.child_expr = operand_ode;
     astref_t unary_op_ode_ref = astnode_new_unary_op(&mempool, &unary_op_node_data);
     const astnode_t *unary_op_ode = astpool_resolve(&mempool, unary_op_ode_ref);
     ASSERT_NE(unary_op_ode, nullptr);
     ASSERT_EQ(unary_op_ode->type, ASTNODE_UNARY_OP);
     ASSERT_EQ(unary_op_ode->dat.n_unary_op.opcode, UNOP_MINUS);
-    ASSERT_EQ(unary_op_ode->dat.n_unary_op.expr, operand_ode);
+    ASSERT_EQ(unary_op_ode->dat.n_unary_op.child_expr, operand_ode);
 
     astpool_free(&mempool);
 }

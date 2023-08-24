@@ -122,7 +122,9 @@ typedef uint32_t bci_instr_t;
 #define bci_u24tou32(x) ((uint32_t)(x))
 #define bci_u32tou24(x) ((uint32_t)(x)&(~(uint32_t)0>>8))
 #define bci_i24toi32(x) (((int32_t)(x)<<8)>>8)
-#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23) ? ((int32_t)(x)&~-16777216)|-16777216 : ((int32_t)(x)&(int32_t)(~(uint32_t)0>>8))&~-16777216))
+#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23)\
+    ? ((int32_t)(x)&~-16777216)|-16777216 \
+    : ((int32_t)(x)&(int32_t)(~(uint32_t)0>>8))&~-16777216))
 #define BCI_MOD1IMM24_BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
 #define bci_mod1unpack_imm24(i) bci_i24toi32((i)>>8)

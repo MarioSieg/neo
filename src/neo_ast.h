@@ -91,7 +91,7 @@ extern NEO_EXPORT const char *unary_op_lexeme(unary_op_type_t op);
 
 typedef struct node_unary_op_t {
     unary_op_type_t opcode : 8;
-    astref_decl(req) expr;
+    astref_decl(req) child_expr;
 } node_unary_op_t;
 
 typedef enum binary_op_type_t {

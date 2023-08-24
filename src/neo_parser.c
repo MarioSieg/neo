@@ -333,7 +333,7 @@ static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
             expr_eval_precedence(self, &expr, PREC_TERM);
             *node = astnode_new_unary_op(&self->pool, &(node_unary_op_t) {
                 .opcode = UNOP_PLUS,
-                .expr = expr
+                .child_expr = expr
             });
         } break;
         case TOK_OP_SUB: {
@@ -341,7 +341,7 @@ static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
             expr_eval_precedence(self, &expr, PREC_TERM);
             *node = astnode_new_unary_op(&self->pool, &(node_unary_op_t) {
                 .opcode = UNOP_MINUS,
-                .expr = expr
+                .child_expr = expr
             });
         } break;
         case TOK_OP_BIT_COMPL: {
