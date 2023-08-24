@@ -87,6 +87,7 @@ typedef enum unary_op_type_t {
 neo_static_assert(UNOP__COUNT < 64);
 #define UNOP_ASSIGN_MASK ((1ull<<(UNOP_INC&63))|(1ull<<(UNOP_DEC&63))) /* Mask of all assigning operators. */
 neo_static_assert(UNOP_ASSIGN_MASK <= UINT64_MAX);
+extern NEO_EXPORT const char *unary_op_lexeme(unary_op_type_t op);
 
 typedef struct node_unary_op_t {
     unary_op_type_t opcode : 8;
@@ -164,6 +165,7 @@ neo_static_assert(BINOP__COUNT < 64);
         (1ull<<(BINOP_BIT_ROR_ASSIGN)&63)|\
         (1ull<<(BINOP_BIT_LSHR_ASSIGN)&63)) /* Mask of all assigning operators. */
 neo_static_assert(BINOP_ASSIGN_MASK <= UINT64_MAX);
+extern NEO_EXPORT const char *binary_op_lexeme(binary_op_type_t op);
 
 typedef struct node_binary_op_t {
     binary_op_type_t opcode : 8;
@@ -366,7 +368,7 @@ static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
 
-#ifdef NEO_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
 extern NEO_EXPORT void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
 extern NEO_EXPORT void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
 #endif

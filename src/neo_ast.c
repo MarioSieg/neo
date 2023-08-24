@@ -1,8 +1,9 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
 #include "neo_ast.h"
+#include "neo_lexer.h"
 
-#ifdef NEO_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
 #   include <time.h>
 #   include <graphviz/gvc.h>
 #endif
@@ -254,7 +255,7 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
             astnode_visit_root_impl(pool, data->body, visitor, user, c);
         } break;
         default: {
-            neo_panic("invalid node type: %d", root->type);
+            neo_panic("Invalid node type: %d", root->type);
         }
     }
     (*visitor)(pool, rootref, user);
@@ -285,9 +286,7 @@ static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
     astverify((node)->dat.n_block.blktype == (expected), "AST Node block type is not of expected block type: " #expected)
 
 static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
-    (void)user;
-    neo_dassert(pool);
-    astnode_t *node = astpool_resolve(pool, noderef);
+    astnode_t *node = astpool_resolve(pool, noderef); (void)user;
     switch (node->type) {
         case ASTNODE_ERROR: {
             const node_error_t *data = &node->dat.n_error;
@@ -425,7 +424,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             }
         } return;
         default: {
-            neo_panic("invalid node type: %d", node->type);
+            neo_panic("Invalid node type: %d", node->type);
         }
     }
 }
@@ -458,10 +457,73 @@ void astpool_free(astpool_t *self) {
     neo_mempool_free(&self->node_pool);
 }
 
-/* GraphViz AST rendering for debugging and visualization. */
-#ifdef NEO_HAS_GRAPHVIZ
+const char *unary_op_lexeme(unary_op_type_t op) {
+    switch (op) {
+        case UNOP_PLUS: return tok_lexemes[TOK_OP_ADD];
+        case UNOP_MINUS: return tok_lexemes[TOK_OP_SUB];
+        case UNOP_NOT: return tok_lexemes[TOK_OP_LOG_NOT];
+        case UNOP_BIT_COMPL: return tok_lexemes[TOK_OP_BIT_COMPL];
+        case UNOP_INC: return tok_lexemes[TOK_OP_INC];
+        case UNOP_DEC: return tok_lexemes[TOK_OP_DEC];
+        default: return "?";
+    }
+}
 
-#if 0
+const char *binary_op_lexeme(binary_op_type_t op) {
+    switch (op) {
+        case BINOP_DOT: return tok_lexemes[TOK_OP_DOT];
+        case BINOP_ASSIGN: return tok_lexemes[TOK_OP_ASSIGN];
+        case BINOP_ADD: return tok_lexemes[TOK_OP_ADD];
+        case BINOP_SUB: return tok_lexemes[TOK_OP_SUB];
+        case BINOP_MUL: return tok_lexemes[TOK_OP_MUL];
+        case BINOP_POW: return tok_lexemes[TOK_OP_POW];
+        case BINOP_ADD_NO_OV: return tok_lexemes[TOK_OP_ADD_NO_OV];
+        case BINOP_SUB_NO_OV: return tok_lexemes[TOK_OP_SUB_NO_OV];
+        case BINOP_MUL_NO_OV: return tok_lexemes[TOK_OP_MUL_NO_OV];
+        case BINOP_POW_NO_OV: return tok_lexemes[TOK_OP_POW_NO_OV];
+        case BINOP_DIV: return tok_lexemes[TOK_OP_DIV];
+        case BINOP_MOD: return tok_lexemes[TOK_OP_MOD];
+        case BINOP_ADD_ASSIGN: return tok_lexemes[TOK_OP_ADD_ASSIGN];
+        case BINOP_SUB_ASSIGN: return tok_lexemes[TOK_OP_SUB_ASSIGN];
+        case BINOP_MUL_ASSIGN: return tok_lexemes[TOK_OP_MUL_ASSIGN];
+        case BINOP_POW_ASSIGN: return tok_lexemes[TOK_OP_POW_ASSIGN];
+        case BINOP_ADD_ASSIGN_NO_OV: return tok_lexemes[TOK_OP_ADD_ASSIGN_NO_OV];
+        case BINOP_SUB_ASSIGN_NO_OV: return tok_lexemes[TOK_OP_SUB_ASSIGN_NO_OV];
+        case BINOP_MUL_ASSIGN_NO_OV: return tok_lexemes[TOK_OP_MUL_ASSIGN_NO_OV];
+        case BINOP_POW_ASSIGN_NO_OV: return tok_lexemes[TOK_OP_POW_ASSIGN_NO_OV];
+        case BINOP_DIV_ASSIGN: return tok_lexemes[TOK_OP_DIV_ASSIGN];
+        case BINOP_MOD_ASSIGN: return tok_lexemes[TOK_OP_MOD_ASSIGN];
+        case BINOP_EQUAL: return tok_lexemes[TOK_OP_EQUAL];
+        case BINOP_NOT_EQUAL: return tok_lexemes[TOK_OP_NOT_EQUAL];
+        case BINOP_LESS: return tok_lexemes[TOK_OP_LESS];
+        case BINOP_LESS_EQUAL: return tok_lexemes[TOK_OP_LESS_EQUAL];
+        case BINOP_GREATER: return tok_lexemes[TOK_OP_GREATER];
+        case BINOP_GREATER_EQUAL: return tok_lexemes[TOK_OP_GREATER_EQUAL];
+        case BINOP_BIT_AND: return tok_lexemes[TOK_OP_BIT_AND];
+        case BINOP_BIT_OR: return tok_lexemes[TOK_OP_BIT_OR];
+        case BINOP_BIT_XOR: return tok_lexemes[TOK_OP_BIT_XOR];
+        case BINOP_BIT_AND_ASSIGN: return tok_lexemes[TOK_OP_BIT_AND_ASSIGN];
+        case BINOP_BIT_OR_ASSIGN: return tok_lexemes[TOK_OP_BIT_OR_ASSIGN];
+        case BINOP_BIT_XOR_ASSIGN: return tok_lexemes[TOK_OP_BIT_XOR_ASSIGN];
+        case BINOP_BIT_ASHL: return tok_lexemes[TOK_OP_BIT_ASHL];
+        case BINOP_BIT_ASHR: return tok_lexemes[TOK_OP_BIT_ASHR];
+        case BINOP_BIT_ROL: return tok_lexemes[TOK_OP_BIT_ROL];
+        case BINOP_BIT_ROR: return tok_lexemes[TOK_OP_BIT_ROR];
+        case BINOP_BIT_LSHR: return tok_lexemes[TOK_OP_BIT_LSHR];
+        case BINOP_BIT_ASHL_ASSIGN: return tok_lexemes[TOK_OP_BIT_ASHL_ASSIGN];
+        case BINOP_BIT_ASHR_ASSIGN: return tok_lexemes[TOK_OP_BIT_ASHR_ASSIGN];
+        case BINOP_BIT_ROL_ASSIGN: return tok_lexemes[TOK_OP_BIT_ROL_ASSIGN];
+        case BINOP_BIT_ROR_ASSIGN: return tok_lexemes[TOK_OP_BIT_ROR_ASSIGN];
+        case BINOP_BIT_LSHR_ASSIGN: return tok_lexemes[TOK_OP_BIT_LSHR_ASSIGN];
+        case BINOP_LOG_AND: return tok_lexemes[TOK_OP_LOG_AND];
+        case BINOP_LOG_OR: return tok_lexemes[TOK_OP_LOG_OR];
+        default: return "?";
+    }
+}
+
+/* GraphViz AST rendering for debugging and visualization. */
+#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+
 static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const char *name, uint32_t c) {
     neo_dassert(g && target);
     char buf[(1<<3)+1];
@@ -480,7 +542,8 @@ static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const
     return n;
 }
 
-static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const SymTab *tab) {
+#if 0
+static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const symtab_t *tab) {
     if (neo_unlikely(!tab || !tab->len)) { return; }
     char buf[(1<<5)+1];
     snprintf(buf, sizeof(buf), "%p", (const void*)tab);
@@ -488,7 +551,7 @@ static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const SymTab *tab) 
     char html[(1<<14)+1];
     int o = snprintf(html, sizeof(html), "<table>\n");
     for (uint32_t i = 0; i < tab->len; ++i) {
-        o += snprintf(html+o, sizeof(html)-(size_t)o, "\t<tr><td>%.*s</td></tr>\n", tab->symbols[i].ident.span.len, tab->symbols[i].ident.span.needle);
+        o += snprintf(html+o, sizeof(html)-(size_t)o, "\t<tr><td>%.*s</td></tr>\n", tab->p[i].ident.span.len, tab->symbols[i].ident.span.needle);
     }
     snprintf(html+o, sizeof(html)-(size_t)o, "</table>");
     agsafeset(n, "label", agstrdup_html(g, html), "");
@@ -501,19 +564,207 @@ static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const SymTab *tab) 
 }
 #endif
 
+typedef struct graph_context_t {
+    Agraph_t *graph;
+    Agnode_t *node;
+    const char *edge;
+    uint32_t id;
+} graph_context_t;
+
+static Agnode_t *graph_append(graph_context_t *ctx, astnode_t *node, const char *name, const char *color) {
+    Agnode_t *n = create_colored_node(ctx->graph, node, name, ctx->id);
+    Agedge_t *e = agedge(ctx->graph, ctx->node, n, NULL, 1);
+    if (color) {
+        agsafeset(n, "fillcolor", (char *)color, "");
+    }
+    if (ctx->edge) {
+        agsafeset(e, "label", (char *)ctx->edge, "");
+    }
+    return n;
+}
+
+static void graphviz_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
+    astnode_t *node = astpool_resolve(pool, noderef);
+    graph_context_t *ctx = (graph_context_t *)user;
+    ++ctx->id;
+    switch (node->type) {
+        case ASTNODE_ERROR: {
+            const node_error_t *data = &node->dat.n_error;
+            graph_append(ctx, node, data->message ? data->message : "Unknown error", "red");
+        } return;
+        case ASTNODE_BREAK: {
+            graph_append(ctx, node, NULL, NULL);
+        } return;
+        case ASTNODE_CONTINUE: {
+            graph_append(ctx, node, NULL, NULL);
+        } return;
+        case ASTNODE_INT_LIT: {
+            const node_int_literal_t *data = &node->dat.n_int_lit;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%" PRIi64, data->value);
+            graph_append(ctx, node, buf, NULL);
+        } return;
+        case ASTNODE_FLOAT_LIT: {
+            const node_float_literal_t *data = &node->dat.n_float_lit;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%f", data->value);
+            graph_append(ctx, node, buf, NULL);
+        } return;
+        case ASTNODE_CHAR_LIT: {
+            const node_char_literal_t *data = &node->dat.n_char_lit;
+            char buf[64];
+            if (data->value <= 0x7f) {
+                snprintf(buf, sizeof(buf), "%c", data->value);
+            } else {
+                snprintf(buf, sizeof(buf), "%" PRIu32, data->value);
+            }
+            graph_append(ctx, node, buf, NULL);
+        } return;
+        case ASTNODE_BOOL_LIT: {
+            const node_bool_literal_t *data = &node->dat.n_bool_lit;
+            graph_append(ctx, node, data->value ? "true" : "false", NULL);
+        } return;
+        case ASTNODE_STRING_LIT: {
+            const node_string_literal_t *data = &node->dat.n_string_lit;
+            char buf[8192];
+            snprintf(buf, sizeof(buf), "\"%.*s\"", data->span.len, data->span.p);
+            graph_append(ctx, node, buf, NULL);
+        } return;
+        case ASTNODE_IDENT_LIT: {
+            const node_ident_literal_t *data = &node->dat.n_ident_lit;
+            char buf[8192];
+            snprintf(buf, sizeof(buf), "%.*s", data->span.len, data->span.p);
+            graph_append(ctx, node, buf, NULL);
+        } return;
+        case ASTNODE_GROUP: {
+            const node_group_t *data = &node->dat.n_group; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_UNARY_OP: {
+            const node_unary_op_t *data = &node->dat.n_unary_op;
+            graph_append(ctx, node, unary_op_lexeme(data->opcode), NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_BINARY_OP: {
+            const node_binary_op_t *data = &node->dat.n_binary_op;
+            graph_append(ctx, node, binary_op_lexeme(data->opcode), NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_METHOD: {
+            const node_method_t *data = &node->dat.n_method; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_BLOCK: {
+            const node_block_t *data = &node->dat.n_block; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_VARIABLE: {
+            const node_variable_t *data = &node->dat.n_variable; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_RETURN: {
+            const node_return_t *data = &node->dat.n_return; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_BRANCH: {
+            const node_branch_t *data = &node->dat.n_branch; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_LOOP: {
+            const node_loop_t *data = &node->dat.n_loop; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_CLASS: {
+            const node_class_t *data = &node->dat.n_class; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        case ASTNODE_MODULE: {
+            const node_module_t *data = &node->dat.n_module; (void)data;
+            graph_append(ctx, node, NULL, NULL);
+            ctx->edge = "child ";
+        } return;
+        default: {
+            neo_panic("Invalid node type: %d", node->type);
+        }
+    }
+}
+
+static void graph_submit(astpool_t *pool, Agraph_t *g, astref_t node) {
+    neo_dassert(pool && g);
+    char statsbuf[256];
+    int off = snprintf(statsbuf, sizeof(statsbuf), "Nodes: %zu\nPoolCap: %zu", pool->node_pool.len/sizeof(astnode_t), pool->node_pool.cap/sizeof(astnode_t));
+    time_t timer = time(NULL);
+    struct tm tm = {0};
+#if NEO_COM_MSVC
+    localtime_s(&tm, &timer);
+#else
+    tm = *localtime(&timer); /* TODO: replace with threadsafe localtime */
+#endif
+    strftime(statsbuf+off, sizeof(statsbuf)-1-(size_t)off, "\nDate: %d.%m.%Y %H:%M:%S", &tm);
+    Agnode_t *root = agnode(g, statsbuf, 1);
+    agsafeset(root, "style", "filled", "");
+    agsafeset(root, "color", "transparent", "");
+    agsafeset(root, "fillcolor", "azure", "");
+    agsafeset(root, "shape", "box", "");
+    Agnode_t *program = agnode(g, "NEO PROGRAM", 1);
+    agsafeset(program, "style", "filled", "");
+    agsafeset(program, "color", "transparent", "");
+    agsafeset(program, "fillcolor", "orchid1", "");
+    agsafeset(program, "shape", "box", "");
+    astnode_visit(pool, node, &graphviz_ast_visitor, &(graph_context_t){.graph=g, .node=program, .edge=NULL, .id=0});
+}
+
 void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f) {
-    (void)pool, (void)root, (void)f;
+    neo_dassert(pool && f);
+    neo_info("dumping AST to graphviz representation...%s", "");
+    time_t timer = time(NULL);
+    struct tm tm = {0};
+#if NEO_COM_MSVC
+    localtime_s(&tm, &timer);
+#else
+    tm = *localtime(&timer); /* TODO: replace with threadsafe localtime */
+#endif
+    char buf[1<<6];
+    strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M:%S", &tm);
+    fprintf(f, "// Neo AST graphviz representation code - optimized for DOT engine\n");
+    fprintf(f, "// Autogenerated - do NOT edit! Generated on: %s\n", buf);
+    fprintf(f, "// Each root is of type ASTNode* in the C code, each edge is a pointer to a child root\n");
+    GVC_t *gvc = gvContext();
+    Agraph_t *g = agopen("AST", Agdirected, NULL);
+    graph_submit(pool, g, root);
+    gvLayout(gvc, g, "dot");
+    gvRender(gvc, g, "dot", f);
+    gvFreeLayout(gvc, g);
+    agclose(g);
+    gvFreeContext(gvc);
 }
 
 void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename) {
-    (void)pool, (void)root, (void)filename;
+    neo_dassert(pool && filename);
+    neo_info("rendering AST to image: '%s'...", filename);
+    GVC_t *gvc = gvContext();
+    Agraph_t *g = agopen("AST", Agdirected, NULL);
+    graph_submit(pool, g, root);
+    gvLayout(gvc, g, "dot");
+    gvRenderFilename(gvc, g, "jpg", filename);
+    gvFreeLayout(gvc, g);
+    agclose(g);
+    gvFreeContext(gvc);
 }
 
 #endif
 
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
-static void my_ast_validator(astnode_t *node, void *user) {
-    (void)user;
+static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
+    astnode_t *node = astpool_resolve(pool, noderef); (void)user;
     switch (node->type) {
         case ASTNODE_ERROR: {
             const node_error_t *data = &node->dat.n_error;
@@ -576,7 +827,7 @@ static void my_ast_validator(astnode_t *node, void *user) {
             const node_module_t *data = &node->dat.n_module;
         } return;
         default: {
-            neo_panic("invalid node type: %d", node->type);
+            neo_panic("Invalid node type: %d", node->type);
         }
     }
 }

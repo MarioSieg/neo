@@ -119,6 +119,7 @@ neo_static_assert(TOK__COUNT <= 255);
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
 neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
+extern NEO_EXPORT const char *tok_lexemes[TOK__COUNT];
 
 typedef struct srcspan_t {
     const uint8_t *p;
@@ -127,7 +128,7 @@ typedef struct srcspan_t {
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
 #define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
 #define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
-extern const uint8_t *srcspan_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
+extern NEO_EXPORT const uint8_t *srcspan_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */

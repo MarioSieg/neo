@@ -12,7 +12,7 @@ const uint8_t *srcspan_clone(srcspan_t span) {
 }
 
 #define _(_1, _2) [_1] = _2
-static const char *tok_lexemes[TOK__COUNT] = { tkdef(_, NEO_SEP) };
+const char *tok_lexemes[TOK__COUNT] = { tkdef(_, NEO_SEP) };
 #undef _
 #define _(_1, _2) [_1] = #_1
 static const char *tok_names[TOK__COUNT] = { tkdef(_, NEO_SEP) };

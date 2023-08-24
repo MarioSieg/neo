@@ -1,15 +1,18 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
+#include <time.h>
 #include "neo_compiler.h"
 #include "neo_ast.h"
 #include "neo_lexer.h"
 #include "neo_parser.h"
 
-const source_t *source_from_file(const uint8_t *path) {
+const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *err_info) {
     neo_dassert(path);
     FILE *f = NULL;
     if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R|NEO_FMODE_BIN))) {
-        neo_error("Failed to open file '%s'.", path);
+        if (err_info) {
+            err_info->error = SRCLOAD_FILE_NOT_FOUND;
+        }
         return NULL;
     }
     /* Check for BOM and skip it if present */
@@ -27,34 +30,28 @@ const source_t *source_from_file(const uint8_t *path) {
         fseek(f, sizeof(bom), SEEK_SET); /* BOM detected, skip it */
         size -= sizeof(bom);
     }
-    if (neo_unlikely(!size)) { /* File is empty */
-        fclose(f);
-        return NULL;
-    }
     uint8_t *buf = neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
-    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) { /* Read file into buffer */
+    size_t bytes_read = fread(buf, sizeof(*buf), size, f);
+    if (neo_unlikely(bytes_read != size)) { /* Read file into buffer */
         neo_memalloc(buf, 0);
         fclose(f);
-        neo_error("Failed to read source file: '%s'", path);
+        if (err_info) {
+            err_info->error = SRCLOAD_FILE_READ_ERROR;
+            err_info->bytes_read = bytes_read;
+        }
         return NULL; /* Failed to read all bytes or read error. */
     }
     fclose(f); /* Close file */
     /* Verify that the file is valid UTF-8. */
     size_t pos = 0;
-    neo_unicode_err_t result = neo_utf8_validate(buf, size, &pos);
-    const char *msg = "";
-    switch (result) {
-        case NEO_UNIERR_OK: break;
-        case NEO_UNIERR_TOO_SHORT: msg = "UTF-8 Sequence too short."; break;
-        case NEO_UNIERR_TOO_LONG: msg = "UTF-8 Sequence too long."; break;
-        case NEO_UNIERR_TOO_LARGE: msg = "UTF-8 Codepoint too large."; break;
-        case NEO_UNIERR_OVERLONG: msg = "UTF-8 Codepoint too long."; break;
-        case NEO_UNIERR_HEADER_BITS: msg = "UTF-8 Sequence contains invalid header bits."; break;
-        case NEO_UNIERR_SURROGATE: msg = "UTF-8 Sequence contains invalid surrogate bytes."; break;
-    }
+    neo_unicode_error_t result = neo_utf8_validate(buf, size, &pos);
     if (result != NEO_UNIERR_OK) {
         neo_memalloc(buf, 0);
-        neo_error("Source file '%s' is not valid UTF-8. Error at position %zu: %s", path, pos, msg);
+        if (err_info) {
+            err_info->error = SRCLOAD_INVALID_UTF8;
+            err_info->invalid_utf8pos = pos;
+            err_info->unicode_error = result;
+        }
         return false;
     }
 #if NEO_OS_WINDOWS
@@ -72,7 +69,10 @@ const source_t *source_from_file(const uint8_t *path) {
     source_t *self = neo_memalloc(NULL, sizeof(*self));
     self->filename = neo_strdup2(path);
     self->src = buf;
-    self->len = size;
+    self->len = size+1; /* +1 for final newline. */
+    if (err_info) {
+        err_info->error = SRCLOAD_OK;
+    }
     return self;
 }
 
@@ -100,7 +100,7 @@ struct neo_compiler_t {
     neo_mempool_t pool; /* Memory pool for allocations. */
     error_vector_t errors; /* List of errors and warnings. */
     parser_t parser; /* Parser state. */
-    astnode_t *ast; /* Root of the AST. */
+    astref_t ast; /* Root of the AST. */
     neo_compiler_flag_t flags; /* Compiler flags. */
     neo_compile_callback_hook_t *pre_compile_callback; /* Called before compilation. */
     neo_compile_callback_hook_t *post_compile_callback; /* Called after compilation. */
@@ -130,11 +130,37 @@ void compiler_free(neo_compiler_t **self) {
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
-    (*self->pre_compile_callback)(src, self->flags, user);
-    self->ast = NULL;
+    clock_t begin = clock();
+    if (self->pre_compile_callback) {
+        (*self->pre_compile_callback)(src, self->flags, user);
+    }
+    self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
-    /* TODO: compile */
-    (*self->post_compile_callback)(src, self->flags, user);
+    self->ast = parser_drain(&self->parser);
+    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
+    if (self->post_compile_callback) {
+        (*self->post_compile_callback)(src, self->flags, user);
+    }
+    if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
+#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+        size_t len = strlen((const char *)src->filename);
+        if (!neo_utf8_is_ascii(src->filename, len)) {
+            neo_error("Failed to render AST, filename is not ASCII.");
+        } else {
+            char *filename = alloca(len+sizeof("_ast.jpg"));
+            memcpy(filename, src->filename, len);
+            memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
+            filename[len+sizeof("_ast.jpg")-1] = '\0';
+            ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
+        }
+#else
+        neo_error("Failed to render AST, Graphviz extension is not enabled.");
+#endif
+    }
+    double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
+    if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
+        printf("Compiled %s in %.3fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
+    }
     return true;
 }
 
@@ -143,7 +169,7 @@ const error_vector_t *compiler_get_errors(const neo_compiler_t *self) {
     return &self->errors;
 }
 
-const astnode_t *compiler_get_ast_root(const neo_compiler_t *self) {
+astref_t compiler_get_ast_root(const neo_compiler_t *self) {
     neo_assert(self && "Compiler pointer is NULL");
     return self->ast;
 }

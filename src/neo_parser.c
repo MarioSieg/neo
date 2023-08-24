@@ -1,6 +1,7 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
 #include "neo_parser.h"
+#include "neo_compiler.h"
 
 #include <ctype.h>
 
@@ -662,6 +663,7 @@ static astref_t parser_root_stmt_module(parser_t *self, bool *skip) {
 }
 
 static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, bool *skip) {
+    if (neo_unlikely(!self->lex.src_data->len)) { return ASTREF_NULL; }
     neo_assert(self->curr.type < TOK__COUNT && "Invalid token type");
     astref_t root = parser_root_stmt_module(self, skip);
     if (neo_unlikely(self->panic)) {
@@ -718,12 +720,6 @@ astref_t parser_parse(parser_t *self) {
 astref_t parser_drain(parser_t *self) {
     neo_dassert(self);
     return parser_drain_whole_module(self);
-}
-
-void parser_prepare(parser_t *self) {
-    neo_dassert(self);
-    self->error = self->panic = false;
-    advance(self); /* Consume first token. */
 }
 
 void parser_setup_source(parser_t *self, const source_t *src) {

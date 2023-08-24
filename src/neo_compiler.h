@@ -19,12 +19,26 @@ typedef struct source_t {
     size_t len; /* In bytes. */
 } source_t;
 
+typedef enum source_load_error_t {
+    SRCLOAD_OK = 0,
+    SRCLOAD_INVALID_UTF8,
+    SRCLOAD_FILE_NOT_FOUND,
+    SRCLOAD_FILE_READ_ERROR
+} source_load_error_t;
+
+typedef struct source_load_error_info_t {
+    source_load_error_t error;
+    size_t invalid_utf8pos; /* Only filled if error == SRCLOAD_INVALID_UTF8. */
+    neo_unicode_error_t unicode_error; /* Only filled if error == SRCLOAD_INVALID_UTF8. */
+    size_t bytes_read; /* Only filled if error == SRCLOAD_FILE_READ_ERROR. */
+} source_load_error_info_t;
+
 /**
  * Load source code from UTF-8 file and validate source.
  * @param path The file path, which is cloned into self.
  * @return New instance or NULL on failure.
  */
-extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_file(const uint8_t *path);
+extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *err_info);
 
 /**
  * Load source code from memory.
@@ -38,9 +52,10 @@ extern NEO_EXPORT void source_free(const source_t *self);
 /* Compiler option flags. */
 typedef enum neo_compiler_flag_t {
     COM_FLAG_NONE = 0,
-    COM_FLAG_DEBUG = 1<<0,        /* Print debug messages. */
-    COM_FLAG_DUMP_AST = 1<<1,     /* Dump AST graphviz code to text file. */
-    COM_FLAG_RENDER_AST = 1<<2,   /* Render AST graphviz code to image file. */
+    COM_FLAG_DEBUG = 1<<0,          /* Print debug messages. */
+    COM_FLAG_DUMP_AST = 1<<1,       /* Dump AST graphviz code to text file. */
+    COM_FLAG_RENDER_AST = 1<<2,     /* Render AST graphviz code to image file. */
+    COM_FLAG_NO_STATUS = 1<<3,      /* Don't print status messages. */
 } neo_compiler_flag_t;
 
 typedef void (neo_compile_callback_hook_t)(const source_t *src, neo_compiler_flag_t flags, void *user);
@@ -64,7 +79,7 @@ extern NEO_EXPORT void compiler_free(neo_compiler_t **self);
 extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user);
 
 extern NEO_EXPORT const error_vector_t *compiler_get_errors(const neo_compiler_t *self);
-extern NEO_EXPORT const astnode_t *compiler_get_ast_root(const neo_compiler_t *self);
+extern NEO_EXPORT astref_t compiler_get_ast_root(const neo_compiler_t *self);
 extern NEO_EXPORT neo_compiler_flag_t compiler_get_flags(const neo_compiler_t *self);
 extern NEO_EXPORT bool compiler_has_flags(const neo_compiler_t *self, neo_compiler_flag_t flags);
 extern NEO_EXPORT neo_compile_callback_hook_t *compiler_get_pre_compile_callback(const neo_compiler_t *self);

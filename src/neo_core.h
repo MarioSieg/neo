@@ -330,14 +330,8 @@ extern "C" {
 #   else
 #       define neo_unreachable() __builtin_unreachable()
 #   endif
-static NEO_AINLINE int neo_bsf32(uint32_t x) {
-    if (neo_unlikely(!x)) { return 0; }
-    return __builtin_ctz(x);
-}
-static NEO_AINLINE int neo_bsr32(uint32_t x) {
-    if (neo_unlikely(!x)) { return 0; }
-    return __builtin_clz(x)^31;
-}
+#define neo_bsf32(x) (neo_likely(x) ? __builtin_ctz((x)) : 0)
+#define neo_bsr32(x) (neo_likely(x) ? __builtin_clz((x))^31 : 0)
 #   define neo_bswap32(x) __builtin_bswap32(x)
 #   define neo_bswap64(x) __builtin_bswap64(x)
 #   if NEO_CPU_AMD64
@@ -581,13 +575,13 @@ static inline void *neo_tls_get_slot(size_t slot) { /* Lookup thread-local-stora
     #elif defined(NEO_CPU_AARCH64)
         void **tcb; (void)ofs;
         #if defined(__APPLE__) /* M1 fixup. */
-            __asm__ __volatile__ (
+            __asm__ __volatile__(
                 "mrs %0, tpidrro_el0\n"
                 "bic %0, %0, #7"
                 : "=r" (tcb)
             );
         #else
-            __asm__ __volatile__ (
+            __asm__ __volatile__(
                 "mrs %0, tpidr_el0"
                 : "=r" (tcb)
             );
@@ -694,8 +688,9 @@ typedef enum neo_unicode_err_t {
     NEO_UNIERR_OVERLONG,
     NEO_UNIERR_HEADER_BITS,
     NEO_UNIERR_SURROGATE
-} neo_unicode_err_t;
-extern NEO_EXPORT neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
+} neo_unicode_error_t;
+extern NEO_EXPORT neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
+extern NEO_EXPORT bool neo_utf8_is_ascii(const uint8_t *buf, size_t len);
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */

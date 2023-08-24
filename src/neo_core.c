@@ -161,7 +161,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 
 #undef get_fmodstr
 
-neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
+neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
     neo_dassert(buf && ppos);
     size_t pos = 0;
     uint32_t cp;
@@ -213,8 +213,15 @@ neo_unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos
     return NEO_UNIERR_OK;
 }
 
-uint32_t neo_hash_x17(const void *key, size_t len)
-{
+bool neo_utf8_is_ascii(const uint8_t *buf, size_t len) {
+    neo_dassert(buf);
+    for (size_t i = 0; i < len; ++i) {
+        if (neo_unlikely(buf[i] > 0x7f)) { return false; }
+    }
+    return true;
+}
+
+uint32_t neo_hash_x17(const void *key, size_t len) {
     uint32_t r = 0x1505;
     const uint8_t *p = (const uint8_t*)key;
     for (size_t i = 0; i < len; ++i) {

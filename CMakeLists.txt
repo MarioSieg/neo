@@ -13,7 +13,7 @@ message("Configuring NEO...")
 
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
 option(NEO_ENABLE_SSE41 "Enable SSE 4.1 Penryn instructions" ON) # Requires CPU >= x86-64 Intel Core 2 2 (Penryn) CPU.
-option(NEO_ENABLE_GRAPHVIZ "Enable Graphviz AST rendering support" ON)
+option(NEO_EXTENSION_GRAPHVIZ "Enable Graphviz AST rendering support" ON)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     message("Detected release mode")
@@ -57,9 +57,9 @@ file(GLOB_RECURSE neo_sources src/*.h src/*.c)
 add_library(libneo STATIC ${neo_sources}) # NEO compiler.
 target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
 
-if (${NEO_ENABLE_GRAPHVIZ} AND NOT WIN32) # Currently only supported on UNIX
+if (${NEO_EXTENSION_GRAPHVIZ} AND NOT WIN32) # Currently only supported on UNIX
     target_link_libraries(libneo PUBLIC cgraph gvc)
-    target_compile_definitions(libneo PUBLIC NEO_HAS_GRAPHVIZ)
+    target_compile_definitions(libneo PUBLIC NEO_EXTENSION_HAS_GRAPHVIZ)
 endif()
 
 add_executable(neo driver/neo_driver.c)
