@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-typedef uint32_t astref_t;
+typedef uint32_t astref_t, listref_t;
 #define astref_decl(type) astref_t /* req = required, opt = optional. */
 #define ASTREF_NULL (0u)
 #define astref_isnull(ref) ((ref)==ASTREF_NULL)
@@ -207,11 +207,11 @@ typedef struct node_block_t {
             symtab_t *var_table; /* Local parameter variables. */
         } sc_params; /* Scope of: BLOCKSCOPE_PARAMLIST */
     } symtabs;
-    astref_decl(req) *nodes; /* Child nodes. */
+    listref_t nodes; /* Child nodes. */
     uint32_t len;
     uint32_t cap;
 } node_block_t;
-extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *block, astref_decl(req) node);
+extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *self, astref_decl(req) node);
 
 /* Variable type */
 typedef enum variable_scope_t {
@@ -356,9 +356,14 @@ struct astpool_t {
 extern NEO_EXPORT void astpool_init(astpool_t *self);
 extern NEO_EXPORT void astpool_free(astpool_t *self);
 extern NEO_EXPORT astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type);
+extern NEO_EXPORT listref_t astpool_alloclist(astpool_t *self, astref_t ** o, uint32_t len);
 static NEO_AINLINE bool astpool_isvalidref(astpool_t *self, astref_t ref) {
     neo_dassert(self);
     return neo_likely(!astref_isnull(ref) && ((size_t)ref*sizeof(astnode_t))-sizeof(astnode_t) < self->node_pool.len);
+}
+static NEO_AINLINE bool astpool_isvalidlistref(astpool_t *self, listref_t ref) {
+    neo_dassert(self);
+    return neo_likely((size_t)ref*sizeof(astref_t) < self->list_pool.len); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 /* Resolves AST reference to node pointer! Do NOT keep the node pointer alive, it might be invalidated on reallocation.
 ** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
@@ -371,6 +376,11 @@ static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
     }
 #endif
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
+}
+static NEO_AINLINE astref_t *astpool_resolvelist(astpool_t *self, listref_t ref) {
+    neo_dassert(self);
+    neo_assert(astpool_isvalidlistref(self, ref));
+    return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 
 #ifdef NEO_EXTENSION_HAS_GRAPHVIZ

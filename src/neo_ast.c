@@ -152,27 +152,32 @@ static const char *const block_names[BLOCKSCOPE__COUNT] = {
     "(BLK) ARGLIST"
 };
 
-void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) {
-    neo_dassert(pool && block);
+void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
+    neo_dassert(pool && self);
     if (neo_unlikely(astref_isnull(node))) {
         return;
-    } else if (!block->cap) { /* No nodes yet, so allocate. */
-        block->cap=1<<5;
-        block->nodes = neo_mempool_alloc(&pool->list_pool, block->cap*sizeof(*block->nodes));
-    } else if (block->len >= block->cap) { /* Reallocate if necessary. */
-        size_t oldlen = block->cap;
-        block->cap<<=2;
-        block->nodes = neo_mempool_realloc(&pool->list_pool, block->nodes, oldlen*sizeof(*block->nodes), block->cap*sizeof(*block->nodes)); /* Wasting a lot of memory here, because we can't individually free the previous block. :/ */
+    } else if (!self->cap) { /* No nodes yet, so allocate. */
+        self->cap=1 << 5;
+        self->nodes = astpool_alloclist(pool, NULL, self->cap);
+    } else if (self->len >= self->cap) { /* Reallocate if necessary. */
+        size_t oldlen = self->cap;
+        const astref_t *old = astpool_resolvelist(pool, self->nodes);
+        self->cap<<=2;
+        listref_t newref = astpool_alloclist(pool, NULL, self->cap);
+        astref_t *new = astpool_resolvelist(pool, newref);
+        memcpy(new, old, oldlen*sizeof(*new));
+        self->nodes = newref;
     }
-    block->nodes[block->len++] = node;
+    astref_t *reflist = astpool_resolvelist(pool, self->nodes);
+    reflist[self->len++] = node;
 #if NEO_DBG
     const astnode_t *pnode = astpool_resolve(pool, node);
-    uint64_t mask = block_valid_masks[block->blktype];
+    uint64_t mask = block_valid_masks[self->blktype];
     uint64_t node_mask = astmask(pnode->type);
     if (neo_unlikely((mask & node_mask) == 0)) {
-        neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[pnode->type], block_names[block->blktype]);
+        neo_error("Block node type '%s' is not allowed in '%s' self kind.", astnode_names[pnode->type], block_names[self->blktype]);
     }
-    neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
+    neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this self kind"); /* Check that the node type is allowed in this self type. For example, method declarations are not allowed in parameter list blocks.  */
 #endif
 }
 
@@ -220,8 +225,9 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
         } break;
         case ASTNODE_BLOCK: {
             const node_block_t *data = &root->dat.n_block;
+            const astref_t *children = astpool_resolvelist(pool, data->nodes);
             for (uint32_t i = 0; i < data->len; ++i) {
-                astnode_visit_root_impl(pool, data->nodes[i], visitor, user, c);
+                astnode_visit_root_impl(pool, children[i], visitor, user, c);
             }
         } break;
         case ASTNODE_VARIABLE: {
@@ -340,10 +346,10 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
         } return;
         case ASTNODE_BLOCK: {
             const node_block_t *data = &node->dat.n_block;
-            astverify(data->nodes != NULL, "Block nodes array is NULL");
             astverify(data->len > 0, "Block nodes array is empty");
+            const astref_t *children = astpool_resolvelist(pool, data->nodes);
             for (uint32_t i = 0; i < data->len; ++i) {
-                astref_t child = data->nodes[i];
+                astref_t child = children[i];
                 const astnode_t *child_node = verify_resolve(child);
                 uint64_t mask = block_valid_masks[data->blktype];
                 uint64_t node_mask = astmask(child_node->type);
@@ -432,15 +438,25 @@ void astnode_validate(astpool_t *pool, astref_t root) {
     astnode_visit(pool, root, &ast_validator, NULL);
 }
 
-astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
+astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) { /* TODO: Use mempool alloc. */
     neo_dassert(self);
     size_t plen = self->node_pool.len+sizeof(astnode_t);
     neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
     astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(astnode_t));
     n->type = type & 255;
     if (o) { *o = n; }
-    plen /= sizeof(astnode_t);
+    plen /= sizeof(*n);
     return (astref_t)plen;
+}
+
+listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len) { /* TODO: Use mempool alloc. */
+    neo_dassert(self);
+    size_t plen = self->list_pool.len;
+    neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
+    astref_t *n = neo_mempool_alloc(&self->list_pool, sizeof(astref_t)*len);
+    if (o) { *o = n; }
+    plen /= sizeof(*n);
+    return (listref_t)plen;
 }
 
 void astpool_init(astpool_t *self) {
@@ -669,11 +685,12 @@ static void graphviz_ast_visitor(
         } return;
         case ASTNODE_BLOCK: {
             const node_block_t *data = &node->dat.n_block;
+            const astref_t *children = astpool_resolvelist(pool, data->nodes);
             Agnode_t *nn = graph_append(node, graph, anode, id, NULL, NULL, edge);
             char buf[64];
             for (uint32_t i = 0; i < data->len; ++i) {
                 snprintf(buf, sizeof(buf), " child %" PRIu32, i+1);
-                graphviz_ast_visitor(pool, graph, nn, data->nodes[i], id, buf);
+                graphviz_ast_visitor(pool, graph, nn, children[i], id, buf);
             }
         } return;
         case ASTNODE_VARIABLE: {

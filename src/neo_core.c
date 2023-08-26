@@ -104,7 +104,17 @@ void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
     neo_dassert(align && align >= sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
-    return (void *)(((uintptr_t)p+off)&~(align-1));
+    return (void *)(((uintptr_t)p+off) & ~(align-1));
+}
+
+size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
+    neo_dassert(self && len);
+    size_t idx = self->len+base*len;
+    neo_assert(idx <= lim && "Pool index limit reached");
+    void *p = neo_mempool_alloc(self, len);
+    if (pp) { *pp = p; }
+    idx /= len;
+    return idx;
 }
 
 void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen) {

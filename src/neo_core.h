@@ -480,6 +480,7 @@ typedef struct neo_mempool_t {
 extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *self, size_t cap);
 extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *self, size_t len);
 extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align);
+extern NEO_EXPORT size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp);
 extern NEO_EXPORT void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen);
 extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *self);
 
