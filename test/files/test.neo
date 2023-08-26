@@ -25,11 +25,11 @@ class Test
 
     # This method computes the XOR of all integers in the range [start, end]
     # and counts the number of set bits in the result.
-    method xorAndCountBitsInRange(start: int, end: int) -> int
+    method xorAndCountBitsInRange(start: int, stop: int) -> int
         let xorResult: int = 0
 
         let i: int = start
-        while i <= end do
+        while i <= stop do
             xorResult = xorResult ^ i
             i = i + 1
         end
@@ -86,7 +86,8 @@ class Test
             while currentNumber != 1 do
                 if currentNumber % 2 == 0 then
                     currentNumber = currentNumber / 2
-                else
+                end
+                if not (currentNumber % 2 == 0) then
                     currentNumber = 3 * currentNumber + 1
                 end
 
