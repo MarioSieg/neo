@@ -23,6 +23,7 @@ static const uint8_t tok_lens[TOK__COUNT] = { tkdef(_, NEO_SEP) };
 const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
     TOK_LI_TRUE,
     TOK_LI_FALSE,
+    TOK_LI_SELF,
     TOK_OP_LOG_AND,
     TOK_OP_LOG_OR,
     TOK_OP_LOG_NOT

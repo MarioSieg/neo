@@ -82,21 +82,21 @@ static NEO_NODISCARD astref_t parser_drain_whole_module(parser_t *self);
 /* Parse rule table. */
 static const parse_rule_t parse_rules_lut[] = {
     /* KW_* = Keyword tokens. */
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
-    {NULL, NULL, PREC_NONE},
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_METHOD, "method" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_LET, "let" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_NEW, "new" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_END, "end" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_THEN, "then" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_IF, "if" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_ELSE, "else" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_RETURN, "return" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_CLASS, "class" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_MODULE, "module" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_BREAK, "break" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_CONTINUE, "continue" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_WHILE, "while" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_STATIC, "static" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_DO, "do" */
 
     /* literals */
     {&expr_literal_identifier, &expr_casting_infix, PREC_PRIMARY},
@@ -105,7 +105,8 @@ static const parse_rule_t parse_rules_lut[] = {
     {&expr_literal_string, &expr_casting_infix, PREC_PRIMARY},
     {&expr_literal_char, &expr_casting_infix, PREC_PRIMARY},
     {&expr_literal_scalar, &expr_casting_infix, PREC_PRIMARY},
-    {&expr_literal_string, &expr_casting_infix, PREC_PRIMARY},
+    {&expr_literal_scalar, &expr_casting_infix, PREC_PRIMARY},
+    {&expr_literal_scalar, &expr_casting_infix, PREC_PRIMARY},
 
     /* SU_* = Structure tokens. */
     {&expr_paren_grouping, &expr_function_call, PREC_CALL},
@@ -261,13 +262,14 @@ static binary_op_type_t expr_literal_char(parser_t *self, astref_t *node) {
     return EXPR_OP_DONE; /* TODO. */
 }
 
+/* Handles literals of type: int, float, true, false, self. */
 static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     switch (self->prev.type) {
         case TOK_LI_INT: {
             srcspan_t lexeme = self->prev.lexeme;
             neo_int_t x = 0;
-            if (neo_unlikely(!parse_int((const char *)lexeme.p, lexeme.len, &x))) {
+            if (neo_unlikely(!parse_int((const char *)lexeme.p, lexeme.len, self->prev.radix, &x))) {
                 error(self, &self->prev, "Invalid int literal");
                 return EXPR_OP_DONE;
             }
@@ -281,6 +283,15 @@ static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
                 return EXPR_OP_DONE;
             }
             *node = astnode_new_float(&self->pool, x);
+        } break;
+        case TOK_LI_TRUE: {
+            *node = astnode_new_bool(&self->pool, NEO_TRUE);
+        } break;
+        case TOK_LI_FALSE: {
+            *node = astnode_new_bool(&self->pool, NEO_FALSE);
+        } break;
+        case TOK_LI_SELF: {
+            *node = astnode_new_self(&self->pool);
         } break;
         default: {
             error(self, &self->prev, "Literal type not yet implemented");
@@ -313,13 +324,14 @@ static binary_op_type_t expr_casting_infix(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     advance(self);
     switch (self->prev.type) {
-        case TOK_LI_IDENT: expr_literal_identifier(self, node); break;
         case TOK_LI_INT:
         case TOK_LI_FLOAT:
         case TOK_LI_TRUE:
-        case TOK_LI_FALSE: expr_literal_scalar(self, node); break;
+        case TOK_LI_FALSE:
+        case TOK_LI_SELF: expr_literal_scalar(self, node); break;
         case TOK_LI_CHAR: expr_literal_char(self, node); break;
         case TOK_LI_STRING: expr_literal_string(self, node); break;
+        case TOK_LI_IDENT: expr_literal_identifier(self, node); break;
         default:
             error(self, &self->prev, "Invalid infix expression");
     }
@@ -328,29 +340,12 @@ static binary_op_type_t expr_casting_infix(parser_t *self, astref_t *node) {
 
 static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
+    unary_op_type_t opcode = UNOP__COUNT;
     switch (self->prev.type) {
-        case TOK_OP_ADD: {
-            astref_t expr = ASTREF_NULL;
-            expr_eval_precedence(self, &expr, PREC_TERM);
-            *node = astnode_new_unary_op(&self->pool, &(node_unary_op_t) {
-                .opcode = UNOP_PLUS,
-                .child_expr = expr
-            });
-        } break;
-        case TOK_OP_SUB: {
-            astref_t expr = ASTREF_NULL;
-            expr_eval_precedence(self, &expr, PREC_TERM);
-            *node = astnode_new_unary_op(&self->pool, &(node_unary_op_t) {
-                .opcode = UNOP_MINUS,
-                .child_expr = expr
-            });
-        } break;
-        case TOK_OP_BIT_COMPL: {
-            error(self, &self->prev, "Logical unary not is not yet implemented");
-        } break;
-        case TOK_OP_LOG_NOT: {
-            error(self, &self->prev, "Logical unary not is not yet implemented");
-        } break;
+        case TOK_OP_ADD: opcode = UNOP_PLUS; break;
+        case TOK_OP_SUB: opcode = UNOP_MINUS; break;
+        case TOK_OP_BIT_COMPL: opcode = UNOP_BIT_COMPL; break;
+        case TOK_OP_LOG_NOT: opcode = UNOP_LOG_NOT; break;
         case TOK_OP_INC: {
             error(self, &self->prev, "Unary increment is not yet implemented");
         } break;
@@ -359,7 +354,14 @@ static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
         } break;
         default:
             error(self, &self->prev, "Invalid unary operator");
+            return EXPR_OP_DONE;
     }
+    astref_t expr = ASTREF_NULL;
+    expr_eval_precedence(self, &expr, PREC_TERM);
+    *node = astnode_new_unary_op(&self->pool, &(node_unary_op_t) {
+        .opcode = opcode,
+        .child_expr = expr
+    });
     return EXPR_OP_DONE;
 }
 
@@ -607,7 +609,7 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 ** Parse local block statement. (Level 3+ statement.)
 ** Local statements are method bodies, if-bodies, while-bodies etc. but not class or module bodies.
 */
-static astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
+static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
     neo_dassert(self);
     node_block_t block = {.blktype = BLOCKSCOPE_LOCAL};
     for (int depth = 0; isok(self) && !match(self, TOK_KW_END); ++depth) {
@@ -646,7 +648,7 @@ static astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
 ** Parse class body statement. (Level 2 statement.)
 ** Class body statements are methods, class variables, constructors etc..
 */
-static astref_t parser_root_stmt_class(parser_t *self) {
+static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self);
     node_block_t block = {.blktype = BLOCKSCOPE_CLASS};
     for (int depth = 0; isok(self) && !match(self, TOK_KW_END); ++depth) {
@@ -671,7 +673,7 @@ static astref_t parser_root_stmt_class(parser_t *self) {
 ** Parse module body statement. (Level 3 statement.)
 ** Module level statements are classes, interfaces, enums etc..
 */
-static astref_t parser_root_stmt_module(parser_t *self, bool *skip) {
+static NEO_HOTPROC astref_t parser_root_stmt_module(parser_t *self, bool *skip) {
     neo_dassert(self && skip);
     *skip = false; /* Assume that token is not skipped. */
     bool is_static = match(self, TOK_KW_STATIC); /* Is the following class static? */
@@ -702,12 +704,12 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
     }
 }
 
-static astref_t parser_drain_whole_module(parser_t *self) {
+static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
     neo_dassert(self);
     node_block_t block = { .blktype = BLOCKSCOPE_MODULE };
     for (int depth = 0; isok(self); ++depth) {
         check_depth_lim(depth);
-        bool skip;
+        bool skip = false;
         astref_t node = parser_root_stmt_module_error_handling_wrapper(self, &skip);
         if (skip) { continue; }
         if (neo_unlikely(astref_isnull(node))) { break; }
@@ -755,10 +757,9 @@ void parser_setup_source(parser_t *self, const source_t *src) {
     advance(self); /* Consume first token. */
 }
 
-bool parse_int(const char *str, size_t len, neo_int_t *o) {
+bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
     neo_int_t r = 0;
     neo_int_t sign = 1;
-    int radix = 10;
     const char *p = str;
     const char *pe = p+len;
     if (neo_unlikely(!len || !*p)) { *o = 0; return false; }
@@ -767,22 +768,9 @@ bool parse_int(const char *str, size_t len, neo_int_t *o) {
     if (*p=='+' || *p=='-') { sign = *p++ == '-' ? -1 : 1; }
     if (neo_unlikely(p == str+len)) { *o = 0; return false; } /* invalid number */
     if (neo_unlikely(*p=='_')) { *o = 0; return false; } /* _ prefix isn't allowed */
-    if (len >= 2 && neo_unlikely(*p == '0')) {
-        if ((tolower(p[1])) == 'x') { /* hex */
-            radix = 16;
-            p += 2;
-        } else if (tolower(p[1]) == 'b') { /* bin */
-            radix = 2;
-            p += 2;
-        } else if (tolower(p[1]) == 'c') { /* oct */
-            radix = 8;
-            p += 2;
-        }
-        if (neo_unlikely(p == str+len)) { *o = 0; return false; } /* invalid number */
-    }
     switch (radix) {
         default:
-        case 10: { /* dec */
+        case RADIX_DEC: { /* dec */
             for (; neo_likely(isdigit(*p)) || neo_unlikely(*p=='_'); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = *p - '0';
@@ -793,7 +781,7 @@ bool parse_int(const char *str, size_t len, neo_int_t *o) {
                 r = r*10+digit*sign;
             }
         } break;
-        case 16: { /* hex */
+        case RADIX_HEX: { /* hex */
             for (; neo_likely(p < pe) && (neo_likely(isxdigit(*p)) || neo_unlikely(*p=='_')); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = (*p&15) + (*p >= 'A' ? 9 : 0);
@@ -804,7 +792,7 @@ bool parse_int(const char *str, size_t len, neo_int_t *o) {
                 r = (r<<4)+digit*sign;
             }
         } break;
-        case 2: { /* bin */
+        case RADIX_BIN: { /* bin */
             unsigned bits = 0;
             neo_uint_t v = 0;
             for (; neo_likely(p < pe) && *p; ++p) {
@@ -822,7 +810,7 @@ bool parse_int(const char *str, size_t len, neo_int_t *o) {
             r = (neo_int_t)v;
             r *= sign;
         } break;
-        case 8: { /* oct */
+        case RADIX_OCT: { /* oct */
             for (; neo_likely(p < pe) && (neo_likely(*p >= '0' && *p <= '7') || neo_unlikely(*p=='_')); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = *p - '0';

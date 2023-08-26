@@ -173,6 +173,7 @@ generic_lexer_test(colon, ":", TOK_PU_COLON)
 generic_lexer_test(at, "@", TOK_PU_AT)
 generic_lexer_test(arrow, "->", TOK_PU_ARROW)
 generic_lexer_test(newline, "\n", TOK_PU_NEWLINE)
+generic_lexer_test(self, "self", TOK_LI_SELF)
 
 generic_lexer_test(dot, ".", TOK_OP_DOT)
 generic_lexer_test(assign, "=", TOK_OP_ASSIGN)

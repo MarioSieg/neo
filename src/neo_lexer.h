@@ -40,7 +40,8 @@ typedef struct source_t source_t;
     _(TOK_LI_STRING, "<string>")__  \
     _(TOK_LI_CHAR, "<char>")__\
     _(TOK_LI_TRUE, "true")__\
-    _(TOK_LI_FALSE, "false")__\
+    _(TOK_LI_FALSE, "false")__ \
+    _(TOK_LI_SELF, "self")__\
     /* Punctuation */\
     _(TOK_PU_L_PAREN, "(")__\
     _(TOK_PU_R_PAREN, ")")__\
@@ -163,7 +164,7 @@ typedef struct lexer_t {
     uint32_t col;
 } lexer_t;
 
-#define KW_MAPPING_CUSTOM_N 5 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not */
+#define KW_MAPPING_CUSTOM_N 6 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not, self. */
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
 extern NEO_EXPORT void lexer_init(lexer_t *self);

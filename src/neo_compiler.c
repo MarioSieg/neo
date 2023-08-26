@@ -70,6 +70,7 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     self->filename = neo_strdup2(path);
     self->src = buf;
     self->len = size+1; /* +1 for final newline. */
+    self->is_file = true;
     if (err_info) {
         err_info->error = SRCLOAD_OK;
     }
@@ -84,6 +85,7 @@ const source_t *source_from_memory(const uint8_t *path, const uint8_t *src) {
     self->filename = path;
     self->src = src;
     self->len = strlen((const char *)src);
+    self->is_file = false;
     return self;
 }
 
@@ -162,10 +164,11 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     if (neo_unlikely(self->errors.len)) {
         neo_error("Compilation failed with %"PRIu32" errors.", self->errors.len);
         errvec_print(&self->errors, stderr);
+        return false;
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
-        printf("Compiled %s in %.3fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
+        printf("Compiled %s in %.03fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
     }
     return true;
 }

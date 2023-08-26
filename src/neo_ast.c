@@ -102,6 +102,7 @@ impl_ast_node_literal_factory(int, INT_LIT)
 impl_ast_node_literal_factory(float, FLOAT_LIT)
 impl_ast_node_literal_factory(char, CHAR_LIT)
 impl_ast_node_literal_factory(bool, BOOL_LIT)
+impl_ast_node_hull_factory(self, SELF_LIT)
 
 astref_t astnode_new_string(astpool_t *pool, srcspan_t value) {
     neo_dassert(pool);
@@ -143,7 +144,6 @@ static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table con
 #define _(_1, _2) [_1] = _2
 const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
 #undef _
-#if NEO_DBG
 static const char *const block_names[BLOCKSCOPE__COUNT] = {
     "(BLK) MODULE",
     "(BLK) CLASS",
@@ -151,7 +151,6 @@ static const char *const block_names[BLOCKSCOPE__COUNT] = {
     "(BLK) PARAMLIST",
     "(BLK) ARGLIST"
 };
-#endif
 
 void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) {
     neo_dassert(pool && block);
@@ -195,7 +194,8 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
         case ASTNODE_CHAR_LIT:
         case ASTNODE_BOOL_LIT:
         case ASTNODE_STRING_LIT:
-        case ASTNODE_IDENT_LIT: {
+        case ASTNODE_IDENT_LIT:
+        case ASTNODE_SELF_LIT: {
             neo_dassert(!!(ASTNODE_LEAF_MASK & astmask(root->type)));
         } break; /* Visitor invocation is redundant. */
         case ASTNODE_GROUP: {
@@ -300,6 +300,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
         case ASTNODE_BOOL_LIT: /* No validation needed. */
         case ASTNODE_STRING_LIT: /* No validation needed. */
         case ASTNODE_IDENT_LIT: /* No validation needed. */
+        case ASTNODE_SELF_LIT:
             return;
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
@@ -444,8 +445,8 @@ astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) {
 
 void astpool_init(astpool_t *self) {
     neo_dassert(self);
-    neo_mempool_init(&self->node_pool, sizeof(astnode_t) * 8192);
-    neo_mempool_init(&self->list_pool, sizeof(astref_t) * 8192);
+    neo_mempool_init(&self->node_pool, sizeof(astnode_t)*(1<<10));
+    neo_mempool_init(&self->list_pool, sizeof(astref_t)*(1<<10));
 }
 
 void astpool_free(astpool_t *self) {
@@ -458,7 +459,7 @@ const char *unary_op_lexeme(unary_op_type_t op) {
     switch (op) {
         case UNOP_PLUS: return tok_lexemes[TOK_OP_ADD];
         case UNOP_MINUS: return tok_lexemes[TOK_OP_SUB];
-        case UNOP_NOT: return tok_lexemes[TOK_OP_LOG_NOT];
+        case UNOP_LOG_NOT: return tok_lexemes[TOK_OP_LOG_NOT];
         case UNOP_BIT_COMPL: return tok_lexemes[TOK_OP_BIT_COMPL];
         case UNOP_INC: return tok_lexemes[TOK_OP_INC];
         case UNOP_DEC: return tok_lexemes[TOK_OP_DEC];
@@ -608,7 +609,7 @@ static void graphviz_ast_visitor(
         case ASTNODE_INT_LIT: {
             const node_int_literal_t *data = &node->dat.n_int_lit;
             char buf[64];
-            snprintf(buf, sizeof(buf), "%" PRIi64, data->value);
+            snprintf(buf, sizeof(buf), data->value > 0xffff ? "0x%" PRIx64 : "%" PRIi64, data->value);
             graph_append(node, graph, anode, id, buf, NULL, edge);
         } return;
         case ASTNODE_FLOAT_LIT: {
@@ -638,6 +639,9 @@ static void graphviz_ast_visitor(
             char buf[8192];
             snprintf(buf, sizeof(buf), "%.*s", data->span.len, data->span.p);
             graph_append(node, graph, anode, id, buf, NULL, edge);
+        } return;
+        case ASTNODE_SELF_LIT: {
+            graph_append(node, graph, anode, id, NULL, NULL, edge);
         } return;
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
@@ -716,7 +720,15 @@ static void graphviz_ast_visitor(
 static void graph_submit(astpool_t *pool, Agraph_t *g, astref_t node) {
     neo_dassert(pool && g);
     char statsbuf[512];
-    int off = snprintf(statsbuf, sizeof(statsbuf), "Abstract Syntax Tree\nNodes: %zu\nPoolCap: %zu", pool->node_pool.len/sizeof(astnode_t), pool->node_pool.cap/sizeof(astnode_t));
+    int off = snprintf(
+        statsbuf,
+        sizeof(statsbuf),
+        "Abstract Syntax Tree\nNodes: %zu\nPoolCap: %zu\nAllocated: %.02fKiB\nAllocs: %zu",
+        pool->node_pool.len/sizeof(astnode_t),
+        pool->node_pool.cap/sizeof(astnode_t),
+        (double)(pool->node_pool.cap+pool->list_pool.cap)/1024.0,
+        pool->node_pool.num_allocs+pool->list_pool.num_allocs
+    );
     time_t timer = time(NULL);
     struct tm tm = {0};
 #if NEO_COM_MSVC

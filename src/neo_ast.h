@@ -78,7 +78,7 @@ typedef struct node_string_literal_t {
 typedef enum unary_op_type_t {
     UNOP_PLUS, /* +1. */
     UNOP_MINUS, /* -1. */
-    UNOP_NOT, /* not true. */
+    UNOP_LOG_NOT, /* not true. */
     UNOP_BIT_COMPL, /* ~1. */
     UNOP_INC, /* ++x. */
     UNOP_DEC, /* --x. */
@@ -264,6 +264,7 @@ typedef struct node_module_t {
     _(ASTNODE_BOOL_LIT, "BOOL")__\
     _(ASTNODE_STRING_LIT, "STRING")__ \
     _(ASTNODE_IDENT_LIT, "IDENT")__\
+    _(ASTNODE_SELF_LIT, "SELF")__\
     _(ASTNODE_GROUP, "GROUP")__\
     _(ASTNODE_UNARY_OP, "UNARY OP")__\
     _(ASTNODE_BINARY_OP, "BINARY OP")__\
@@ -284,8 +285,8 @@ typedef enum astnode_type_t {
 #undef _
 neo_static_assert(ASTNODE__COUNT <= 63);
 #define astmask(t) (1ull<<((t)&63))
-#define ASTNODE_HULL_MASK (astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE))  /* Hulls are nodes which have no data associated with them. E.g. break has no children or data. */
-#define ASTNODE_LITERAL_MASK (astmask(ASTNODE_INT_LIT)|astmask(ASTNODE_FLOAT_LIT)|astmask(ASTNODE_CHAR_LIT)|astmask(ASTNODE_BOOL_LIT)|astmask(ASTNODE_STRING_LIT)|astmask(ASTNODE_IDENT_LIT)) /* All literal types. */
+#define ASTNODE_HULL_MASK (astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE)|astmask(ASTNODE_SELF_LIT))  /* Hulls are nodes which have no data associated with them. E.g. break has no children or data. */
+#define ASTNODE_LITERAL_MASK (astmask(ASTNODE_INT_LIT)|astmask(ASTNODE_FLOAT_LIT)|astmask(ASTNODE_CHAR_LIT)|astmask(ASTNODE_BOOL_LIT)|astmask(ASTNODE_STRING_LIT)|astmask(ASTNODE_IDENT_LIT)|astmask(ASTNODE_SELF_LIT)) /* All literal types. */
 #define ASTNODE_EXPR_MASK (ASTNODE_LITERAL_MASK|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP)) /* All expression types. */
 #define ASTNODE_LEAF_MASK (ASTNODE_HULL_MASK|ASTNODE_LITERAL_MASK) /* Leafs are nodes which have no further children. Logically, all hulls are also leafs. */
 #define ASTNODE_CONTROL_FLOW (astmask(ASTNODE_BRANCH)|astmask(ASTNODE_RETURN)|astmask(ASTNODE_LOOP)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE)) /* And also the CALL binary expression. */
@@ -317,6 +318,7 @@ struct astnode_t {
         node_loop_t n_loop;
         node_class_t n_class;
         node_module_t n_module;
+        /* ASTNODE_SELF_LIT, ASTNODE_BREAK etc.. have no data associated with them and therefore no custom node. */
     } dat;
 };
 
@@ -342,6 +344,7 @@ extern NEO_EXPORT astref_t astnode_new_branch(astpool_t *pool, const node_branch
 extern NEO_EXPORT astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node);
 extern NEO_EXPORT astref_t astnode_new_class(astpool_t *pool, const node_class_t *node);
 extern NEO_EXPORT astref_t astnode_new_module(astpool_t *pool, const node_module_t *node);
+extern NEO_EXPORT astref_t astnode_new_self(astpool_t *pool);
 
 extern NEO_EXPORT size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
 extern NEO_EXPORT void astnode_validate(astpool_t *pool, astref_t root); /* Validates AST tree data in depth-first order, panics on failure.  */
