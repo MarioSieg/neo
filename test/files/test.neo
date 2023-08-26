@@ -1,4 +1,146 @@
 class Test
+    # This method calculates the nth number in the Fibonacci sequence.
+    method fibonacci(n: int) -> int
+        let a: int = 0
+        let b: int = 1
+        let i: int = 2
+
+        if n == 0 then
+            return a
+        end
+        
+        if n == 1 then
+            return b
+        end
+
+        while i <= n do
+            let c: int = a + b
+            a = b
+            b = c
+            i = i + 1
+        end
+
+        return b
+    end
+
+    # This method computes the XOR of all integers in the range [start, end]
+    # and counts the number of set bits in the result.
+    method xorAndCountBitsInRange(start: int, end: int) -> int
+        let xorResult: int = 0
+
+        let i: int = start
+        while i <= end do
+            xorResult = xorResult ^ i
+            i = i + 1
+        end
+
+        let count: int = 0
+        let mask: int = 1
+
+        let j: int = 0
+        while j < 32 do  # Assuming a 32-bit integer
+            if (xorResult & mask) != 0 then
+                count = count + 1
+            end
+            mask = mask << 1
+            j = j + 1
+        end
+
+        return count
+    end
+
+    # This method calculates the sum of all Pythagorean triplets (a, b, c)
+    # where a, b, and c are integers less than or equal to a given limit.
+    method sumOfPythagoreanTriplets(limit: int) -> int
+        let sum: int = 0
+
+        let a: int = 1
+        while a <= limit do
+            let b: int = a
+            while b <= limit do
+                let c: int = b
+                while c <= limit do
+                    # Check if (a, b, c) is a Pythagorean triplet
+                    if a * a + b * b == c * c then
+                        sum = sum + a + b + c
+                    end
+                    c = c + 1
+                end
+                b = b + 1
+            end
+            a = a + 1
+        end
+
+        return sum
+    end
+
+    # This method generates the first n terms of the Collatz sequence for a given starting number.
+    method collatzSequence(n: int) -> int
+        let sequence: int = 0
+        let i: int = 1
+
+        while i <= n do
+            let currentNumber: int = i
+            let terms: int = 0
+
+            while currentNumber != 1 do
+                if currentNumber % 2 == 0 then
+                    currentNumber = currentNumber / 2
+                else
+                    currentNumber = 3 * currentNumber + 1
+                end
+
+                terms = terms + 1
+            end
+
+            sequence = sequence + terms
+            i = i + 1
+        end
+
+        return sequence
+    end
+
+    # This method calculates the sum of squares of integers from 1 to n.
+    method sumOfSquares(n: int) -> int
+        let sum: int = 0
+        let i: int = 1
+
+        while i <= n do
+            let square: int = i * i
+            sum = sum + square
+            i = i + 1
+        end
+
+        return sum
+    end
+
+    # This method calculates the sum of prime numbers up to a given limit.
+    method sumOfPrimes(limit: int) -> int
+        let sum: int = 0
+        let candidate: int = 2
+
+        while candidate <= limit do
+            let isPrime: bool = true
+            let divisor: int = 2
+
+            while divisor * divisor <= candidate do
+                if candidate % divisor == 0 then
+                    isPrime = false
+                    break
+                end
+                divisor = divisor + 1
+            end
+
+            if isPrime then
+                sum = sum + candidate
+            end
+
+            candidate = candidate + 1
+        end
+
+        return sum
+    end
+
     static method fib(lim: int) -> int
         if lim == 0 then return 0 end
         let a: int = 0
@@ -65,5 +207,18 @@ class Test
         let i: int = self
         i = (i & 0x00ff00ff00ff00ff) << 8 | (i >>>> 8) & 0x00ff00ff00ff00ff
         return (i << 48) | ((i & 0xffff0000) << 16) | ((i >>>> 16) & 0xffff0000) | (i >>>> 48)
+    end
+
+      # This method calculates the factorial of a given positive integer.
+    method factorial(n: int) -> int
+        let result: int = 1
+        let i: int = 1
+        
+        while i <= n do
+            result = result * i
+            i = i + 1
+        end
+        
+        return result
     end
 end
