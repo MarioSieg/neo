@@ -130,13 +130,14 @@ astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astre
     return ref;
 }
 
-static const uint64_t NEO_UNUSED block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
+static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCKSCOPE_LOCAL */
     |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCKSCOPE_LOCAL */
     |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCKSCOPE_LOCAL */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE) /* BLOCKSCOPE_PARAMLIST */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_PARAMLIST */
+    ASTNODE_EXPR_MASK /* BLOCKSCOPE_ARGLIST */
 };
 
 #define _(_1, _2) [_1] = _2
@@ -144,10 +145,11 @@ const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
 #undef _
 #if NEO_DBG
 static const char *const block_names[BLOCKSCOPE__COUNT] = {
-    "module",
-    "class",
-    "local",
-    "param-list"
+    "(BLK) MODULE",
+    "(BLK) CLASS",
+    "(BLK) LOCAL",
+    "(BLK) PARAMLIST",
+    "(BLK) ARGLIST"
 };
 #endif
 
@@ -156,7 +158,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *block, astref_t node) 
     if (neo_unlikely(astref_isnull(node))) {
         return;
     } else if (!block->cap) { /* No nodes yet, so allocate. */
-        block->cap=1<<6;
+        block->cap=1<<5;
         block->nodes = neo_mempool_alloc(&pool->list_pool, block->cap*sizeof(*block->nodes));
     } else if (block->len >= block->cap) { /* Reallocate if necessary. */
         size_t oldlen = block->cap;
@@ -239,7 +241,6 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
             astnode_visit_root_impl(pool, data->false_block, visitor, user, c);
         } break;
         case ASTNODE_LOOP: {
-
             const node_loop_t *data = &root->dat.n_loop;
             astnode_visit_root_impl(pool, data->cond_expr, visitor, user, c);
             astnode_visit_root_impl(pool, data->true_block, visitor, user, c);
@@ -254,9 +255,7 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
             astnode_visit_root_impl(pool, data->ident, visitor, user, c);
             astnode_visit_root_impl(pool, data->body, visitor, user, c);
         } break;
-        default: {
-            neo_panic("Invalid node type: %d", root->type);
-        }
+        case ASTNODE__COUNT: neo_unreachable();
     }
     (*visitor)(pool, rootref, user);
 }
@@ -423,9 +422,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                 verify_block(verify_resolve(data->body), BLOCKSCOPE_MODULE);
             }
         } return;
-        default: {
-            neo_panic("Invalid node type: %d", node->type);
-        }
+        case ASTNODE__COUNT: neo_unreachable();
     }
 }
 
@@ -465,7 +462,7 @@ const char *unary_op_lexeme(unary_op_type_t op) {
         case UNOP_BIT_COMPL: return tok_lexemes[TOK_OP_BIT_COMPL];
         case UNOP_INC: return tok_lexemes[TOK_OP_INC];
         case UNOP_DEC: return tok_lexemes[TOK_OP_DEC];
-        default: return "?";
+        default: return "";
     }
 }
 
@@ -517,7 +514,8 @@ const char *binary_op_lexeme(binary_op_type_t op) {
         case BINOP_BIT_LSHR_ASSIGN: return tok_lexemes[TOK_OP_BIT_LSHR_ASSIGN];
         case BINOP_LOG_AND: return tok_lexemes[TOK_OP_LOG_AND];
         case BINOP_LOG_OR: return tok_lexemes[TOK_OP_LOG_OR];
-        default: return "?";
+        case BINOP_CALL: return "()";
+        default: return "";
     }
 }
 
@@ -529,14 +527,14 @@ static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const
     char buf[32];
     snprintf(buf, sizeof(buf), "%" PRIu32, c);
     Agnode_t *n = agnode(g, buf, 1);
-    name = name && *name ? name : astnode_names[target->type];
+    name = name && *name ? name : target->type == ASTNODE_BLOCK ? block_names[target->dat.n_block.blktype] : astnode_names[target->type];
     agsafeset(n, "label", (char *)name, "");
     agsafeset(n, "style", "filled", ""); /* make it filled */
     agsafeset(n, "color", "transparent", ""); /* hide outline */
     if (ASTNODE_LITERAL_MASK & astmask(target->type)) {
         agsafeset(n, "fillcolor", target->type == ASTNODE_IDENT_LIT ? "lightblue" : "peachpuff", "");
     } else {
-        bool affect_cf = ASTNODE_CONTROL_FLOW & astmask(target->type); /* node affects control flow? */
+        bool affect_cf = ASTNODE_CONTROL_FLOW & astmask(target->type) || (target->type == ASTNODE_BINARY_OP && target->dat.n_binary_op.opcode == BINOP_CALL); /* node affects control flow? */
         agsafeset(n, "fillcolor", affect_cf ? "coral1" : "aquamarine1", ""); /* fill color */
     }
     return n;
@@ -551,7 +549,7 @@ static void create_symtab_node(Agraph_t *g, Agnode_t *gnode, const symtab_t *tab
     char html[(1<<14)+1];
     int o = snprintf(html, sizeof(html), "<table>\n");
     for (uint32_t i = 0; i < tab->len; ++i) {
-        o += snprintf(html+o, sizeof(html)-(size_t)o, "\t<tr><td>%.*s</td></tr>\n", tab->p[i].ident.span.len, tab->symbols[i].ident.span.needle);
+        o += snprintf(html+o, sizeof(html)-(size_t)o, "\t<tr><td>%.*s</td></tr>\n", tab->p[i].callee_ident.span.len, tab->symbols[i].callee_ident.span.needle);
     }
     snprintf(html+o, sizeof(html)-(size_t)o, "</table>");
     agsafeset(n, "label", agstrdup_html(g, html), "");
@@ -711,9 +709,7 @@ static void graphviz_ast_visitor(
             graphviz_ast_visitor(pool, graph, nn, data->ident, id, " ident");
             graphviz_ast_visitor(pool, graph, nn, data->body, id, " body");
         } return;
-        default: {
-            neo_panic("Invalid node type: %d", node->type);
-        }
+        case ASTNODE__COUNT: neo_unreachable();
     }
 }
 

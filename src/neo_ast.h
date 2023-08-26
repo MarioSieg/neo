@@ -141,6 +141,7 @@ typedef enum binary_op_type_t {
     BINOP_BIT_LSHR_ASSIGN,
     BINOP_LOG_AND,
     BINOP_LOG_OR,
+    BINOP_CALL,
     BINOP__COUNT
 } binary_op_type_t;
 neo_static_assert(BINOP__COUNT < 64);
@@ -181,10 +182,11 @@ typedef struct node_method_t {
 } node_method_t;
 
 typedef enum block_scope_t {
-    BLOCKSCOPE_MODULE,       /* Module (per-file). */
-    BLOCKSCOPE_CLASS,        /* Class body. */
-    BLOCKSCOPE_LOCAL,        /* Method or statement body. */
-    BLOCKSCOPE_PARAMLIST,    /* Method parameter list. */
+    BLOCKSCOPE_MODULE,          /* Module (per-file). */
+    BLOCKSCOPE_CLASS,           /* Class body. */
+    BLOCKSCOPE_LOCAL,           /* Method or statement body. */
+    BLOCKSCOPE_PARAMLIST,       /* Method parameter list. */
+    BLOCKSCOPE_ARGLIST,         /* Method argument expr list. */
     BLOCKSCOPE__COUNT
 } block_scope_t;
 
@@ -222,7 +224,7 @@ typedef enum variable_scope_t {
 
 typedef struct node_variable_t {
     astref_decl(req) var_scope : 8; /* Variable type. */
-    astref_decl(req) ident;      /* Required variable ident. */
+    astref_decl(req) ident;      /* Required variable callee_ident. */
     astref_decl(req) type;       /* Required variable type. */
     astref_decl(req) init_expr;  /* Required variable initializer. */
 } node_variable_t;
@@ -284,9 +286,9 @@ neo_static_assert(ASTNODE__COUNT <= 63);
 #define astmask(t) (1ull<<((t)&63))
 #define ASTNODE_HULL_MASK (astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE))  /* Hulls are nodes which have no data associated with them. E.g. break has no children or data. */
 #define ASTNODE_LITERAL_MASK (astmask(ASTNODE_INT_LIT)|astmask(ASTNODE_FLOAT_LIT)|astmask(ASTNODE_CHAR_LIT)|astmask(ASTNODE_BOOL_LIT)|astmask(ASTNODE_STRING_LIT)|astmask(ASTNODE_IDENT_LIT)) /* All literal types. */
-#define ASTNODE_EXPR_MASK (ASTNODE_LITERAL_MASK|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|(ASTNODE_GROUP)) /* All expression types. */
+#define ASTNODE_EXPR_MASK (ASTNODE_LITERAL_MASK|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP)) /* All expression types. */
 #define ASTNODE_LEAF_MASK (ASTNODE_HULL_MASK|ASTNODE_LITERAL_MASK) /* Leafs are nodes which have no further children. Logically, all hulls are also leafs. */
-#define ASTNODE_CONTROL_FLOW (astmask(ASTNODE_BRANCH)|astmask(ASTNODE_RETURN)|astmask(ASTNODE_LOOP)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE))
+#define ASTNODE_CONTROL_FLOW (astmask(ASTNODE_BRANCH)|astmask(ASTNODE_RETURN)|astmask(ASTNODE_LOOP)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE)) /* And also the CALL binary expression. */
 neo_static_assert(ASTNODE_HULL_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_LITERAL_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_EXPR_MASK <= UINT64_MAX);

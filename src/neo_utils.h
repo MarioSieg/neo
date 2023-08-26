@@ -41,6 +41,8 @@ typedef struct error_vector_t {
 #define errvec_isempty(self) (!!((self).len))
 extern NEO_EXPORT NEO_COLDPROC void errvec_init(error_vector_t *self);
 extern NEO_EXPORT NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t* error);
+extern NEO_EXPORT NEO_COLDPROC void errvec_print(const error_vector_t *self, FILE *f);
+extern NEO_EXPORT NEO_COLDPROC void errvec_clear(error_vector_t *self);
 extern NEO_EXPORT NEO_COLDPROC void errvec_free(error_vector_t *self);
 
 #ifdef __cplusplus

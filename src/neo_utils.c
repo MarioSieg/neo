@@ -79,3 +79,20 @@ NEO_COLDPROC void errvec_free(error_vector_t *self) {
     }
     neo_memalloc(self->p, 0); /* Free error list. */
 }
+
+void errvec_print(const error_vector_t *self, FILE *f) {
+    neo_dassert(self && f);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        const compile_error_t *e = self->p[i];
+        neo_error("%s:%"PRIu32":%"PRIu32": %s", e->file, e->line, e->col, e->msg);
+    }
+}
+
+void errvec_clear(error_vector_t *self) {
+    neo_dassert(self);
+    for (uint32_t i = 0; i < self->len; ++i) { /* Free individual errors. */
+        comerror_free(self->p[i]);
+        self->p[i] = NULL;
+    }
+    self->len = 0;
+}

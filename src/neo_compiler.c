@@ -134,9 +134,11 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     if (self->pre_compile_callback) {
         (*self->pre_compile_callback)(src, self->flags, user);
     }
+    errvec_clear(&self->errors);
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
     self->ast = parser_drain(&self->parser);
+   // astnode_validate(&self->parser.pool, self->ast);
     neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
     if (self->post_compile_callback) {
         (*self->post_compile_callback)(src, self->flags, user);
@@ -156,6 +158,10 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
 #else
         neo_error("Failed to render AST, Graphviz extension is not enabled.");
 #endif
+    }
+    if (neo_unlikely(self->errors.len)) {
+        neo_error("Compilation failed with %"PRIu32" errors.", self->errors.len);
+        errvec_print(&self->errors, stderr);
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {

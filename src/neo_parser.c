@@ -58,6 +58,7 @@ static binary_op_type_t expr_dec_infix(parser_t *self, astref_t *node);
 static binary_op_type_t expr_casting_infix(parser_t *self, astref_t *node);
 static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node);
 static binary_op_type_t expr_binary_op(parser_t *self, astref_t *node);
+static binary_op_type_t expr_function_call(parser_t *self, astref_t *node);
 static void expr_eval_precedence(parser_t *self, astref_t *node, precedence_t rule);
 
 /* Core rules. */
@@ -107,7 +108,7 @@ static const parse_rule_t parse_rules_lut[] = {
     {&expr_literal_string, &expr_casting_infix, PREC_PRIMARY},
 
     /* SU_* = Structure tokens. */
-    {&expr_paren_grouping, NULL, PREC_CALL},
+    {&expr_paren_grouping, &expr_function_call, PREC_CALL},
     {NULL, NULL, PREC_NONE},
     {NULL, NULL, PREC_NONE},
     {NULL, NULL, PREC_NONE},
@@ -418,6 +419,31 @@ static binary_op_type_t expr_binary_op(parser_t *self, astref_t *node) {
             error(self, &self->prev, "Invalid binary operator");
             return EXPR_OP_DONE;
     }
+}
+
+static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
+    neo_dassert(self && node);
+    advance(self); /* Eat LPAREN. */
+    if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
+        if (!match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
+            node_block_t arguments = {.blktype = BLOCKSCOPE_ARGLIST};
+            do { /* Parse arguments. */
+                astref_t arg = ASTREF_NULL;
+                expr_eval_precedence(self, &arg, PREC_TERNARY);
+                if (neo_unlikely(astref_isnull(arg))) {
+                    error(self, &self->prev, "Invalid argument in function call");
+                    return EXPR_OP_DONE;
+                }
+                node_block_push_child(&self->pool, &arguments, arg);
+            } while (match(self, TOK_PU_COMMA));
+            consume(self, TOK_PU_R_PAREN, "Expected ')'");
+            *node = astnode_new_block(&self->pool, &arguments);
+        }
+        return BINOP_CALL;
+    } else {
+        error(self, &self->prev, "Invalid token in expression");
+    }
+    return EXPR_OP_DONE;
 }
 
 static void expr_eval_precedence(parser_t *self, astref_t *node, precedence_t rule) {

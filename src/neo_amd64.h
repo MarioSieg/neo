@@ -8,12 +8,16 @@
     #define USE_GCC_GET_CPUID
 #endif
 
+#define VEX_SUPPORT /* Enable AVX VEX (Vector Extensions) prefix encoding. */
+#define EVEX_SUPPORT /* Enable AVX512-F EVEX (Enhanced Vector Extensions) prefix encoding. */
+
 #if NEO_COM_MSVC
 #   include <intrin.h>
 #elif defined(HAVE_GCC_GET_CPUID) && defined(USE_GCC_GET_CPUID)
 #   include <cpuid.h>
 #endif
 
+/* Contains flags of all detected CPU features. */
 typedef enum extended_isa_t {
     AMD64ISA_DEFAULT = 0,
     AMD64ISA_AVX2 = 1<<0,
@@ -54,6 +58,7 @@ typedef enum extended_isa_t {
 #define XCR0_AVX512 (7ull<<5) /* 512-bit %zmm* save/restore */
 
 static void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) { /* Query CPUID. */
+    neo_dassert(eax && ebx && ecx && edx);
 #if NEO_COM_MSVC
     int cpu_info[4];
     __cpuidex(cpu_info, *eax, *ecx);
@@ -84,6 +89,7 @@ static inline uint64_t xgetbv() { /* Query extended control register value. */
 #endif
 }
 
+/* Detect all supported CPU extension on host. */
 static extended_isa_t detect_cpu_isa() {
     uint32_t eax;
     uint32_t ebx = 0;
@@ -163,6 +169,7 @@ enum { XM_INDIRECT, XM_SIGNED_DISP8, XN_SIGNED_DISP32, XM_DIRECT }; /* MODRM add
 #define sse_packps(o) ((uint32_t)(0xfe00000fu|((0x##o##u&255)<<8)))  /*    0f = packed single prec, 0xfe magic => no opcode prefix required */
 #define sse_packss(o) ((uint32_t)(0x00000ff3u|((0x##o##u&255)<<16))) /* f3 0f = scalar single prec */
 
+/* Baseline SSE, SSE2 instructions. AVX and AVX-512 support is planned. */
 typedef enum sse_opcode_t {
     XO_MOVSD = sse_packsd(10), XO_MOVAPD = sse_packpd(28), XO_MOVUPD = sse_packpd(10),
     XO_ADDSD = sse_packsd(58), XO_ADDPD = sse_packpd(58),
@@ -173,12 +180,13 @@ typedef enum sse_opcode_t {
     XO_MAXSD = sse_packsd(5f), XO_MAXPD = sse_packpd(5f),
 } sse_opcode_t;
 
+/* Scalar opcode instructions. Utilities and integer instructions. */
 typedef enum opcode_t {
     XI_INT3 = 0xcc, XI_NOP = 0x90, XI_RET = 0xc3,
     XI_CALL = 0xe8, XI_JMP = 0xe9
 } opcode_t;
 
-typedef enum coco_t { /* Condition codes. */
+typedef enum coco_t { /* Branch condition codes. */
     COCO_EQ = 0,  COCO_E   = 0,  COCO_Z  = 0,   COCO_NE  = 1,  COCO_NZ  = 1,
     COCO_LT = 2,  COCO_B   = 2,  COCO_C  = 2,   COCO_NAE = 2,  COCO_LE  = 3,
     COCO_BE = 3,  COCO_NA  = 3,  COCO_GT = 4,   COCO_A   = 4,  COCO_NBE = 4,
