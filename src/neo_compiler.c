@@ -140,7 +140,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
     self->ast = parser_drain(&self->parser);
-   // astnode_validate(&self->parser.pool, self->ast);
+    astnode_validate(&self->parser.pool, self->ast);
     neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
     if (self->post_compile_callback) {
         (*self->post_compile_callback)(src, self->flags, user);

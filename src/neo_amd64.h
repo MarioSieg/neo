@@ -160,9 +160,6 @@ neo_static_assert(FID__LEN == 16);
 neo_static_assert(CALLEE_REG_MASK <= 0xffff);
 neo_static_assert(CALLEE_SAVED_REG_MASK <= 0xffff);
 
-enum { XM_INDIRECT, XM_SIGNED_DISP8, XN_SIGNED_DISP32, XM_DIRECT }; /* MODRM addressing modes. */
-#define emit_modrm(mod, ro, rx) ((mcode_t)(((mod)&3)<<6)|(((ro)&7)<<3)|((rx)&7))
-
 /* Pack VLA SSE opcodes. Little endian byte order.  */
 #define sse_packpd(o) ((uint32_t)(0x00000f66u|((0x##o##u&255)<<16))) /* 66 0f = packed double prec */
 #define sse_packsd(o) ((uint32_t)(0x00000ff2u|((0x##o##u&255)<<16))) /* f2 0f = scalar double prec */
@@ -195,3 +192,84 @@ typedef enum coco_t { /* Branch condition codes. */
     COCO_NP = 9,  COCO_PO  = 9,  COCO_O  = 10,  COCO_NO  = 11,
     COCO__LEN
 } coco_t;
+
+typedef union imm_t { /* Immediate operand. */
+    uint64_t u64;
+    int64_t i64;
+    uint32_t u32;
+    int32_t i32;
+    uint8_t u8;
+    int8_t i8;
+    double f64;
+    void *p;
+} imm_t;
+neo_static_assert(sizeof(imm_t) == 8);
+
+enum { XM_INDIRECT = 0, XM_SIGNED_DISP8, XN_SIGNED_DISP32, XM_DIRECT }; /* MODRM addressing modes. */
+enum { REX_B = 1<<0, REX_X = 1<<1, REX_R = 1<<2, REX_W = 1<<3 }; /* REX prefix bits. */
+#define pack_modrm(mod, ro, rx) ((mcode_t)(((mod)&3)<<6)|(((ro)&7)<<3)|((rx)&7))
+#define checku8(x) ((int32_t)(uint8_t)(x) == (x))
+#define checki8(x) ((int32_t)(int8_t)(x) == (x))
+#define checku16(x) ((int32_t)(uint16_t)(x) == (x))
+#define checki16(x) ((int32_t)(int16_t)(x) == (x))
+#define checku32(x) ((uint32_t)(x) == (x))
+#define checki32(x) ((int32_t)(x) == (x))
+
+/* Emit REX prefix. */
+static void emit_rex(mcode_t **mxp, mcode_t mod, mcode_t idx, mcode_t rmo, bool x64) {
+    mcode_t rex = 0x40;
+    rex |= x64 ? REX_W : 0;
+    rex |= mod & ~7 ? REX_R : 0;
+    rex |= idx & ~7 ? REX_X : 0;
+    rex |= rmo & ~7 ? REX_B : 0;
+    if (rex != 0x40) { *--*mxp = rex; }
+}
+
+/* REX + OPC. */
+static NEO_AINLINE void emit_si_opc(mcode_t **mxp, mcode_t opc, mcode_t r, bool x64) {
+    emit_rex(mxp, 0, 0, r, x64);
+    *--*mxp = opc|(r&7);
+}
+/* REX + OPC + MODRM. */
+static NEO_AINLINE void emit_si_opc_modrm(mcode_t **mxp, mcode_t opc, mcode_t r0, mcode_t mod, bool x64) {
+    emit_rex(mxp, 0, 0, r0, x64);
+    *--*mxp = opc;
+    *--*mxp = pack_modrm(XM_DIRECT, mod, r0);
+}
+
+/* MOV reg, imm. Example: movq $10, %rax. */
+static void emit_mov_reg_imm(mcode_t **mxp, mcode_t reg, imm_t x) {
+    bool x64 = !checku32(x.u64); /* Requires 64-bit load. */
+    emit_si_opc(mxp, 0xb8, reg, x64);
+    if (x64) { /* Full 64-bit load. Example: movabsq $10, %rax. */
+        *mxp -= sizeof(x.u64);
+        *(uint64_t *)*mxp = x.u64;
+    } else { /* Small 32-bit load. Example: movl $10, %eax. */
+        *mxp -= sizeof(x.u32);
+        *(uint32_t *)*mxp = x.u32;
+    }
+}
+
+/* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: add $10, %rax. */
+static void emit_alu_reg_imm(mcode_t **mxp, mcode_t opc, mcode_t reg, imm_t x, bool x64) {
+    neo_assert(checku32(x.u64) && "32-bit Imm out of range");
+    mcode_t *p = *mxp; /* Pointer to current machine code buffer. */
+    if (checku8(x.u64)) { /* Small 8-bit immediate. */
+        emit_rex(&p, 0, 0, reg, x64);
+        *--p = 0x83;
+        *--p = pack_modrm(XM_DIRECT, opc, reg);
+        *--p = x.u8;
+    } else if (reg == RID_RAX) { /* Optimize for accumulator. */
+        emit_rex(&p, 0, 0, 0, x64);
+        *--p = (opc << 3) + 5;
+        p -= sizeof(x.u32);
+        *(uint32_t *)p = x.u32;
+    } else { /* Full 32-bit immediate. */
+        emit_rex(&p, 0, 0, 0, x64);
+        *--p = 0x81;
+        *--p = pack_modrm(XM_DIRECT, opc, reg);
+        p -= sizeof(x.u32);
+        *(uint32_t *)p = x.u32;
+    }
+    *mxp = p; /* Update pointer to current machine code buffer. */
+}

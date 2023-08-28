@@ -134,8 +134,9 @@ extern NEO_EXPORT const uint8_t *srcspan_clone(srcspan_t span); /* Create null-t
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
     RADIX_OCT = 8, /* Literal Prefix: 0o */
-    RADIX_DEC = 10, /* Literal Prefix: none */
-    RADIX_HEX = 16 /* Literal Prefix: 0x */
+    RADIX_DEC = 10,/* Literal Prefix: none */
+    RADIX_HEX = 16,/* Literal Prefix: 0x */
+    RADIX_UNKNOWN = 0
 } radix_t;
 
 /* Represents a token. */

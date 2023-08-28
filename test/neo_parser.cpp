@@ -3,20 +3,8 @@
 #include <gtest/gtest.h>
 #include <neo_parser.h>
 
-static inline bool parse_int2(srcspan_t str, neo_int_t *x)
-{
-    radix_t radix = RADIX_DEC;
-    if (str.len > 2 && (str.p[0] == '0' ||(str.p[0] == '-' && str.p[1] == '0'))) { // This is done by the lexer by default.
-        if (str.p[0] == '-') {
-            ++str.p;
-        }
-        switch (str.p[1]) {
-            case 'x': radix = RADIX_HEX; str.p += 2; break;
-            case 'b': radix = RADIX_BIN; str.p += 2; break;
-            case 'o': radix = RADIX_OCT; str.p += 2; break;
-        }
-    }
-    return parse_int((const char *) str.p, str.len, radix, x);
+static inline bool parse_int2(srcspan_t str, neo_int_t *x) {
+    return parse_int((const char *) str.p, str.len, RADIX_UNKNOWN, x);
 }
 
 TEST(parse, int_invalid)

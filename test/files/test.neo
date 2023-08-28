@@ -42,7 +42,7 @@ class Test
             if (xorResult & mask) != 0 then
                 count = count + 1
             end
-            mask = mask << 1
+            mask <<= 1
             j = j + 1
         end
 
@@ -90,7 +90,6 @@ class Test
                 if not (currentNumber % 2 == 0) then
                     currentNumber = 3 * currentNumber + 1
                 end
-
                 terms = terms + 1
             end
 
@@ -119,11 +118,9 @@ class Test
     method sumOfPrimes(limit: int) -> int
         let sum: int = 0
         let candidate: int = 2
-
         while candidate <= limit do
             let isPrime: bool = true
             let divisor: int = 2
-
             while divisor * divisor <= candidate do
                 if candidate % divisor == 0 then
                     isPrime = false
@@ -131,14 +128,11 @@ class Test
                 end
                 divisor = divisor + 1
             end
-
             if isPrime then
                 sum = sum + candidate
             end
-
             candidate = candidate + 1
         end
-
         return sum
     end
 
@@ -210,7 +204,7 @@ class Test
         return (i << 48) | ((i & 0xffff0000) << 16) | ((i >>>> 16) & 0xffff0000) | (i >>>> 48)
     end
 
-      # This method calculates the factorial of a given positive integer.
+    # This method calculates the factorial of a given positive integer.
     method factorial(n: int) -> int
         let result: int = 1
         let i: int = 1

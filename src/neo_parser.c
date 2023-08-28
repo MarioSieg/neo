@@ -187,6 +187,7 @@ static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *m
     const compile_error_t *error = comerror_from_token(tok, msg);
     errvec_push(self->errors, error);
     self->error = self->panic = true;
+    self->prev_error = msg;
 }
 
 static NEO_AINLINE void advance(parser_t *self) {
@@ -696,7 +697,7 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
     astref_t root = parser_root_stmt_module(self, skip);
     if (neo_unlikely(self->panic)) {
         return astnode_new_error(&self->pool, &(node_error_t) {
-            .message = "Unknown Error",
+            .message = self->prev_error ? self->prev_error : "Unknown Error",
             .token = self->curr
         });
     } else {
@@ -757,9 +758,10 @@ void parser_setup_source(parser_t *self, const source_t *src) {
     advance(self); /* Consume first token. */
 }
 
-bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
+bool parse_int(const char *str, size_t len, radix_t radix_hint, neo_int_t *o) {
     neo_int_t r = 0;
     neo_int_t sign = 1;
+    int radix = 10;
     const char *p = str;
     const char *pe = p+len;
     if (neo_unlikely(!len || !*p)) { *o = 0; return false; }
@@ -768,9 +770,24 @@ bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
     if (*p=='+' || *p=='-') { sign = *p++ == '-' ? -1 : 1; }
     if (neo_unlikely(p == str+len)) { *o = 0; return false; } /* invalid number */
     if (neo_unlikely(*p=='_')) { *o = 0; return false; } /* _ prefix isn't allowed */
+    if (radix_hint != RADIX_UNKNOWN) {
+        radix = (int)radix_hint;
+    } else if (len >= 2 && neo_unlikely(*p == '0')) {
+        if ((tolower(p[1])) == 'x') { /* hex */
+            radix = 16;
+            p += 2;
+        } else if (tolower(p[1]) == 'b') { /* bin */
+            radix = 2;
+            p += 2;
+        } else if (tolower(p[1]) == 'c') { /* oct */
+            radix = 8;
+            p += 2;
+        }
+        if (neo_unlikely(p == str+len)) { *o = 0; return false; } /* invalid number */
+    }
     switch (radix) {
         default:
-        case RADIX_DEC: { /* dec */
+        case 10: { /* dec */
             for (; neo_likely(isdigit(*p)) || neo_unlikely(*p=='_'); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = *p - '0';
@@ -781,7 +798,7 @@ bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
                 r = r*10+digit*sign;
             }
         } break;
-        case RADIX_HEX: { /* hex */
+        case 16: { /* hex */
             for (; neo_likely(p < pe) && (neo_likely(isxdigit(*p)) || neo_unlikely(*p=='_')); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = (*p&15) + (*p >= 'A' ? 9 : 0);
@@ -792,7 +809,7 @@ bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
                 r = (r<<4)+digit*sign;
             }
         } break;
-        case RADIX_BIN: { /* bin */
+        case 2: { /* bin */
             unsigned bits = 0;
             neo_uint_t v = 0;
             for (; neo_likely(p < pe) && *p; ++p) {
@@ -810,7 +827,7 @@ bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o) {
             r = (neo_int_t)v;
             r *= sign;
         } break;
-        case RADIX_OCT: { /* oct */
+        case 8: { /* oct */
             for (; neo_likely(p < pe) && (neo_likely(*p >= '0' && *p <= '7') || neo_unlikely(*p=='_')); ++p) {
                 if (neo_unlikely(*p=='_')) { continue; } /* ignore underscores */
                 neo_int_t digit = *p - '0';

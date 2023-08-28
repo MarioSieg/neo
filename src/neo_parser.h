@@ -21,6 +21,7 @@ typedef struct parser_t {
     error_vector_t *errors; /* List of errors. */
     bool panic; /* Panic mode. */
     bool error; /* Error mode. */
+    const char *prev_error; /* Previous error message. */
 } parser_t;
 
 extern NEO_EXPORT void parser_init(parser_t *self, error_vector_t *errors);
@@ -29,7 +30,7 @@ extern NEO_EXPORT NEO_NODISCARD astref_t parser_parse(parser_t *self);
 extern NEO_EXPORT astref_t parser_drain(parser_t *self);
 extern NEO_EXPORT void parser_setup_source(parser_t *self, const source_t *src);
 
-extern NEO_EXPORT bool parse_int(const char *str, size_t len, radix_t radix, neo_int_t *o);
+extern NEO_EXPORT bool parse_int(const char *str, size_t len, radix_t radix_hint, neo_int_t *o);
 extern NEO_EXPORT bool parse_float(const char *str, size_t len, neo_float_t *o);
 
 #ifdef __cplusplus

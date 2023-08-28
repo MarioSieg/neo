@@ -325,7 +325,18 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             const astnode_t *lhs = verify_resolve(data->left_expr);
             verify_expr(lhs);
             const astnode_t *rhs = verify_resolve(data->right_expr);
-            verify_expr(rhs);
+            if (data->opcode == BINOP_CALL) { /* Call has a block of arguments. */
+                verify_type(rhs, ASTNODE_BLOCK);
+                const node_block_t *block = &rhs->dat.n_block;
+                astverify(block->blktype == BLOCKSCOPE_ARGLIST, "Call block is not of type BLOCKSCOPE_ARGLIST");
+                const astref_t *args = astpool_resolvelist(pool, block->nodes);
+                for (uint32_t i = 0; i < block->len; ++i) { /* All arguments must be expressions. */
+                    const astnode_t *arg = verify_resolve(args[i]);
+                    verify_expr(arg);
+                }
+            } else {
+                verify_expr(rhs);
+            }
         } return;
         case ASTNODE_METHOD: {
             const node_method_t *data = &node->dat.n_method;
@@ -362,8 +373,8 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             }
             switch (data->blktype) {
                 case BLOCKSCOPE_MODULE: {
-                    const symtab_t *class_table = data->symtabs.sc_module.class_table;
-                    astverify(class_table != NULL, "Module class table is NULL");
+                    //const symtab_t *class_table = data->symtabs.sc_module.class_table;
+                    //astverify(class_table != NULL, "Module class table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
                 case BLOCKSCOPE_CLASS: {
@@ -387,6 +398,7 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
                     //astverify(var_table != NULL, "Parameter list variable table is NULL");
                     /* TODO: Validate symtab itself. */
                 } break;
+                case BLOCKSCOPE_ARGLIST: break;
                 default: neo_panic("Invalid block type: %d", data->blktype);
             }
         } return;
@@ -394,7 +406,9 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
             const node_variable_t *data = &node->dat.n_variable;
             verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
             verify_type(verify_resolve(data->type), ASTNODE_IDENT_LIT);
-            verify_expr(verify_resolve(data->init_expr));
+            if (data->var_scope != VARSCOPE_PARAM) {
+                verify_expr(verify_resolve(data->init_expr));
+            }
         } return;
         case ASTNODE_RETURN: {
             const node_return_t *data = &node->dat.n_return;
@@ -424,7 +438,9 @@ static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
         } return;
         case ASTNODE_MODULE: {
             const node_module_t *data = &node->dat.n_module;
-            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+            if (!astref_isnull(data->ident)) {
+                verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+            }
             if (!astref_isnull(data->body)) { /* Optional. */
                 verify_block(verify_resolve(data->body), BLOCKSCOPE_MODULE);
             }
