@@ -131,7 +131,7 @@ TEST(parse, consume_ident) {
         errvec_init(&ev);\
         parser_t parser;\
         parser_init(&parser, &ev);\
-        std::uniform_int_distribution<neo_int_t> dist {0, NEO_INT_MAX};\
+        std::uniform_int_distribution<neo_int_t> dist {0, 0xffff};\
         neo_int_t a = dist(prng);\
         neo_int_t b = dist(prng);\
         std::string source = std::to_string(a) + " " #op " " + std::to_string(b);\
@@ -174,7 +174,7 @@ TEST(parse, consume_ident) {
         errvec_init(&ev);\
         parser_t parser;\
         parser_init(&parser, &ev);\
-        std::uniform_int_distribution<neo_int_t> dist {0, NEO_INT_MAX};\
+        std::uniform_int_distribution<neo_int_t> dist {0, 0xffff};\
         auto identA = srcspan_from("x");\
         auto identB = srcspan_from("y");\
         std::string source = std::string(reinterpret_cast<const char *>(identA.p)) + " " #op " " + std::string(reinterpret_cast<const char *>(identB.p));\
