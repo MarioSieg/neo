@@ -34,8 +34,8 @@ typedef struct parse_rule_t {
 /* Parser functionality core. */
 static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *msg);
 static void advance(parser_t *self);
-static bool match(parser_t *self, toktype_t tag);
-static void consume(parser_t *self, toktype_t tag, const char *msg);
+static bool consume_match(parser_t *self, toktype_t type);
+static void consume_or_err(parser_t *self, toktype_t tag, const char *msg);
 static astref_t consume_identifier(parser_t *self, const char *msg);
 static bool is_line_or_block_done(parser_t *self);
 
@@ -199,7 +199,7 @@ static NEO_AINLINE void advance(parser_t *self) {
     }
 }
 
-static NEO_AINLINE bool match(parser_t *self, toktype_t type) {
+static NEO_AINLINE bool consume_match(parser_t *self, toktype_t type) {
     neo_dassert(self);
     if (self->curr.type == type) {
         advance(self);
@@ -209,7 +209,7 @@ static NEO_AINLINE bool match(parser_t *self, toktype_t type) {
     }
 }
 
-static NEO_AINLINE void consume(parser_t *self, toktype_t type, const char *msg) {
+static NEO_AINLINE void consume_or_err(parser_t *self, toktype_t type, const char *msg) {
     neo_dassert(self);
     if (neo_unlikely(self->curr.type != type)) {
         error(self, &self->curr, msg);
@@ -220,7 +220,7 @@ static NEO_AINLINE void consume(parser_t *self, toktype_t type, const char *msg)
 
 static NEO_AINLINE astref_t consume_identifier(parser_t *self, const char *msg) {
     neo_dassert(self);
-    consume(self, TOK_LI_IDENT, msg);
+    consume_or_err(self, TOK_LI_IDENT, msg);
     return astnode_new_ident(&self->pool, self->prev.lexeme);
 }
 
@@ -236,7 +236,7 @@ static binary_op_type_t expr_paren_grouping(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     if (self->prev.type == TOK_PU_L_PAREN) {
         expr_eval_precedence(self, node, PREC_TERNARY);
-        consume(self, TOK_PU_R_PAREN, "Expected ')'");
+        consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
         *node = astnode_new_group(&self->pool, &(node_group_t) {
             .child_expr = *node
         });
@@ -428,7 +428,7 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     advance(self); /* Eat LPAREN. */
     if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
-        if (!match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
+        if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
             node_block_t arguments = {.blktype = BLOCKSCOPE_ARGLIST};
             do { /* Parse arguments. */
                 astref_t arg = ASTREF_NULL;
@@ -438,8 +438,8 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
                     return EXPR_OP_DONE;
                 }
                 node_block_push_child(&self->pool, &arguments, arg);
-            } while (match(self, TOK_PU_COMMA));
-            consume(self, TOK_PU_R_PAREN, "Expected ')'");
+            } while (consume_match(self, TOK_PU_COMMA));
+            consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
             *node = astnode_new_block(&self->pool, &arguments);
         }
         return BINOP_CALL;
@@ -468,18 +468,18 @@ static void expr_eval_precedence(parser_t *self, astref_t *node, precedence_t ru
             return;
         }
         astref_t right = ASTREF_NULL;
-        binary_op_type_t operator = (*infix)(self, &right);
-        if (operator == EXPR_OP_DONE) {
+        binary_op_type_t opcode = (*infix)(self, &right);
+        if (opcode == EXPR_OP_DONE) {
             *node = ASTREF_NULL;
             return;
         }
         *node = astnode_new_binary_op(&self->pool, &(node_binary_op_t) {
-           .opcode = operator,
+           .opcode = opcode,
            .left_expr = *node,
            .right_expr = right
         });
     }
-    if (neo_unlikely(is_assign && match(self, TOK_OP_ASSIGN))) {
+    if (neo_unlikely(is_assign && consume_match(self, TOK_OP_ASSIGN))) {
         error(self, &self->prev, "Invalid assignment target");
     }
 }
@@ -496,7 +496,7 @@ static astref_t rule_expr(parser_t *self) {
 static astref_t rule_free_expr_statement(parser_t *self) {
     neo_dassert(self);
     astref_t node = rule_expr(self);
-    consume(self, TOK_PU_NEWLINE, "Expected new line after freestanding expression");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after freestanding expression");
     return node;
 }
 
@@ -504,7 +504,7 @@ static astref_t rule_branch(parser_t *self, bool within_loop) {
     neo_dassert(self);
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
-    consume(self, TOK_KW_THEN, "Expected 'then' after if-statement condition");
+    consume_or_err(self, TOK_KW_THEN, "Expected 'then' after if-statement condition");
     astref_t true_block = parser_root_stmt_local(self, within_loop);
     return astnode_new_branch(&self->pool, &(node_branch_t) {
         .cond_expr = condition,
@@ -517,7 +517,7 @@ static astref_t rule_loop(parser_t *self, bool within_loop) {
     neo_dassert(self);
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
-    consume(self, TOK_KW_DO, "Expected 'do' after while-loop condition");
+    consume_or_err(self, TOK_KW_DO, "Expected 'do' after while-loop condition");
     astref_t true_block = parser_root_stmt_local(self, within_loop);
     return astnode_new_loop(&self->pool, &(node_loop_t) {
         .cond_expr = condition,
@@ -542,16 +542,16 @@ static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
          var_scope == VARSCOPE_PARAM
          ? "Expected parameter identifier"
          : "Expected variable identifier after 'let'");
-    consume(self, TOK_PU_COLON, "Expected ':' after identifier");
+    consume_or_err(self, TOK_PU_COLON, "Expected ':' after identifier");
     astref_t type = consume_identifier(self, "Expected type identifier");
     astref_t init_expr = ASTREF_NULL;
     if (var_scope != VARSCOPE_PARAM) { /* All non-parameters must be initialized. */
-        if (neo_likely(match(self, TOK_OP_ASSIGN))) {
+        if (neo_likely(consume_match(self, TOK_OP_ASSIGN))) {
             init_expr = rule_expr(self);
         } else {
             error(self, &self->curr, "Variable must be initialized");
         }
-        consume(self, TOK_PU_NEWLINE, "Expected new line after variable definition");
+        consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after variable definition");
     }
     return astnode_new_variable(&self->pool, &(node_variable_t) {
         .var_scope = var_scope,
@@ -565,24 +565,24 @@ static astref_t rule_method(parser_t *self, bool is_static) {
     (void)is_static;
     neo_dassert(self);
     astref_t identifier = consume_identifier(self, "Expected method identifier");
-    consume(self, TOK_PU_L_PAREN, "Expected '(' after method identifier");
+    consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after method identifier");
     astref_t parameters = ASTREF_NULL;
-    if (!match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
+    if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
         node_block_t param_list = {.blktype = BLOCKSCOPE_PARAMLIST};
         int depth = 0;
         do { /* Eat all parameters. */
             check_depth_lim(depth);
             node_block_push_child(&self->pool, &param_list, rule_variable(self, VARSCOPE_PARAM));
             ++depth;
-        } while (isok(self) && match(self, TOK_PU_COMMA));
-        consume(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
+        } while (isok(self) && consume_match(self, TOK_PU_COMMA));
+        consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
         parameters = neo_likely(param_list.len) ? astnode_new_block(&self->pool, &param_list) : ASTREF_NULL;
     }
     astref_t ret_type = ASTREF_NULL;
-    if (match(self, TOK_PU_ARROW)) { /* We have a return type. */
+    if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
         ret_type = consume_identifier(self, "Expected type identifier after method arrow '->'");
     }
-    consume(self, TOK_PU_NEWLINE, "Expected new line after method signature");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method signature");
     astref_t body = parser_root_stmt_local(self, false);
     return astnode_new_method(&self->pool, &(node_method_t) {
        .ident = identifier,
@@ -596,7 +596,7 @@ static astref_t rule_class(parser_t *self, bool is_static) {
     (void)is_static;
     neo_dassert(self);
     astref_t identifier = consume_identifier(self, "Expected class identifier");
-    consume(self, TOK_PU_NEWLINE, "Expected new line after class identifier");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class identifier");
     astref_t body = parser_root_stmt_class(self);
     return astnode_new_class(&self->pool, &(node_class_t) {
         .ident = identifier,
@@ -613,35 +613,35 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
     neo_dassert(self);
     node_block_t block = {.blktype = BLOCKSCOPE_LOCAL};
-    for (int depth = 0; isok(self) && !match(self, TOK_KW_END); ++depth) {
+    for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
-        if (match(self, TOK_KW_LET)) {
+        if (consume_match(self, TOK_KW_LET)) {
             node_block_push_child(&self->pool, &block, rule_variable(self, VARSCOPE_LOCAL));
-        } else if (match(self, TOK_KW_IF)) {
+        } else if (consume_match(self, TOK_KW_IF)) {
             node_block_push_child(&self->pool, &block, rule_branch(self, within_loop));
-        } else if (match(self, TOK_KW_WHILE)) {
+        } else if (consume_match(self, TOK_KW_WHILE)) {
             node_block_push_child(&self->pool, &block, rule_loop(self, true));
-        } else if (match(self, TOK_KW_RETURN)) {
+        } else if (consume_match(self, TOK_KW_RETURN)) {
             node_block_push_child(&self->pool, &block, rule_return(self));
-        } else if (match(self, TOK_KW_BREAK)) {
+        } else if (consume_match(self, TOK_KW_BREAK)) {
             if (neo_likely(within_loop)) {
                 node_block_push_child(&self->pool, &block, astnode_new_break(&self->pool));
             } else {
                 error(self, &self->prev, "'break'-statement can only be used within loops");
             }
-        } else if (match(self, TOK_KW_CONTINUE)) {
+        } else if (consume_match(self, TOK_KW_CONTINUE)) {
             if (neo_likely(within_loop)) {
                 node_block_push_child(&self->pool, &block, astnode_new_continue(&self->pool));
             } else {
                 error(self, &self->prev, "'continue'-statement can only be used within loops");
             }
-        } else if (match(self, TOK_PU_NEWLINE)) {
+        } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
         } else {
             node_block_push_child(&self->pool, &block, rule_free_expr_statement(self));
         }
     }
-    consume(self, TOK_PU_NEWLINE, "Expected new line after method end");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end");
     return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
 }
 
@@ -652,21 +652,21 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self);
     node_block_t block = {.blktype = BLOCKSCOPE_CLASS};
-    for (int depth = 0; isok(self) && !match(self, TOK_KW_END); ++depth) {
+    for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
-        bool is_static = match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
-        if (match(self, TOK_KW_METHOD)) {
+        bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
+        if (consume_match(self, TOK_KW_METHOD)) {
             node_block_push_child(&self->pool, &block, rule_method(self, is_static));
-        } else if (match(self, TOK_KW_LET)) {
+        } else if (consume_match(self, TOK_KW_LET)) {
             node_block_push_child(&self->pool, &block, rule_variable(self, is_static ? VARSCOPE_STATIC_FIELD : VARSCOPE_FIELD));
-        } else if (match(self, TOK_PU_NEWLINE)) {
+        } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
         } else {
             error(self, &self->curr, "Expected method or variable definition within class");
             return ASTREF_NULL;
         }
     }
-    consume(self, TOK_PU_NEWLINE, "Expected new line after class end");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end");
     return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
 }
 
@@ -677,13 +677,13 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
 static NEO_HOTPROC astref_t parser_root_stmt_module(parser_t *self, bool *skip) {
     neo_dassert(self && skip);
     *skip = false; /* Assume that token is not skipped. */
-    bool is_static = match(self, TOK_KW_STATIC); /* Is the following class static? */
-    if (match(self, TOK_KW_CLASS)) {
+    bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following class static? */
+    if (consume_match(self, TOK_KW_CLASS)) {
         return rule_class(self, is_static);
-    } else if (match(self, TOK_PU_NEWLINE)) {
+    } else if (consume_match(self, TOK_PU_NEWLINE)) {
         *skip = true; /* Don't add \n to AST. */
         return ASTREF_NULL;
-    } else if (neo_unlikely(match(self, TOK_ME_EOF))) {
+    } else if (neo_unlikely(consume_match(self, TOK_ME_EOF))) {
         return ASTREF_NULL;
     } else {
         error(self, &self->curr, "Expected class definition within module");

@@ -1,14 +1,128 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
 #include <gtest/gtest.h>
-#include <neo_parser.h>
+#include <neo_parser.c>
+
+inline const std::uint8_t *operator""_neo(const char8_t *s, size_t len) {
+    return reinterpret_cast<const std::uint8_t *>(s);
+}
+
+TEST(parse, advance) {
+    error_vector_t ev;
+    errvec_init(&ev);
+    parser_t parser;
+    parser_init(&parser, &ev);
+    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+
+    parser_setup_source(&parser, src);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_INT);
+    ASSERT_EQ(parser.prev.type, TOK__COUNT);
+    advance(&parser);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_FLOAT);
+    ASSERT_EQ(parser.prev.type, TOK_LI_INT);
+    advance(&parser);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_IDENT);
+    ASSERT_EQ(parser.prev.type, TOK_LI_FLOAT);
+    advance(&parser);
+
+    source_free(src);
+    parser_free(&parser);
+    errvec_free(&ev);
+}
+
+TEST(parse, consume_match) {
+    error_vector_t ev;
+    errvec_init(&ev);
+    parser_t parser;
+    parser_init(&parser, &ev);
+    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+
+    parser_setup_source(&parser, src);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_INT);
+    ASSERT_EQ(parser.prev.type, TOK__COUNT);
+    advance(&parser);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_FLOAT);
+    ASSERT_EQ(parser.prev.type, TOK_LI_INT);
+
+    ASSERT_FALSE(consume_match(&parser, TOK_LI_INT));
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_FLOAT); // no match, so curr is unchanged
+    ASSERT_EQ(parser.prev.type, TOK_LI_INT); // no match, so prev is unchanged
+
+    ASSERT_TRUE(consume_match(&parser, TOK_LI_FLOAT));
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_IDENT); // match, so curr is advanced
+    ASSERT_EQ(parser.prev.type, TOK_LI_FLOAT);
+
+    source_free(src);
+    parser_free(&parser);
+    errvec_free(&ev);
+}
+
+TEST(parse, consume_or_err) {
+    error_vector_t ev;
+    errvec_init(&ev);
+    parser_t parser;
+    parser_init(&parser, &ev);
+    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+
+    parser_setup_source(&parser, src);
+
+    ASSERT_EQ(parser.curr.type, TOK_LI_INT);
+
+    consume_or_err(&parser, TOK_LI_INT, "expected int");
+    ASSERT_FALSE(parser.error);
+    ASSERT_EQ(parser.curr.type, TOK_LI_FLOAT);
+
+    consume_or_err(&parser, TOK_LI_INT, "expected int");
+    ASSERT_TRUE(parser.error);
+    ASSERT_EQ(parser.curr.type, TOK_LI_FLOAT);
+    ASSERT_STREQ(parser.prev_error, "expected int");
+
+    source_free(src);
+    parser_free(&parser);
+    errvec_free(&ev);
+}
+
+TEST(parse, consume_ident) {
+    error_vector_t ev;
+    errvec_init(&ev);
+    parser_t parser;
+    parser_init(&parser, &ev);
+    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+
+    parser_setup_source(&parser, src);
+    advance(&parser);
+    advance(&parser);
+    ASSERT_EQ(parser.curr.type, TOK_LI_IDENT);
+    ASSERT_EQ(parser.prev.type, TOK_LI_FLOAT);
+
+    astref_t ident = consume_identifier(&parser, "expected identifier");
+    ASSERT_EQ(parser.curr.type, TOK_ME_EOF);
+    ASSERT_EQ(parser.prev.type, TOK_LI_IDENT);
+    ASSERT_FALSE(parser.error);
+
+    ASSERT_FALSE(astref_isnull(ident));
+    ASSERT_TRUE(astpool_isvalidref(&parser.pool, ident));
+    astnode_t *node = astpool_resolve(&parser.pool, ident);
+    ASSERT_NE(node, nullptr);
+    ASSERT_TRUE(srcspan_eq(node->dat.n_ident_lit.span, srcspan_from("hello")));
+
+    source_free(src);
+    parser_free(&parser);
+    errvec_free(&ev);
+}
 
 static inline bool parse_int2(srcspan_t str, neo_int_t *x) {
     return parse_int((const char *) str.p, str.len, RADIX_UNKNOWN, x);
 }
 
-TEST(parse, int_invalid)
-{
+TEST(parse, int_invalid) {
     neo_int_t x;
     ASSERT_FALSE(parse_int2(srcspan_from(""), &x));
     ASSERT_EQ(0, x);
@@ -74,8 +188,7 @@ TEST(parse, int_invalid)
     ASSERT_EQ(0, x);
 }
 
-TEST(parse, int_overflow)
-{
+TEST(parse, int_overflow) {
     neo_int_t x;
     ASSERT_FALSE(parse_int2(srcspan_from("9223__37203685_4775808"), &x));
     ASSERT_EQ(NEO_INT_MAX, x);
@@ -96,8 +209,7 @@ TEST(parse, int_overflow)
     ASSERT_EQ(NEO_INT_MAX, x);
 }
 
-TEST(parse, int_underflow)
-{
+TEST(parse, int_underflow) {
     neo_int_t x;
     ASSERT_FALSE(parse_int2(srcspan_from("-922337203_6854775810"), &x));
     ASSERT_EQ(NEO_INT_MIN, x);
@@ -107,8 +219,7 @@ TEST(parse, int_underflow)
     ASSERT_EQ(NEO_INT_MIN, x);
 }
 
-TEST(parse, int_dec)
-{
+TEST(parse, int_dec) {
     neo_int_t x;
     ASSERT_TRUE(parse_int2(srcspan_from("0"), &x));
     ASSERT_EQ(0, x);
@@ -134,8 +245,7 @@ TEST(parse, int_dec)
     ASSERT_EQ(NEO_INT_MIN, x);
 }
 
-TEST(parse, int_oct)
-{
+TEST(parse, int_oct) {
     neo_int_t x;
     ASSERT_TRUE(parse_int2(srcspan_from("0c0"), &x));
     ASSERT_EQ(0, x);
@@ -167,8 +277,7 @@ TEST(parse, int_oct)
     ASSERT_EQ(0, x);
 }
 
-TEST(parse, int_hex)
-{
+TEST(parse, int_hex) {
     neo_int_t x;
     ASSERT_TRUE(parse_int2(srcspan_from("0xff"), &x));
     ASSERT_EQ(0xff, x);
@@ -192,8 +301,7 @@ TEST(parse, int_hex)
     ASSERT_EQ(NEO_INT_MIN, x);
 }
 
-TEST(parse, int_bin)
-{
+TEST(parse, int_bin) {
     neo_int_t x;
     ASSERT_TRUE(parse_int2(srcspan_from("0b11111__111"), &x));
     ASSERT_EQ(0xff, x);
