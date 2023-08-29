@@ -8,6 +8,7 @@
     #define USE_GCC_GET_CPUID
 #endif
 
+#define VLI_MAX 15 /* Max 15. bytes of VLI instructions. */
 #define VEX_SUPPORT /* Enable AVX VEX (Vector Extensions) prefix encoding. */
 #define EVEX_SUPPORT /* Enable AVX512-F EVEX (Enhanced Vector Extensions) prefix encoding. */
 
@@ -166,8 +167,20 @@ neo_static_assert(CALLEE_SAVED_REG_MASK <= 0xffff);
 #define sse_packps(o) ((uint32_t)(0xfe00000fu|((0x##o##u&255)<<8)))  /*    0f = packed single prec, 0xfe magic => no opcode prefix required */
 #define sse_packss(o) ((uint32_t)(0x00000ff3u|((0x##o##u&255)<<16))) /* f3 0f = scalar single prec */
 
+/* General instructions. */
+typedef enum genop_t {
+    XI_INT3 = 0xcc, XI_NOP = 0x90, XI_RET = 0xc3,
+    XI_CALL = 0xe8, XI_JMP = 0xe9
+} genop_t;
+
+/* ALU instructions. */
+typedef enum aluop_t {
+    XA_ADD, XA_OR, XA_ADC, XA_SBB, XA_AND, XA_SUB, XA_XOR, XA_CMP,
+    XA__LEN
+} aluop_t;
+
 /* Baseline SSE, SSE2 instructions. AVX and AVX-512 support is planned. */
-typedef enum sse_opcode_t {
+typedef enum sseop_t {
     XO_MOVSD = sse_packsd(10), XO_MOVAPD = sse_packpd(28), XO_MOVUPD = sse_packpd(10),
     XO_ADDSD = sse_packsd(58), XO_ADDPD = sse_packpd(58),
     XO_SUBSD = sse_packsd(5c), XO_SUBPD = sse_packpd(5c),
@@ -175,13 +188,7 @@ typedef enum sse_opcode_t {
     XO_DIVSD = sse_packsd(5e), XO_DIVPD = sse_packpd(5e),
     XO_MINSD = sse_packsd(5d), XO_MINPD = sse_packpd(5d),
     XO_MAXSD = sse_packsd(5f), XO_MAXPD = sse_packpd(5f),
-} sse_opcode_t;
-
-/* Scalar opcode instructions. Utilities and integer instructions. */
-typedef enum opcode_t {
-    XI_INT3 = 0xcc, XI_NOP = 0x90, XI_RET = 0xc3,
-    XI_CALL = 0xe8, XI_JMP = 0xe9
-} opcode_t;
+} sseop_t;
 
 typedef enum coco_t { /* Branch condition codes. */
     COCO_EQ = 0,  COCO_E   = 0,  COCO_Z  = 0,   COCO_NE  = 1,  COCO_NZ  = 1,
@@ -227,20 +234,30 @@ static void emit_rex(mcode_t **mxp, mcode_t mod, mcode_t idx, mcode_t rmo, bool 
 
 /* REX + OPC. */
 static NEO_AINLINE void emit_si_opc(mcode_t **mxp, mcode_t opc, mcode_t r, bool x64) {
-    emit_rex(mxp, 0, 0, r, x64);
     *--*mxp = opc|(r&7);
+    emit_rex(mxp, 0, 0, r, x64);
 }
 /* REX + OPC + MODRM. */
 static NEO_AINLINE void emit_si_opc_modrm(mcode_t **mxp, mcode_t opc, mcode_t r0, mcode_t mod, bool x64) {
-    emit_rex(mxp, 0, 0, r0, x64);
-    *--*mxp = opc;
     *--*mxp = pack_modrm(XM_DIRECT, mod, r0);
+    *--*mxp = opc;
+    emit_rex(mxp, 0, 0, r0, x64);
+}
+
+/* OP reg, reg. OP is an ALU opcode like add, sub, xor etc. Example: addq %r8, %rax. */
+static void emit_alu_reg_reg(mcode_t **mxp, aluop_t opc, gpr_t dst, gpr_t src, bool x64) {
+    *--*mxp = pack_modrm(XM_DIRECT, dst, src);
+    *--*mxp = (opc << 3) + 3;
+    emit_rex(mxp, dst, 0, src, x64);
 }
 
 /* MOV reg, imm. Example: movq $10, %rax. */
-static void emit_mov_reg_imm(mcode_t **mxp, mcode_t reg, imm_t x) {
+static void emit_mov_reg_imm(mcode_t **mxp, gpr_t reg, imm_t x) {
+    if (x.u64 == 0) { /* Optimization: xorl %reg, %reg for zeroing. */
+        emit_alu_reg_reg(mxp, XA_XOR, reg, reg, false);
+        return;
+    }
     bool x64 = !checku32(x.u64); /* Requires 64-bit load. */
-    emit_si_opc(mxp, 0xb8, reg, x64);
     if (x64) { /* Full 64-bit load. Example: movabsq $10, %rax. */
         *mxp -= sizeof(x.u64);
         *(uint64_t *)*mxp = x.u64;
@@ -248,28 +265,54 @@ static void emit_mov_reg_imm(mcode_t **mxp, mcode_t reg, imm_t x) {
         *mxp -= sizeof(x.u32);
         *(uint32_t *)*mxp = x.u32;
     }
+    emit_si_opc(mxp, 0xb8, reg, x64);
 }
 
-/* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: add $10, %rax. */
-static void emit_alu_reg_imm(mcode_t **mxp, mcode_t opc, mcode_t reg, imm_t x, bool x64) {
+/* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: addq $10, %rax. */
+static void emit_alu_reg_imm(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
     neo_assert(checku32(x.u64) && "32-bit Imm out of range");
     mcode_t *p = *mxp; /* Pointer to current machine code buffer. */
     if (checku8(x.u64)) { /* Small 8-bit immediate. */
-        emit_rex(&p, 0, 0, reg, x64);
         *--p = 0x83;
         *--p = pack_modrm(XM_DIRECT, opc, reg);
         *--p = x.u8;
+        emit_rex(&p, 0, 0, reg, x64);
     } else if (reg == RID_RAX) { /* Optimize for accumulator. */
-        emit_rex(&p, 0, 0, 0, x64);
-        *--p = (opc << 3) + 5;
-        p -= sizeof(x.u32);
         *(uint32_t *)p = x.u32;
-    } else { /* Full 32-bit immediate. */
+        p -= sizeof(x.u32);
+        *--p = (opc << 3) + 5;
         emit_rex(&p, 0, 0, 0, x64);
+    } else { /* Full 32-bit immediate. */
         *--p = 0x81;
         *--p = pack_modrm(XM_DIRECT, opc, reg);
         p -= sizeof(x.u32);
         *(uint32_t *)p = x.u32;
+        emit_rex(&p, 0, 0, 0, x64);
     }
     *mxp = p; /* Update pointer to current machine code buffer. */
 }
+
+#ifdef NEO_EXTENSION_DISASSEMBLER
+
+#include <Zydis/Zydis.h>
+
+static NEO_COLDPROC void dump_assembly(const mcode_t *p, size_t len, FILE *f) {
+    neo_dassert(p && f);
+    fprintf(f, "Machine Code Block @%p, Len: %zu\n", p, len);
+    uintptr_t rip = (uintptr_t)p;
+    size_t offset = 0;
+    ZydisDisassembledInstruction instruction;
+    while (ZYAN_SUCCESS(ZydisDisassembleATT(
+        ZYDIS_MACHINE_MODE_LONG_64,
+        rip,
+        p + offset,
+        len - offset,
+        &instruction
+    ))) {
+        fprintf(f, "%016" PRIX64 "  %s\n", rip, instruction.text);
+        offset += instruction.info.length;
+        rip += instruction.info.length;
+    }
+}
+
+#endif

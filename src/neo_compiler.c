@@ -146,7 +146,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
         (*self->post_compile_callback)(src, self->flags, user);
     }
     if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
-#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_AST_RENDERING
         size_t len = strlen((const char *)src->filename);
         if (!neo_utf8_is_ascii(src->filename, len)) {
             neo_error("Failed to render AST, filename is not ASCII.");

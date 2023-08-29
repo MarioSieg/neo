@@ -3,7 +3,7 @@
 #include "neo_ast.h"
 #include "neo_lexer.h"
 
-#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_AST_RENDERING
 #   include <time.h>
 #   include <graphviz/gvc.h>
 #endif
@@ -553,7 +553,7 @@ const char *binary_op_lexeme(binary_op_type_t op) {
 }
 
 /* GraphViz AST rendering for debugging and visualization. */
-#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_AST_RENDERING
 
 static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const char *name, uint32_t c) {
     neo_dassert(g && target);

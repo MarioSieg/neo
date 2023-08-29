@@ -383,7 +383,7 @@ static NEO_AINLINE astref_t *astpool_resolvelist(astpool_t *self, listref_t ref)
     return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 
-#ifdef NEO_EXTENSION_HAS_GRAPHVIZ
+#ifdef NEO_EXTENSION_AST_RENDERING
 extern NEO_EXPORT void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
 extern NEO_EXPORT void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
 #endif

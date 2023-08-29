@@ -91,7 +91,7 @@ typedef enum {
     opdef(_, NEO_SEP),
     OPC__COUNT,
     OPC__MAX = 127
-} opcode_t;
+} genop_t;
 #undef _
 neo_static_assert(OPC__COUNT <= OPC__MAX);
 extern NEO_EXPORT const char *const opc_mnemonic[OPC__COUNT];
@@ -106,7 +106,7 @@ typedef uint32_t bci_instr_t;
 #define BCI_OPCMAX 127
 #define BCI_MOD1 0
 #define BCI_MOD2 1
-#define bci_unpackopc(i) ((opcode_t)((i)&127))
+#define bci_unpackopc(i) ((genop_t)((i)&127))
 #define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
 #define bci_unpackmod(i) (((i)&128)>>7)
 #define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
@@ -139,17 +139,17 @@ extern NEO_EXPORT bool bci_validate_instr(bci_instr_t instr);
 extern NEO_EXPORT void bci_dump_instr(bci_instr_t instr, FILE *out);
 
 /* Instruction composition. */
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(opcode_t opc, int32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(genop_t opc, int32_t imm) {
     neo_assert(bci_fits_i24(imm) && "24-bit signed imm out of range"); /* Verify immediate value. */
     neo_assert(opc_imm[opc&127] == IMM_I24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_i32toi24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(opcode_t opc, uint32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(genop_t opc, uint32_t imm) {
     neo_assert(bci_fits_u24(imm) && "24-bit unsigned imm out of range"); /* Verify immediate value. */
     neo_assert(opc_imm[opc&127] == IMM_U24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_u32tou24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(genop_t opc) {
     neo_assert(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc);
 }

@@ -23,7 +23,7 @@ bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode) {
             neo_error("invalid instruction at index: %zu", i);
             return false;
         }
-        opcode_t opc = bci_unpackopc(code[i]);
+        genop_t opc = bci_unpackopc(code[i]);
         if (neo_unlikely(opc == OPC_LDC)) { /* Specific instruction validation. */
             uint32_t umm24 = bci_mod1unpack_umm24(code[i]);
             if (neo_unlikely(umm24 >= isolate->constpool.len)) {
