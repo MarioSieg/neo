@@ -1,0 +1,21 @@
+class Program
+
+    # This method calculates the factorial of a given positive integer.
+    static method factorial(n: int) -> int
+        let result = 1
+        let i = 1
+        
+        while i <= n do
+            result *= i++
+        end
+        
+        return result
+    end
+
+    # Output: >>> The factorial of 5 is 120
+    static method main()
+        let n = 5
+        let result = factorial(n)
+        Console.println("The factorial of $n is $result")
+    end
+end

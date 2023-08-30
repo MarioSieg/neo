@@ -1,0 +1,8 @@
+add_subdirectory(dot)
+add_subdirectory(edgepaint)
+add_subdirectory(gvedit)
+add_subdirectory(gvmap)
+add_subdirectory(gvpr)
+add_subdirectory(mingle)
+add_subdirectory(smyrna)
+add_subdirectory(tools)
