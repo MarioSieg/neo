@@ -1,0 +1,660 @@
+=head2 Tue Jul 14 20:11:15 2020: C<Module> L<Test2::Suite|Test2::Suite>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.000097>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:11:37 2020: C<Module> L<DateTime::Format::Sybase|DateTime::Format::Sybase>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.04>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:12:21 2020: C<Module> L<Specio|Specio>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.42>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:12:31 2020: C<Module> L<DateTime::Format::Oracle|DateTime::Format::Oracle>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.06>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:14:18 2020: C<Module> L<HTTP::Message|HTTP::Message>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 6.14>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:15:15 2020: C<Module> L<HTTP::Negotiate|HTTP::Negotiate>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 6.01>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:16:24 2020: C<Module> L<HTTP::Daemon|HTTP::Daemon>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 6.01>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:17:47 2020: C<Module> L<WWW::Mechanize|WWW::Mechanize>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.86>
+
+=item *
+
+C<EXE_FILES: bin/mech-dump>
+
+=back
+
+=head2 Tue Jul 14 20:18:08 2020: C<Module> L<DateTime|DateTime>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.45>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:18:34 2020: C<Module> L<Moose|Moose>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.2009>
+
+=item *
+
+C<EXE_FILES: bin/moose-outdated>
+
+=back
+
+=head2 Tue Jul 14 20:18:46 2020: C<Module> L<CGI|CGI>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 4.38>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:19:45 2020: C<Module> L<libwww::perl|libwww::perl>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 6.31>
+
+=item *
+
+C<EXE_FILES: bin/lwp-download bin/lwp-dump bin/lwp-mirror bin/lwp-request>
+
+=back
+
+=head2 Tue Jul 14 20:19:57 2020: C<Module> L<Variable::Magic|Variable::Magic>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.62>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:20:05 2020: C<Module> L<HTML::Template|HTML::Template>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.97>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:20:14 2020: C<Module> L<DBD::CSV|DBD::CSV>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.49>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:20:33 2020: C<Module> L<PPI|PPI>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.236>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:23:02 2020: C<Module> L<ActiveState::Test|ActiveState::Test>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.00>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:23:13 2020: C<Module> L<ActiveState::Utils|ActiveState::Utils>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.11>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:23:25 2020: C<Module> L<B::Hooks::EndOfScope|B::Hooks::EndOfScope>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.21>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:24:06 2020: C<Module> L<DateTime::Locale|DateTime::Locale>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.17>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:24:17 2020: C<Module> L<Pod::Spell|Pod::Spell>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.20>
+
+=item *
+
+C<EXE_FILES: bin/podspell>
+
+=back
+
+=head2 Tue Jul 14 20:24:26 2020: C<Module> L<File::ShareDir|File::ShareDir>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.104>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:24:43 2020: C<Module> L<DBD::Oracle|DBD::Oracle>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.74>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:25:00 2020: C<Module> L<DBD::Pg|DBD::Pg>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 3.7.0>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:25:31 2020: C<Module> L<Net::SSLeay|Net::SSLeay>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.84>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:25:45 2020: C<Module> L<XML::Parser|XML::Parser>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.44>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:25:56 2020: C<Module> L<Tcl|Tcl>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 1.02>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:26:20 2020: C<Module> L<XML::Simple|XML::Simple>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 2.24>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:26:29 2020: C<Module> L<XML::SAX::Expat|XML::SAX::Expat>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 0.51>
+
+=item *
+
+C<EXE_FILES: >
+
+=back
+
+=head2 Tue Jul 14 20:26:42 2020: C<Module> L<ActiveState::PerlCritic|ActiveState::PerlCritic>
+
+=over 4
+
+=item *
+
+C<installed into: C:\Users\magja\graphviz-build-utilities\Perl64\site\lib>
+
+=item *
+
+C<LINKTYPE: dynamic>
+
+=item *
+
+C<VERSION: 10.00>
+
+=item *
+
+C<EXE_FILES: bin/perlcritic-gui>
+
+=back
+

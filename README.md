@@ -3,21 +3,23 @@
 NEO is a small but powerful, fast, and object-oriented scripting language that draws inspiration from the best aspects of Java, Lua, and Python.<br>
 It is designed to be easily embedded into any application, making it a versatile choice for various projects.
 
-## Features
+## Key Features
 
-- **Small and Fast**: NEO is lightweight and designed for efficiency, allowing your applications to perform optimally without sacrificing performance.
+- **Lightweight & Efficient** 🚀: NEO prioritizes efficiency for high-performance applications.
 
-- **Object-Oriented**: Embrace the power of object-oriented programming paradigms to create modular and maintainable code.
+- **Object-Oriented** 🧩: Embrace modularity with object-oriented programming.
 
-- **Easy to Embed**: NEO can seamlessly integrate into your applications through the C99 library, providing a simple and hassle-free way to extend functionality.
+- **Easy Integration** 🧬: Seamlessly embed NEO via the C99 library for hassle-free extensibility.
 
-- **Familiar Syntax**: If you are already familiar with Java, Lua, or Python, learning NEO will be a breeze. It combines the best elements of these languages, making it easy for developers to transition and start coding right away.
+- **Familiar Syntax** 🤓: If you know Java, Lua, or Python, NEO's syntax will feel like home.
 
-- **Static Typing**: NEO uses static typing, allowing you to write safe and expressive code.
+- **Static Typing** 📝: Write safe and expressive code with NEO's static typing.
 
-- **Garbage Collection**: Forget about manual memory management. NEO incorporates a robust garbage collector to handle memory allocation and deallocation automatically.
+- **Automated Memory Management** 🗑️: NEO's robust garbage collector handles memory for you.
 
-- **Extensive Standard Library**: NEO comes with a comprehensive standard library, providing a rich set of tools and functionalities out of the box.
+- **Comprehensive Standard Library** 📚: Access a rich set of tools and features out of the box.
+
+
 
 ## Screenshots
 Simple rectangle class implemented with help of the (WIP) Visual Studio Code extension:

@@ -137,7 +137,9 @@ class Test
     end
 
     static method fib(lim: int) -> int
-        if lim == 0 then return 0 end
+        if lim == 0 then
+            return 0
+        end
         let a: int = 0
         let b: int = 0
         let n: int = 0
