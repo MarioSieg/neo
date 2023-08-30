@@ -21,7 +21,7 @@ const uint8_t opc_imm[OPC__COUNT] = {opdef(_, NEO_SEP)};
 bool bci_validate_instr(bci_instr_t instr) {
     int mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
-        opcode_t opc = bci_unpackopc(instr);
+        genop_t opc = bci_unpackopc(instr);
         if (neo_unlikely(opc >= OPC__COUNT)) { /* Invalid opcode value. */
             neo_error("invalid opcode: %" PRIx8, opc);
             return false;
@@ -39,10 +39,10 @@ bool bci_validate_instr(bci_instr_t instr) {
 }
 
 void bci_dump_instr(bci_instr_t instr, FILE *out) {
-    neo_asd(out);
+    neo_dassert(out);
     int mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
-        opcode_t opc = bci_unpackopc(instr);
+        genop_t opc = bci_unpackopc(instr);
         if (opc_imm[opc]) {
             fprintf(out, "%s #%" PRIi32 "\n", opc_mnemonic[opc], bci_mod1unpack_imm24(instr));
         } else {

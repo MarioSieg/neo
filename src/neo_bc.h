@@ -91,7 +91,7 @@ typedef enum {
     opdef(_, NEO_SEP),
     OPC__COUNT,
     OPC__MAX = 127
-} opcode_t;
+} genop_t;
 #undef _
 neo_static_assert(OPC__COUNT <= OPC__MAX);
 extern NEO_EXPORT const char *const opc_mnemonic[OPC__COUNT];
@@ -106,23 +106,25 @@ typedef uint32_t bci_instr_t;
 #define BCI_OPCMAX 127
 #define BCI_MOD1 0
 #define BCI_MOD2 1
-#define bci_unpackopc(i) ((opcode_t)((i)&127))
+#define bci_unpackopc(i) ((genop_t)((i)&127))
 #define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
 #define bci_unpackmod(i) (((i)&128)>>7)
 #define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
 #define bci_switchmod(i) ((bci_instr_t)(((i)^128)&255))
 
 /* Mode 1 macros. */
-#define BCI_MOD1IMM24MAX (0x007fffff)
-#define BCI_MOD1IMM24MIN (-0x00800000)
-#define BCI_MOD1UMM24MAX (0x00ffffff)
-#define BCI_MOD1UMM24MIN (0x00000000)
+#define BCI_MOD1IMM24MAX (0x7fffff)
+#define BCI_MOD1IMM24MIN (-0x800000)
+#define BCI_MOD1UMM24MAX (~(uint32_t)0>>8)
+#define BCI_MOD1UMM24MIN 0u
 #define bci_fits_i24(x) (((int64_t)(x)>=BCI_MOD1IMM24MIN)&&((int64_t)(x)<=BCI_MOD1IMM24MAX))
 #define bci_fits_u24(x) ((int64_t)(x)>=0&&(int64_t)(x)<=BCI_MOD1UMM24MAX)
 #define bci_u24tou32(x) ((uint32_t)(x))
-#define bci_u32tou24(x) ((uint32_t)(x)&0x00ffffffu)
+#define bci_u32tou24(x) ((uint32_t)(x)&(~(uint32_t)0>>8))
 #define bci_i24toi32(x) (((int32_t)(x)<<8)>>8)
-#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23) ? ((int32_t)(x)&~-16777216)|-16777216 : ((int32_t)(x)&0x00ffffff)&~-16777216))
+#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23)\
+    ? ((int32_t)(x)&~-16777216)|-16777216 \
+    : ((int32_t)(x)&(int32_t)(~(uint32_t)0>>8))&~-16777216))
 #define BCI_MOD1IMM24_BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
 #define bci_mod1unpack_imm24(i) bci_i24toi32((i)>>8)
@@ -137,18 +139,18 @@ extern NEO_EXPORT bool bci_validate_instr(bci_instr_t instr);
 extern NEO_EXPORT void bci_dump_instr(bci_instr_t instr, FILE *out);
 
 /* Instruction composition. */
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(opcode_t opc, int32_t imm) {
-    neo_as(bci_fits_i24(imm) && "24-bit signed imm out of range"); /* Verify immediate value. */
-    neo_as(opc_imm[opc&127] == IMM_I24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(genop_t opc, int32_t imm) {
+    neo_assert(bci_fits_i24(imm) && "24-bit signed imm out of range"); /* Verify immediate value. */
+    neo_assert(opc_imm[opc&127] == IMM_I24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_i32toi24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(opcode_t opc, uint32_t imm) {
-    neo_as(bci_fits_u24(imm) && "24-bit unsigned imm out of range"); /* Verify immediate value. */
-    neo_as(opc_imm[opc&127] == IMM_U24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(genop_t opc, uint32_t imm) {
+    neo_assert(bci_fits_u24(imm) && "24-bit unsigned imm out of range"); /* Verify immediate value. */
+    neo_assert(opc_imm[opc&127] == IMM_U24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_u32tou24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
-    neo_as(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(genop_t opc) {
+    neo_assert(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc);
 }
 

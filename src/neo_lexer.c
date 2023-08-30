@@ -2,9 +2,17 @@
 
 #include "neo_lexer.h"
 #include "neo_core.h"
+#include "neo_compiler.h"
+
+const uint8_t *srcspan_clone(srcspan_t span) {
+    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    memcpy(p, span.p, span.len*sizeof(*p));
+    p[span.len] = '\0';
+    return p;
+}
 
 #define _(_1, _2) [_1] = _2
-static const char *tok_lexemes[TOK__COUNT] = { tkdef(_, NEO_SEP) };
+const char *tok_lexemes[TOK__COUNT] = { tkdef(_, NEO_SEP) };
 #undef _
 #define _(_1, _2) [_1] = #_1
 static const char *tok_names[TOK__COUNT] = { tkdef(_, NEO_SEP) };
@@ -15,12 +23,13 @@ static const uint8_t tok_lens[TOK__COUNT] = { tkdef(_, NEO_SEP) };
 const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
     TOK_LI_TRUE,
     TOK_LI_FALSE,
+    TOK_LI_SELF,
     TOK_OP_LOG_AND,
     TOK_OP_LOG_OR,
     TOK_OP_LOG_NOT
 };
 
-static uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x>>5) == 0x6/*0000'0110*/) { return 2; } /* 2 bytes */
     else if ((x>>4) == 0xe/*0000'1110*/) { return 3; } /* 3 bytes */
@@ -52,58 +61,6 @@ static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into 
     return cp;
 }
 
-bool source_load(source_t *self, const uint8_t *path) {
-    neo_asd(self && path);
-    FILE *f = NULL;
-    if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R | NEO_FMODE_BIN))) {
-        neo_error("Failed to open file '%s'.", path);
-        return false;
-    }
-    /* Check for BOM and skip it if present */
-    uint8_t bom[3];
-    size_t bom_len = fread(bom, sizeof(*bom),  sizeof(bom), f);
-    bool has_bom = false;
-    if (bom_len == sizeof(bom) && memcmp(bom, "\xef\xbb\xbf", sizeof(bom)) == 0) {
-        has_bom = true; /* BOM found */
-    }
-    else { rewind(f); } /* No BOM, rewind to start of file */
-    fseek(f, 0, SEEK_END);
-    size_t size = (size_t)ftell(f);
-    rewind(f);
-    if (has_bom) {
-        fseek(f, sizeof(bom), SEEK_SET); /* BOM detected, skip it */
-        size -= sizeof(bom);
-    }
-    if (neo_unlikely(!size)) { /* File is empty */
-        fclose(f);
-        return false;
-    }
-    uint8_t *buf = (uint8_t *)neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
-    if (neo_unlikely(fread(buf, sizeof(*buf), size, f) != size)) {
-        neo_memalloc(buf, 0);
-        fclose(f);
-        neo_error("Failed to read source file: '%s'", path);
-        return false;
-    }
-    fclose(f);
-#if NEO_OS_WINDOWS
-    /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
-    for (size_t i = 0; i < size; ++i) {
-        if (buf[i] == '\r' && buf[i+1] == '\n') {
-            buf[i] = '\n';
-            memmove(buf+i+1, buf+i+2, size-i-2); /* Fold data downwards. */
-            --size, --i;
-        }
-    }
-#endif
-    buf[size] = '\n'; /* Append final newline */
-    buf[size+1] = '\0'; /* Append terminator */
-    self->filename = path;
-    self->src = buf;
-    self->len = size;
-    return true;
-}
-
 #define c32_is_within(c, min, max) ((c) >= (min) && (c) <= (max))
 #define c32_is_ascii(c) ((c) < 0x80)
 #define c32_is_ascii_whitespace(c) ((c) == ' ' || (c) == '\t' || (c) == '\v' || (c) == '\r') /* \n is no whitespace - it's a punctuation token. */
@@ -132,7 +89,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
 }
 
 static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
-    neo_asd(self && self->src && self->needle);
+    neo_dassert(self && self->src && self->needle);
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -142,28 +99,28 @@ static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
 #define peek_next(l) ((l)->cp_next)
 #define is_done(l) (peek(l) == 0)
 static void consume(lexer_t *self) {
-    neo_asd(self && self->src && self->needle);
+    neo_dassert(self && self->src && self->needle);
     if (neo_unlikely(is_done(self))) { /* We're done here. */
-        self->line_end = self->src+self->src_dat.len;
+        self->line_end = self->src+self->src_data->len;
         return;
     }
     else if (peek(self) == '\n') { /* Newline just started. */
         ++self->line;
         self->col = 1; /* Reset */
         self->line_start = self->needle+1;
-        /* Find next line ending. */
+        /* Find the next line ending. */
         do { ++self->line_end; }
         while (*self->line_end && *self->line_end != '\n');
     } else { /* No special event, just increment column. */
         ++self->col;
     }
-    neo_asd(neo_bnd_check(self->needle, self->src, self->src_dat.len));
+    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_data->len));
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
     decode_cached_tmp(self); /* Decode cached codepoints. */
 }
 
 static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) {
-    neo_asd(self);
+    neo_dassert(self);
     if (peek(self) == c) {
         consume(self);
         return true;
@@ -196,31 +153,31 @@ static void consume_whitespace(lexer_t *self) {
 }
 
 static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
-    neo_asd(self);
-    (void)pdelta; /* TODO */
+    neo_dassert(self);
     token_t tok;
     memset(&tok, 0, sizeof(tok));
     tok.type = type;
     if (neo_likely(type != TOK_ME_EOF)) { /* Regular token case. */
         ptrdiff_t delta = self->needle-self->tok_start;
-        neo_as(delta >= 0 && "invalid lexeme length");
-        const uint8_t *lp = self->needle-delta;
-        neo_as(neo_bnd_check(lp, self->src, self->src_dat.len) && "invalid lexeme pointer"); /* bounds check */
+        neo_assert(delta >= 0 && "invalid lexeme length");
+        const uint8_t *lp = self->needle-delta+pdelta;
+        if (delta > 0) { delta -= pdelta<<1; }
+        neo_assert(neo_bnd_check(lp, self->src, self->src_data->len) && "invalid lexeme pointer"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
-        tok.col = (uint32_t)abs((int32_t)self->col-(int32_t)delta);
+        tok.col = (uint32_t)abs((int)self->col-(int)delta);
         delta = self->line_end-self->line_start; /* Line delta */
-        neo_as(delta >= 0 && "invalid lexeme line length");
+        neo_assert(delta >= 0 && "invalid lexeme line length");
         tok.lexeme_line = (srcspan_t){.p=self->line_start,.len=(uint32_t)delta};
     } else { /* EOF or empty token case. */
         tok.lexeme = (srcspan_t){.p=(const uint8_t *)"",.len=0};
     }
     tok.line = self->line;
-    tok.file = self->src_dat.filename;
+    tok.file = self->src_data->filename;
     return tok;
 }
 
 static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
-    neo_asd(self);
+    neo_dassert(self);
     toktype_t type = TOK_LI_INT; /* Assume integer literal by default. */
     radix_t rdx = RADIX_DEC; /* Assume decimal by default. */
     if (peek(self) == '0') { /* Check for radix prefix. */
@@ -259,7 +216,7 @@ static bool kw_found(const lexer_t *self, toktype_t i) {
 }
 
 static token_t consume_keyword_or_identifier(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     while (c32_is_ident_cont(peek(self))) {
         consume(self);
     }
@@ -276,26 +233,38 @@ static token_t consume_keyword_or_identifier(lexer_t *self) {
     return mktok(self, TOK_LI_IDENT, 0); /* No builtin keyword found, return identifier. */
 }
 
+static token_t consume_string(lexer_t *self) {
+    neo_dassert(self);
+    while (!is_done(self) && peek(self) != '"') {
+        consume(self);
+    }
+    if (neo_unlikely(peek(self) != '"')) { /* Unterminated string literal. */
+        return mktok(self, TOK_ME_ERR, 0);
+    }
+    consume(self); /* Consume closing quote. */
+    return mktok(self, TOK_LI_STRING, 1);
+}
+
 void lexer_init(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     memset(self, 0, sizeof(*self));
 }
 
-void lexer_set_src(lexer_t *self, const source_t *src) {
-    neo_asd(self && src);
-    self->src_dat = *src;
-    self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_dat.src;
+void lexer_setup_source(lexer_t *self, const source_t *src) {
+    neo_dassert(self && src);
+    self->src_data = src;
+    self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_data->src;
     self->line = self->col = 1;
     decode_cached_tmp(self); /* Decode cached codepoints. */
-    /* Find first line ending. */
+    /* Find the first line ending. */
     while (*self->line_end && *self->line_end != '\n') {
         ++self->line_end;
     }
 }
 
 token_t lexer_scan_next(lexer_t *self) {
-    neo_asd(self && self->src);
-    consume_whitespace(self); /* Consume whitespace and comments. */
+    neo_dassert(self && self->src);
+    consume_whitespace(self); /* Consume space and comments. */
     if (neo_unlikely(is_done(self))) { /* EOF? */
         return mktok(self, TOK_ME_EOF, 0);
     }
@@ -313,6 +282,8 @@ token_t lexer_scan_next(lexer_t *self) {
         case '{': return mktok(self, TOK_PU_L_BRACE, 0);
         case '}': return mktok(self, TOK_PU_R_BRACE, 0);
         case ',': return mktok(self, TOK_PU_COMMA, 0);
+        case ':': return mktok(self, TOK_PU_COLON, 0);
+        case '@': return mktok(self, TOK_PU_AT, 0);
         case '\n': return mktok(self, TOK_PU_NEWLINE, 0);
 
         case '.': return mktok(self, TOK_OP_DOT, 0);
@@ -364,11 +335,9 @@ token_t lexer_scan_next(lexer_t *self) {
                     else {
                         if (ismatch(self, '>')) {
                             if (ismatch(self, '>')) {
-                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_LSHR_ASSIGN, 0); }
-                                else { return mktok(self, TOK_OP_BIT_LSHR, 0); }
+                                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_LSHR_ASSIGN : TOK_OP_BIT_LSHR, 0);
                             } else {
-                                if (ismatch(self, '=')) { return mktok(self, TOK_OP_BIT_ROR_ASSIGN, 0); }
-                                else { return mktok(self, TOK_OP_BIT_ROR, 0); }
+                                return mktok(self, ismatch(self, '=') ? TOK_OP_BIT_ROR_ASSIGN : TOK_OP_BIT_ROR, 0);
                             }
                         }
                         else { return mktok(self, TOK_OP_BIT_ASHR, 0); }
@@ -376,6 +345,7 @@ token_t lexer_scan_next(lexer_t *self) {
                 } else { return mktok(self, TOK_OP_GREATER, 0); }
             }
         }
+        case '"': return consume_string(self);
         default: {
             if (neo_likely(c32_is_ident_start(c))) { /* Identifier ? */
                 return consume_keyword_or_identifier(self);
@@ -387,14 +357,14 @@ token_t lexer_scan_next(lexer_t *self) {
 }
 
 size_t lexer_drain(lexer_t *self, token_t **tok) {
-    neo_asd(self && tok);
+    neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
-    *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
+    *tok = neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {
         token_t t = lexer_scan_next(self);
         if (neo_unlikely(t.type == TOK_ME_EOF)) { break; }
         if (neo_unlikely(len >= cap)) {
-            *tok = (token_t *)neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
+            *tok = neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
         }
         (*tok)[len++] = t;
     }
@@ -402,12 +372,12 @@ size_t lexer_drain(lexer_t *self, token_t **tok) {
 }
 
 void lexer_free(lexer_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     (void)self;
 }
 
 void token_dump(const token_t *self) {
-    neo_asd(self);
+    neo_dassert(self);
     printf("%" PRIu32 ":%" PRIu32 " Type: %s, Lexeme: %.*s\n",
         self->line,
         self->col,

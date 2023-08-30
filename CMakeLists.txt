@@ -12,6 +12,11 @@ project(NEO LANGUAGES C)
 message("Configuring NEO...")
 
 option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
+option(NEO_ENABLE_SSE41 "Enable SSE 4.1 Penryn instructions" ON) # Requires CPU >= x86-64 Intel Core 2 2 (Penryn) CPU.
+
+# The following extensions are useful to debug and investigate the NEO compiler and runtime, but not to the end user.
+option(NEO_EXTENSION_AST_RENDERING "Enable AST rendering support" ON)
+option(NEO_EXTENSION_DISASSEMBLER "Enable disassembling of JIT code" ON)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     message("Detected release mode")
@@ -27,6 +32,9 @@ if (WIN32)
     set(COMPILE_OPTIONS /W3 /WX /utf-8) # basic compile options
 else()
     set(COMPILE_OPTIONS -std=gnu99 -Wall -Wextra -Werror -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -Wno-error=type-limits) # basic compile options
+    if (${NEO_ENABLE_SSE41})
+        set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -msse -msse2 -msse3 -mssse3 -msse4.1 -mcx16) # Enable advanced instructions
+    endif()
     if (${IS_RELEASE})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -O3 -fvisibility=hidden -fomit-frame-pointer) # advanced options
         if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -52,6 +60,20 @@ file(GLOB_RECURSE neo_sources src/*.h src/*.c)
 add_library(libneo STATIC ${neo_sources}) # NEO compiler.
 target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
 
+if (${NEO_EXTENSION_AST_RENDERING} OR ${NEO_BUILD_TESTS}) # Currently only supported on UNIX
+    message("[EXTENSION] Enabled AST rendering support")
+    target_link_libraries(libneo PRIVATE cgraph gvc)
+    target_compile_definitions(libneo PUBLIC NEO_EXTENSION_AST_RENDERING)
+endif()
+
+if (${NEO_EXTENSION_DISASSEMBLER} OR ${NEO_BUILD_TESTS})
+    message("[EXTENSION] Enabled disassembling of JIT code")
+    add_subdirectory(ext/zydis)
+    target_link_libraries(libneo PRIVATE Zydis)
+    target_include_directories(libneo PRIVATE ext/zydis/include)
+    target_compile_definitions(libneo PUBLIC NEO_EXTENSION_DISASSEMBLER)
+endif()
+
 add_executable(neo driver/neo_driver.c)
 target_link_libraries(neo PRIVATE libneo)
 target_compile_options(neo PRIVATE "${COMPILE_OPTIONS}")
@@ -67,10 +89,14 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
     enable_testing()
-    file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp)
+
+    file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp test/*.c src/*.hpp)
     add_executable(neo_test ${neo_test_sources})
     target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_compile_options(neo_test PUBLIC "-fpermissive")
     target_link_libraries(neo_test GTest::gtest_main)
+    target_link_libraries(neo_test Zydis)
+    target_include_directories(neo_test PUBLIC ext/zydis/include)
     include(GoogleTest)
     gtest_discover_tests(neo_test)
     target_link_libraries(neo_test libneo)

@@ -2,6 +2,8 @@
 
 #include "neo_core.h"
 
+NEO_THREAD_LOCAL void *volatile neo_tls_proxy = NULL;
+
 #if NEO_OS_WINDOWS
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
@@ -15,7 +17,7 @@
 #endif
 
 void neo_assert_impl(const char *expr, const char *file, int line) {
-    neo_panic("%s:%d fatal internal NEO compiler/runtime error - expression: '%s'", file, line, expr);
+    neo_panic("%s:%d Internal NEO ERROR - expression: '%s'", file, line, expr);
 }
 
 void neo_panic(const char *msg, ...) {
@@ -36,7 +38,7 @@ static neo_osi_t osi_data; /* Global OSI data. Only set once inneo_osi_init(). *
 void neo_osi_init(void) {
     memset(&osi_data, 0, sizeof(osi_data));
 #if NEO_OS_WINDOWS
-    neo_as(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+    neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 1<<12;
@@ -60,48 +62,74 @@ void *neo_defmemalloc(void *blk, size_t len) {
         return NULL;
     } else if(!blk) {  /* allocation */
         blk = neo_alloc_malloc(len);
-        neo_as(blk && "allocation failed");
+        neo_assert(blk && "allocation failed");
         return blk;
     } else { /* reallocation */
         void *newblock = neo_alloc_realloc(blk, len);
-        neo_as(newblock && "reallocation failed");
+        neo_assert(newblock && "reallocation failed");
         return newblock;
     }
 }
 
-void neo_mempool_init(neo_mempool_t *pool, size_t cap) {
-    neo_asd(pool);
-    memset(pool, 0, sizeof(*pool));
+void neo_mempool_init(neo_mempool_t *self, size_t cap) {
+    neo_dassert(self);
+    memset(self, 0, sizeof(*self));
     cap = cap ? cap : 1<<9;
-    pool->cap = cap;
-    pool->needle = neo_memalloc(NULL, cap);
+    self->cap = cap;
+    self->needle = neo_memalloc(NULL, cap);
+    memset(self->needle, 0, cap); /* Zero the memory. */
 }
 
-void *neo_mempool_alloc(neo_mempool_t *pool, size_t len) {
-    neo_asd(pool);
-    if (!neo_unlikely(len)) { return NULL; }
-    size_t total = pool->len+len;
-    if (total >= pool->cap) {
-        do { pool->cap<<=1; }
-        while (pool->cap < total);
-        pool->needle = neo_memalloc(pool->needle, pool->cap);
+void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
+    neo_dassert(self);
+    neo_assert(len);
+    size_t total = self->len+len;
+    if (total >= self->cap) {
+        size_t old = self->cap;
+        do {
+            self->cap<<=1;
+        } while (self->cap <= total);
+        self->needle = neo_memalloc(self->needle, self->cap);
+        size_t delta = self->cap-old;
+        memset((uint8_t *)self->needle+old, 0, delta); /* Zero the new memory. */
     }
-    void *p = (uint8_t *)pool->needle+pool->len;
-    pool->len += len;
+    void *p = (uint8_t *)self->needle+self->len;
+    self->len += len;
+    ++self->num_allocs;
     return p;
 }
 
-void *neo_mempool_alloc_aligned(neo_mempool_t *pool, size_t len, size_t align) {
-    neo_asd(pool);
-    neo_as(align && align>=sizeof(void*) && !(align&(align-1)));
+void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
+    neo_dassert(self);
+    neo_dassert(align && align >= sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
-    void *p = neo_mempool_alloc(pool, len+off);
-    return (void *)(((uintptr_t)p+off)&~(align-1));
+    void *p = neo_mempool_alloc(self, len + off);
+    return (void *)(((uintptr_t)p+off) & ~(align-1));
 }
 
-void neo_mempool_free(neo_mempool_t *pool) {
-    neo_asd(pool);
-    neo_memalloc(pool->needle, 0);
+size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
+    neo_dassert(self && len);
+    size_t idx = self->len+base*len;
+    neo_assert(idx <= lim && "Pool index limit reached");
+    void *p = neo_mempool_alloc(self, len);
+    if (pp) { *pp = p; }
+    idx /= len;
+    return idx;
+}
+
+void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen) {
+    neo_dassert(self);
+    neo_assert(blk && oldlen && newlen);
+    if (neo_unlikely(oldlen == newlen)) { return blk; }
+    const void *prev = blk; /* We need to copy the old data into the new block. */
+    blk = neo_mempool_alloc(self, newlen);
+    memcpy(blk, prev, oldlen); /* Copy the old data into the new block. This is safe because the old data is still in the self. */
+    return blk;
+}
+
+void neo_mempool_free(neo_mempool_t *self) {
+    neo_dassert(self);
+    neo_memalloc(self->needle, 0);
 }
 
 #define get_fmodstr(_)\
@@ -117,7 +145,7 @@ void neo_mempool_free(neo_mempool_t *pool) {
     else { neo_panic("Invalid file mode: %d", mode); }
 
 bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
-    neo_asd(fp && filepath && mode);
+    neo_dassert(fp && filepath && mode);
     *fp = NULL;
 #if NEO_OS_WINDOWS
     int len = MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, NULL, 0);
@@ -143,8 +171,8 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 
 #undef get_fmodstr
 
-unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
-    neo_asd(buf && ppos);
+neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
+    neo_dassert(buf && ppos);
     size_t pos = 0;
     uint32_t cp;
     while (pos < len) {
@@ -152,7 +180,7 @@ unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { 
         if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
             uint64_t v1 = *(const uint64_t *)(buf+pos);
             uint64_t v2 = *(const uint64_t *)(buf+pos+sizeof(v1));
-            if (!((v1|v2)&UINT64_C(0x8080808080808080))) {
+            if (!((v1|v2) & UINT64_C(0x8080808080808080))) {
                 pos = np;
                 continue;
             }
@@ -195,8 +223,15 @@ unicode_err_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { 
     return NEO_UNIERR_OK;
 }
 
-uint32_t neo_hash_x17(const void *key, size_t len)
-{
+bool neo_utf8_is_ascii(const uint8_t *buf, size_t len) {
+    neo_dassert(buf);
+    for (size_t i = 0; i < len; ++i) {
+        if (neo_unlikely(buf[i] > 0x7f)) { return false; }
+    }
+    return true;
+}
+
+uint32_t neo_hash_x17(const void *key, size_t len) {
     uint32_t r = 0x1505;
     const uint8_t *p = (const uint8_t*)key;
     for (size_t i = 0; i < len; ++i) {
@@ -205,3 +240,20 @@ uint32_t neo_hash_x17(const void *key, size_t len)
     return r^(r>>16);
 }
 
+uint8_t *neo_strdup2(const uint8_t *str) {
+    neo_assert(str && "Invalid ptr to clone");
+    size_t len = strlen((const char *)str); /* strlen also works with UTF-8 strings to find the end \0. */
+    uint8_t *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
+    memcpy(dup, str, len);
+    dup[len] = '\0';
+    return dup;
+}
+
+char *neo_strdup(const char *str) {
+    neo_assert(str && "Invalid ptr to clone");
+    size_t len = strlen(str); /* strlen also works with UTF-8 strings to find the end \0. */
+    char *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
+    memcpy(dup, str, len);
+    dup[len] = '\0';
+    return dup;
+}

@@ -11,7 +11,8 @@ extern "C" {
 #endif
 
 /*
-** The current GC is a conservative, thread local, mark and sweep garbage collector.
+** The current GC is a conservative, thread local, (tracing) mark and sweep garbage collector.
+** The GC reclaims syntactic garbage, not semantic garbage, by scanning the VM stack and the heap for pointers.
 ** It could be replaced by a faster generational, concurrent, compacting garbage collector but this requires a lot of work.
 ** The current GC is simple and works.
 **
@@ -30,9 +31,11 @@ extern "C" {
 ** Given these conditions, tgc will free memory allocations some time after they become unreachable.
 ** To do this, it performs an iteration of mark and sweep when gc_vmalloc is called and the number of memory allocations exceeds some threshold.
 ** It can also be run manually with gc_collect.
-** TODO: Shrink object header (maybe 32-bit hashes are enough?, compressed references, destructors?)
+** TODO: Shrink object header (compressed references, hash?)
+** TODO: Store record directly on header if value type.
 ** TODO: What happends if data looks like a pointer but isn't?
-** TODO: Generational GC.
+** TODO: Generational, concurrent, mark-compact GC, which also allows for sequencial allocation instead of free-listing.
+** TODO: Define object layout with reference types first for faster scanning.
 */
 
 #define GC_DBG NEO_DBG /* Eanble GC debug mode and logging. */
@@ -45,7 +48,7 @@ typedef uint32_t gc_grasize_t; /* Size of a memory allocation in granules. Each 
 #define gc_grasize_valid(gra) ((gra)>0&&(gra<=GC_ALLOC_MAX))
 #define gc_granules2bytes(s) ((size_t)(s)<<3) /* S / GC_ALLOC_GRANULARITY. Granules to bytes. */
 #define gc_bytes2granules(g) ((size_t)(g)>>3) /* S * GC_ALLOC_GRANULARITY. Bytes to granules. */
-#define gc_sizeof_granules(obj) (gc_bytes2granules(sizeof(obj))) /* Size of an C structure in granules. */
+#define gc_sizeof_granules(obj) (gc_bytes2granules(sizeof(obj))) /* Size of a structure in granules. */
 #define gc_granule_align(p) (((p)+((GC_ALLOC_GRANULARITY)-1))&~((GC_ALLOC_GRANULARITY)-1))
 neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);
 neo_static_assert(gc_sizeof_granules(neo_int_t) == 1);
@@ -90,8 +93,8 @@ neo_static_assert(__alignof__(gc_fatptr_t) == 8);
 
 /* Per-thread GC context. */
 typedef struct gc_context_t {
-    const void *stktop; /* Top of the VM stack. (VM stack grows upwards so: top > bot.) */
-    const void *stkbot; /* Bottom of the VM stack. (VM stack grows upwards so: top > bot.) */
+    const void *stk; /* Bottom (start) of the VM stack. (VM stack grows upwards) */
+    size_t stk_spdelta; /* VM Stack length (sp delta to stk). */
     uintptr_t bndmin; /* Minimum pointer value of memory bounds. */
     uintptr_t bndmax; /* Maximum pointer value of memory bounds. */
     gc_fatptr_t *trackedallocs; /* List of tracked allocated objects. */
@@ -106,7 +109,7 @@ typedef struct gc_context_t {
     void (*dtor_hook)(void *); /* Destructor callback hook. */
 } gc_context_t;
 
-extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk_top, const void *stk_bot);
+extern NEO_EXPORT void gc_init(gc_context_t *self, const void *stk, size_t stk_spdelta);
 extern NEO_EXPORT void gc_free(gc_context_t *self);
 extern NEO_EXPORT void gc_pause(gc_context_t *self);
 extern NEO_EXPORT void gc_resume(gc_context_t *self);

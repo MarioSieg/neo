@@ -14,13 +14,7 @@
 extern "C" {
 #endif
 
-typedef struct source_t {
-    const uint8_t *filename; /* Encoded in UTF-8 and terminated. */
-    const uint8_t *src; /* Encoded in UTF-8 and terminated. */
-    size_t len; /* In bytes. */
-} source_t;
-extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
-#define source_free(self) neo_memalloc((void *)(self).src, 0)
+typedef struct source_t source_t;
 
 #define tkdef(_, __)\
     /* Keywords */\
@@ -46,7 +40,8 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_LI_STRING, "<string>")__  \
     _(TOK_LI_CHAR, "<char>")__\
     _(TOK_LI_TRUE, "true")__\
-    _(TOK_LI_FALSE, "false")__\
+    _(TOK_LI_FALSE, "false")__ \
+    _(TOK_LI_SELF, "self")__\
     /* Punctuation */\
     _(TOK_PU_L_PAREN, "(")__\
     _(TOK_PU_R_PAREN, ")")__\
@@ -56,6 +51,8 @@ extern NEO_EXPORT bool source_load(source_t *self, const uint8_t *path);
     _(TOK_PU_R_BRACE, "}")__\
     _(TOK_PU_COMMA, ",")__\
     _(TOK_PU_ARROW, "->")__\
+    _(TOK_PU_COLON, ":")__\
+    _(TOK_PU_AT, "@")__\
     _(TOK_PU_NEWLINE, "\\n")__\
     /* Operators */\
     _(TOK_OP_DOT, ".")__\
@@ -122,7 +119,8 @@ neo_static_assert(TOK__COUNT <= 255);
 #define KWR_START TOK_KW_METHOD /* First keyword token */
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
-neo_static_assert(KWR_START>=0 && KWR_END < TOK__COUNT && KWR_LEN>0 && KWR_LEN <= 255 && KWR_END - KWR_START > 0);
+neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
+extern NEO_EXPORT const char *tok_lexemes[TOK__COUNT];
 
 typedef struct srcspan_t {
     const uint8_t *p;
@@ -131,14 +129,17 @@ typedef struct srcspan_t {
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
 #define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
 #define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
+extern NEO_EXPORT const uint8_t *srcspan_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
     RADIX_OCT = 8, /* Literal Prefix: 0o */
-    RADIX_DEC = 10, /* Literal Prefix: none */
-    RADIX_HEX = 16 /* Literal Prefix: 0x */
+    RADIX_DEC = 10,/* Literal Prefix: none */
+    RADIX_HEX = 16,/* Literal Prefix: 0x */
+    RADIX_UNKNOWN = 0
 } radix_t;
 
+/* Represents a token. */
 typedef struct token_t {
     toktype_t type : 8;
     radix_t radix : 8; /* Only used if type == TOK_LI_INT */
@@ -150,8 +151,9 @@ typedef struct token_t {
 } token_t;
 extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
 
+/* Represents the lexer context for a single source file. */
 typedef struct lexer_t {
-    source_t src_dat;
+    const source_t *src_data;
     const uint8_t *src;
     const uint8_t *needle;
     const uint8_t *tok_start;
@@ -163,14 +165,14 @@ typedef struct lexer_t {
     uint32_t col;
 } lexer_t;
 
-#define KW_MAPPING_CUSTOM_N 5 /* Number of custom keywords mapping. Currently, 5: true, false, and, or, not */
+#define KW_MAPPING_CUSTOM_N 6 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not, self. */
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
-extern NEO_EXPORT NEO_COLDPROC void lexer_init(lexer_t *self);
-extern NEO_EXPORT NEO_COLDPROC void lexer_set_src(lexer_t *self, const source_t *src);
-extern NEO_EXPORT NEO_HOTPROC token_t lexer_scan_next(lexer_t *self);
-extern NEO_EXPORT NEO_COLDPROC size_t lexer_drain(lexer_t *self, token_t **tok);
-extern NEO_EXPORT NEO_COLDPROC void lexer_free(lexer_t *self);
+extern NEO_EXPORT void lexer_init(lexer_t *self);
+extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const source_t *src);
+extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self);
+extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
+extern NEO_EXPORT void lexer_free(lexer_t *self);
 
 #ifdef __cplusplus
 }
