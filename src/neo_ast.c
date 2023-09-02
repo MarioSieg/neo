@@ -162,8 +162,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     } else if (self->len >= self->cap) { /* Reallocate if necessary. */
         size_t oldlen = self->cap;
         const astref_t *old = astpool_resolvelist(pool, self->nodes);
-        self->cap<<=2;
-        listref_t newref = astpool_alloclist(pool, NULL, self->cap);
+        listref_t newref = astpool_alloclist(pool, NULL, self->cap<<=2);
         astref_t *new = astpool_resolvelist(pool, newref);
         memcpy(new, old, oldlen*sizeof(*new));
         self->nodes = newref;

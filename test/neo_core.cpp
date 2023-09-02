@@ -25,6 +25,9 @@ TEST(core, hashmap_core) {
     }, &num);
     ASSERT_EQ(num, 1);
 
+    neo_hashmap_remove(&map, "hello", sizeof("hello")-1);
+    ASSERT_FALSE(neo_hashmap_get(&map, "hello", sizeof("hello")-1, &x));
+
     neo_hashmap_free(&map);
 }
 
