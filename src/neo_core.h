@@ -670,8 +670,6 @@ static NEO_AINLINE size_t neo_tid(void) {
 #   error "Unsupported compiler"
 #endif
 
-/* ---- Misc ---- */
-
 typedef enum neo_fmode_t {
     NEO_FMODE_R /* read */,
     NEO_FMODE_W /* write */,
@@ -680,6 +678,8 @@ typedef enum neo_fmode_t {
     NEO_FMODE_TXT /* text */
 } neo_fmode_t;
 extern NEO_EXPORT bool neo_fopen(FILE **fp, const uint8_t *filepath, /* neo_fmode_t */ int mode);
+
+/* ---- Unicode Handling ---- */
 
 typedef enum neo_unicode_err_t {
     NEO_UNIERR_OK,
@@ -692,7 +692,47 @@ typedef enum neo_unicode_err_t {
 } neo_unicode_error_t;
 extern NEO_EXPORT neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos);
 extern NEO_EXPORT bool neo_utf8_is_ascii(const uint8_t *buf, size_t len);
+
+/* ---- Hash Functions ---- */
+
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
+extern NEO_EXPORT uint32_t neo_hash_fnv1a(const void *key, size_t len);
+
+/* ---- Hashmap ---- */
+
+#define NEO_HASHMAP_DEFAULT_CAPACITY 32
+#define NEO_HASHMAP_MAX_LOAD 0.75f
+typedef void (neo_hashmap_callback_t)(const void *key, uint32_t klen, uintptr_t value, void *usr);
+typedef struct neo_bucket_t neo_bucket_t;
+struct neo_bucket_t {
+    neo_bucket_t *next;
+    const void *key;
+    uint32_t klen;
+    uint32_t hash;
+    uintptr_t val;
+};
+typedef struct neo_hashmap_t {
+    neo_bucket_t *buckets;
+    uint32_t len;
+    uint32_t cap;
+    uint32_t tombstones;
+    neo_bucket_t *first;
+    neo_bucket_t *last;
+} neo_hashmap_t;
+
+extern NEO_EXPORT void neo_hashmap_init(neo_hashmap_t *self, uint32_t cap);
+extern NEO_EXPORT void neo_hashmap_put(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val);
+extern NEO_EXPORT bool neo_hashmap_get_set(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_in);
+extern NEO_EXPORT void neo_hashmap_put_free(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val, neo_hashmap_callback_t *cb, void *usr);
+extern NEO_EXPORT bool neo_hashmap_get(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_val);
+extern NEO_EXPORT void neo_hashmap_remove(neo_hashmap_t *self, const void *key, uint32_t klen);
+extern NEO_EXPORT void neo_hashmap_remove_free(neo_hashmap_t *self, const void *key, uint32_t klen, neo_hashmap_callback_t *cb, void *usr);
+extern NEO_EXPORT uint32_t neo_hashmap_len(const neo_hashmap_t *self);
+extern NEO_EXPORT void neo_hashmap_iter(const neo_hashmap_t *self, neo_hashmap_callback_t *cb, void *usr);
+extern NEO_EXPORT void neo_hashmap_free(neo_hashmap_t *self);
+
+/* ---- Utilities ---- */
+
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 

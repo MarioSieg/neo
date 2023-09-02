@@ -3,6 +3,31 @@
 #include <gtest/gtest.h>
 #include <neo_core.h>
 
+TEST(core, hashmap_core) {
+    neo_hashmap_t map;
+    neo_hashmap_init(&map, 8);
+
+    ASSERT_EQ(neo_hashmap_len(&map), 0);
+
+    neo_hashmap_put(&map, "hello", sizeof("hello") - 1, 0xc0c0);
+
+    ASSERT_EQ(neo_hashmap_len(&map), 1);
+    uintptr_t x = 0;
+    ASSERT_TRUE(neo_hashmap_get(&map, "hello", sizeof("hello")-1, &x));
+    ASSERT_EQ(x, 0xc0c0);
+
+    static int num = 0;
+    neo_hashmap_iter(&map, [](const void *key, std::size_t key_len, uintptr_t value, void *user_data) {
+        ASSERT_EQ(key_len, sizeof("hello")-1);
+        ASSERT_EQ(value, 0xc0c0);
+        ASSERT_EQ(*static_cast<int *>(user_data), num);
+        ++num;
+    }, &num);
+    ASSERT_EQ(num, 1);
+
+    neo_hashmap_free(&map);
+}
+
 TEST(core, tls_id) {
     std::set<std::size_t> ids {};
     std::mutex mtx {};
