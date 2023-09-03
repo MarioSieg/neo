@@ -4,7 +4,7 @@
 #define NEO_VM_H
 
 #include "neo_core.h"
-#include "neo_object.h"
+#include "neo_bc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,27 +30,21 @@ typedef enum vminterrupt_t {
     VMINT_ARI_OVERFLOW,
     VMINT_ARI_ZERODIV,
 
-    VMINT__COUNT
+    VMINT__LEN
 } vminterrupt_t;
 
-typedef struct vmisolate_t {
+typedef struct vmisolate_t vmisolate_t;
+struct vmisolate_t {
     const char *name;
     uint64_t id;
     opstck_t stack;
-    constpool_t constpool;
     vminterrupt_t interrupt;
     const bci_instr_t *ip;
     const record_t *sp;
     ptrdiff_t ip_delta;
     ptrdiff_t sp_delta;
-} vmisolate_t;
+};
 
-typedef struct bytecode_t {
-    const bci_instr_t *p;
-    size_t len;
-} bytecode_t;
-
-extern NEO_NODISCARD bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode);
 extern NEO_HOTPROC NEO_NODISCARD bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode);
 
 #ifdef __cplusplus

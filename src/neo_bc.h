@@ -91,7 +91,7 @@ typedef enum {
     opdef(_, NEO_SEP),
     OPC__COUNT,
     OPC__MAX = 127
-} genop_t;
+} opcode_t;
 #undef _
 neo_static_assert(OPC__COUNT <= OPC__MAX);
 extern NEO_EXPORT const char *const opc_mnemonic[OPC__COUNT];
@@ -102,11 +102,13 @@ extern NEO_EXPORT const uint8_t /* IMM_* type */ opc_imm[OPC__COUNT];
 
 /* General instruction en/decoding (applies to mode 1 and 2) */
 typedef uint32_t bci_instr_t;
+typedef int32_t imm24_t;
+typedef uint32_t umm24_t;
 #define BCI_MAX 0xffffffffu
 #define BCI_OPCMAX 127
 #define BCI_MOD1 0
 #define BCI_MOD2 1
-#define bci_unpackopc(i) ((genop_t)((i)&127))
+#define bci_unpackopc(i) ((opcode_t)((i)&127))
 #define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
 #define bci_unpackmod(i) (((i)&128)>>7)
 #define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
@@ -119,16 +121,16 @@ typedef uint32_t bci_instr_t;
 #define BCI_MOD1UMM24MIN 0u
 #define bci_fits_i24(x) (((int64_t)(x)>=BCI_MOD1IMM24MIN)&&((int64_t)(x)<=BCI_MOD1IMM24MAX))
 #define bci_fits_u24(x) ((int64_t)(x)>=0&&(int64_t)(x)<=BCI_MOD1UMM24MAX)
-#define bci_u24tou32(x) ((uint32_t)(x))
-#define bci_u32tou24(x) ((uint32_t)(x)&(~(uint32_t)0>>8))
-#define bci_i24toi32(x) (((int32_t)(x)<<8)>>8)
-#define bci_i32toi24(x) ((uint32_t)((int32_t)(x)&(1<<23)\
+#define bci_u24tou32(x) ((umm24_t)(x))
+#define bci_u32tou24(x) ((umm24_t)(x)&(~(umm24_t)0>>8))
+#define bci_i24toi32(x) (((imm24_t)(x)<<8)>>8)
+#define bci_i32toi24(x) ((umm24_t)((int32_t)(x)&(1<<23)\
     ? ((int32_t)(x)&~-16777216)|-16777216 \
     : ((int32_t)(x)&(int32_t)(~(uint32_t)0>>8))&~-16777216))
 #define BCI_MOD1IMM24_BIAS (1<<3)
 #define bci_mod1imm24_sign(x) (((x)&0x800000)>>23)
-#define bci_mod1unpack_imm24(i) bci_i24toi32((i)>>8)
-#define bci_mod1unpack_umm24(i) bci_u24tou32((i)>>8)
+#define bci_mod1unpack_imm24(i) ((imm24_t)bci_i24toi32((i)>>8))
+#define bci_mod1unpack_umm24(i) ((umm24_t)bci_u24tou32((i)>>8))
 #define bci_mod1pack_imm24(i, imm24) ((bci_instr_t)((i)|(bci_i32toi24(imm24)<<BCI_MOD1IMM24_BIAS)))
 #define bci_mod1pack_umm24(i, imm24) ((bci_instr_t)((i)|(bci_u32tou24(imm24)<<BCI_MOD1IMM24_BIAS)))
 
@@ -136,23 +138,80 @@ typedef uint32_t bci_instr_t;
 /* NYI */
 
 extern NEO_EXPORT bool bci_validate_instr(bci_instr_t instr);
-extern NEO_EXPORT void bci_dump_instr(bci_instr_t instr, FILE *out);
+extern NEO_EXPORT NEO_COLDPROC void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored);
 
 /* Instruction composition. */
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(genop_t opc, int32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_imm24(opcode_t opc, imm24_t imm) {
     neo_assert(bci_fits_i24(imm) && "24-bit signed imm out of range"); /* Verify immediate value. */
     neo_assert(opc_imm[opc&127] == IMM_I24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_i32toi24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(genop_t opc, uint32_t imm) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_umm24(opcode_t opc, umm24_t imm) {
     neo_assert(bci_fits_u24(imm) && "24-bit unsigned imm out of range"); /* Verify immediate value. */
     neo_assert(opc_imm[opc&127] == IMM_U24 && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc)|(bci_u32tou24(imm)<<BCI_MOD1IMM24_BIAS);
 }
-static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(genop_t opc) {
+static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
     neo_assert(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc);
 }
+
+typedef enum rtag_t { /* Record type tag. */
+    RT_INT = 0,
+    RT_FLOAT,
+    RT_CHAR,
+    RT_BOOL,
+    RT_REF,
+    RT__LEN
+} rtag_t;
+neo_static_assert(RT__LEN <= 255);
+
+typedef union NEO_ALIGN(8) record_t { /* Represents an undiscriminated value in the VM/CP. Either a value type of reference to a class. */
+    neo_int_t as_int;
+    neo_uint_t as_uint;
+    neo_float_t as_float;
+    neo_char_t as_char;
+    neo_bool_t as_bool;
+    void *as_ref; /* Reference type. */
+    uint8_t raw[sizeof(neo_int_t)];
+} record_t;
+neo_static_assert(sizeof(record_t) == 8);
+
+extern NEO_EXPORT bool record_eq(record_t a, record_t b, rtag_t tag);
+
+typedef uint32_t cpkey_t; /* 24-bit Metaspace index key. */
+#define CONSTPOOL_MAX BCI_MOD1UMM24MAX /* Maximum constant pool index, because the ldc immediate is an 24-bit unsigned integer. */
+typedef struct metaspace_t {
+    record_t *p;
+    uint8_t /*rtag_t*/ *tags;
+    uint32_t len;
+    uint32_t cap;
+} metaspace_t;
+
+extern NEO_EXPORT void metaspace_init(metaspace_t *self, uint32_t cap /* capacity or 0 */);
+extern NEO_EXPORT cpkey_t metaspace_insert_kv(metaspace_t *self, rtag_t tag, record_t value); /* Insert constant if not existent, and return 24-bit key index. */
+extern NEO_EXPORT bool metaspace_contains_k(const metaspace_t *self, cpkey_t idx);
+extern NEO_EXPORT bool metaspace_get(const metaspace_t *self, cpkey_t idx, record_t *value, rtag_t *tag);
+extern NEO_EXPORT void metaspace_free(metaspace_t *self);
+
+typedef struct bytecode_t {
+    uint32_t ver; /* Bytecode version. */
+    bci_instr_t *p; /* Pointer to bytecode. */
+    size_t cap; /* Capacity of bytecode. */
+    size_t len; /* Length of bytecode. */
+    metaspace_t pool;
+} bytecode_t;
+
+struct vmisolate_t;
+
+extern NEO_EXPORT void bc_init(bytecode_t *self);
+extern NEO_EXPORT void bc_emit(bytecode_t *self, bci_instr_t instr);
+extern NEO_EXPORT void bc_emit_ipush(bytecode_t *self, neo_int_t x);
+extern NEO_EXPORT void bc_emit_fpush(bytecode_t *self, neo_float_t x);
+extern NEO_EXPORT const bci_instr_t *bc_finalize(bytecode_t *self);
+extern NEO_EXPORT NEO_COLDPROC void bc_disassemble(const bytecode_t *self, FILE *f, bool colored);
+extern NEO_EXPORT void bc_free(bytecode_t *self);
+extern NEO_NODISCARD bool bc_validate(const bytecode_t *self, const struct vmisolate_t *isolate);
 
 #ifdef __cplusplus
 }

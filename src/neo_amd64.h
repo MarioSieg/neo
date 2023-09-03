@@ -171,7 +171,7 @@ neo_static_assert(CALLEE_SAVED_REG_MASK <= 0xffff);
 typedef enum genop_t {
     XI_INT3 = 0xcc, XI_NOP = 0x90, XI_RET = 0xc3,
     XI_CALL = 0xe8, XI_JMP = 0xe9
-} genop_t;
+} opcode_t;
 
 /* ALU instructions. */
 typedef enum aluop_t {
