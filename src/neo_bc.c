@@ -158,9 +158,8 @@ void bc_free(bytecode_t *self) {
 
 static NEO_COLDPROC void bitdump(uint8_t x, FILE *f) {
     neo_dassert(f);
-    for (size_t i = 0; i < sizeof(x)<<3; ++i) {
-        if (x >> i & 1) { fputc('1', f); }
-        else { fputc('0', f); }
+    for (int i = (sizeof(x)<<3)-1; i >= 0; --i) {
+        fputc((x >> i) & 1 ? '1' : '0', f);
     }
 }
 
