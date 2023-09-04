@@ -141,7 +141,6 @@ TEST(ast, visit) {
     astpool_init(&mempool);
 
     astref_t mock = get_mock_class(&mempool);
-    astnode_validate(&mempool, mock);
 
     static std::unordered_map<astnode_type_t, int> node_type_counts {};
 

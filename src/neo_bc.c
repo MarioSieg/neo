@@ -48,14 +48,15 @@ void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored) {
         const char *cc_k = colored ? NEO_CCMAGENTA : "";
         const char *cc_reset = colored ? NEO_CCRESET : "";
         if (opc_imm[opc]) {
+            imm24_t i = bci_mod1unpack_imm24(instr);
             fprintf(
                 out,
-                "%s%s%s %s#%" PRIx32 "%s",
+                i > 0xffff ? "%s%s%s %s#%" PRIx32 "%s" : "%s%s%s %s#%" PRIi32 "%s",
                 cc_mnemonic,
                 opc_mnemonic[opc],
                 cc_reset,
                 cc_k,
-                bci_mod1unpack_imm24(instr),
+                i,
                 cc_reset
             );
         } else {
@@ -203,7 +204,7 @@ void bc_disassemble(const bytecode_t *self, FILE *f, bool colored) {
             if (metaspace_get(&self->pool, bci_mod1unpack_umm24(self->p[i]), &value, &tag)) {
                 fprintf(f, "%s ; ", cc_comment);
                 switch (tag) {
-                    case RT_INT: fprintf(f, value.as_uint > 0xffff ? "int 0x%" PRIx64 : "int %" PRIi64, value.as_int); break;
+                    case RT_INT: fprintf(f, value.as_uint > 0xffff ? ("int 0x%" PRIx64) : ("int %" PRIi64), value.as_int); break;
                     case RT_FLOAT: fprintf(f, "float %f", value.as_float); break;
                     case RT_CHAR: fprintf(f, "char %c", value.as_char); break;
                     case RT_BOOL: fprintf(f, "bool %s", value.as_bool ? "true" : "false"); break;
@@ -216,6 +217,7 @@ void bc_disassemble(const bytecode_t *self, FILE *f, bool colored) {
         fputc('\n', f);
     }
     for (int i = 0; i < 64; ++i) { fputc('-', f); }
+    fputc('\n', f);
 }
 
 bool bc_validate(const bytecode_t *self, const vmisolate_t *isolate) {

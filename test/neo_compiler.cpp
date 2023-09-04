@@ -6,7 +6,7 @@
 using namespace neo;
 
 TEST(compiler, compile_test_file) {
-    neo_source_code source {"test/files/test.neo"};
+    neo_source_code source {"test/files/simple.neo"};
 
     neo_compiler compiler {};
     ASSERT_TRUE(compiler(source));

@@ -347,7 +347,6 @@ extern NEO_EXPORT astref_t astnode_new_module(astpool_t *pool, const node_module
 extern NEO_EXPORT astref_t astnode_new_self(astpool_t *pool);
 
 extern NEO_EXPORT size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
-extern NEO_EXPORT void astnode_validate(astpool_t *pool, astref_t root); /* Validates AST tree data in depth-first order, panics on failure.  */
 
 struct astpool_t {
     neo_mempool_t node_pool; /* Stores the astnode_t objects. */
