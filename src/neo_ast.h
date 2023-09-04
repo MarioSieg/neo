@@ -27,24 +27,6 @@ typedef struct symbol_t {
 #endif
 } symbol_t;
 
-/* Represents the symbol table which maps variable names to AST-nodes. */
-typedef struct symtab_t { /* Todo: Replace with hashmap. */
-    symbol_t *p;
-    uint32_t len;
-    uint32_t cap;
-    neo_mempool_t *pool;
-#if NEO_DBG
-    const char *dbg_name;
-#endif
-} symtab_t;
-
-extern NEO_EXPORT void symtab_init(symtab_t *self, neo_mempool_t *pool, const char *dbg_name);
-extern NEO_EXPORT bool symtab_insert(symtab_t *self, const symbol_t *sym, symbol_t **out);
-extern NEO_EXPORT NEO_NODISCARD astref_t symtab_lookup(symtab_t *self, uint32_t hash);
-#if NEO_DBG
-extern NEO_EXPORT void symtab_dump(const symtab_t *self, FILE *f);
-#endif
-
 typedef struct node_error_t {
     const char *message;
     token_t token;
@@ -194,17 +176,17 @@ typedef struct node_block_t {
     block_scope_t blktype : 8;
     union {
         struct {
-            symtab_t *class_table; /* Global symbol table. */
+            neo_hashmap_t class_table; /* Global symbol table. */
         } sc_module; /* Scope of: BLOCKSCOPE_MODULE */
         struct {
-            symtab_t *var_table; /* Class variables (static and local). */
-            symtab_t *method_table; /* Class methods (static and local). */
+            neo_hashmap_t var_table; /* Class variables (static and local). */
+            neo_hashmap_t method_table; /* Class methods (static and local). */
         } sc_class; /* Scope of: BLOCKSCOPE_CLASS */
         struct {
-            symtab_t *var_table; /* Local variables. */
+            neo_hashmap_t var_table; /* Local variables. */
         } sc_local; /* Scope of: BLOCKSCOPE_LOCAL */
         struct {
-            symtab_t *var_table; /* Local parameter variables. */
+            neo_hashmap_t var_table; /* Local parameter variables. */
         } sc_params; /* Scope of: BLOCKSCOPE_PARAMLIST */
     } symtabs;
     listref_t nodes; /* Child nodes. */

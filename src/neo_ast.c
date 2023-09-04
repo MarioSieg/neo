@@ -8,55 +8,6 @@
 #   include <graphviz/gvc.h>
 #endif
 
-void symtab_init(symtab_t *self, neo_mempool_t *pool, const char *dbg_name) {
-    neo_dassert(self && pool);
-    memset(self, 0, sizeof(*self));
-    self->cap = 1<<6;
-    self->p = neo_mempool_alloc(pool, self->cap*(sizeof(*self->p)));
-#if NEO_DBG
-    self->dbg_name = dbg_name ? dbg_name : "Default";
-#else
-    (void)dbg_name;
-#endif
-}
-
-bool symtab_insert(symtab_t *self, const symbol_t *sym, symbol_t **out) {
-    neo_dassert(self && sym);
-    neo_dassert(sym->hash && "Invalid hash");
-    for (uint32_t i = 0; i < self->len; ++i) {
-        if (self->p[i].hash == sym[i].hash) {
-            *out = self->p + i;
-            return false;
-        }
-    }
-    if (self->len >= self->cap) {
-        self->p = neo_mempool_realloc(self->pool, self->p, self->len, self->len + 1);
-    }
-    self->p[self->len++] = *sym;
-    return true;
-}
-
-astref_t symtab_lookup(symtab_t *self, uint32_t hash) {
-    neo_dassert(self && hash);
-    for (uint32_t i = 0; i < self->len; ++i) {
-        if (self->p[i].hash == hash) {
-            return self->p[i].node;
-        }
-    }
-    return ASTREF_NULL;
-}
-
-#if NEO_DBG
-void symtab_dump(const symtab_t *self, FILE *f) {
-    neo_dassert(self && f);
-    fprintf(f, "--- Begin Symbol Table '%s' ----\n", self->dbg_name);
-    for (uint32_t i = 0; i < self->len; ++i) {
-        fprintf(f, "\t\'%.*s\' : %"PRIx32"\n", self->p[i].span.len, self->p[i].span.p, self->p[i].hash);
-    }
-    fprintf(f, "--- End Symbol Table '%s' ----\n", self->dbg_name);
-}
-#endif
-
 static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
@@ -227,38 +178,24 @@ astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
 #endif
         astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
     }
+
+    /* Create AST node. */
     switch (data->blktype) {
         case BLOCKSCOPE_MODULE: {
-            //const symtab_t *class_table = data->symtabs.sc_module.class_table;
-            //astverify(class_table != NULL, "Module class table is NULL");
-            /* TODO: Validate symtab itself. */
+            /* TODO: Create symtab. */
         } break;
         case BLOCKSCOPE_CLASS: {
-            const symtab_t *var_table = data->symtabs.sc_class.var_table;
-            (void)var_table;
-            //astverify(var_table != NULL, "Class variable table is NULL");
-            const symtab_t *method_table = data->symtabs.sc_class.method_table;
-            (void)method_table;
-            //astverify(method_table != NULL, "Class method table is NULL");
-            /* TODO: Validate symtab itself. */
+            /* TODO: Create symtab. */
         } break;
         case BLOCKSCOPE_LOCAL: {
-            const symtab_t *var_table = data->symtabs.sc_local.var_table;
-            (void)var_table;
-            //astverify(var_table != NULL, "Local variable table is NULL");
-            /* TODO: Validate symtab itself. */
+            /* TODO: Create symtab. */
         } break;
         case BLOCKSCOPE_PARAMLIST: {
-            const symtab_t *var_table = data->symtabs.sc_params.var_table;
-            (void)var_table;
-            //astverify(var_table != NULL, "Parameter list variable table is NULL");
-            /* TODO: Validate symtab itself. */
+            /* TODO: Create symtab. */
         } break;
         case BLOCKSCOPE_ARGLIST: break;
         default: neo_panic("Invalid block type: %d", data->blktype);
     }
-
-    /* Create AST node. */
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BLOCK);
     nn->dat.n_block = *node;
@@ -432,7 +369,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     if (neo_unlikely(astref_isnull(node))) {
         return;
     } else if (!self->cap) { /* No nodes yet, so allocate. */
-        self->cap=1 << 5;
+        self->cap = 1<<5;
         self->nodes = astpool_alloclist(pool, NULL, self->cap);
     } else if (self->len >= self->cap) { /* Reallocate if necessary. */
         size_t oldlen = self->cap;
