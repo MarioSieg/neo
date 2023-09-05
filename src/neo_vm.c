@@ -2,39 +2,6 @@
 
 #include "neo_vm.h"
 
-bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode) {
-    neo_assert(isolate && bcode);
-    const bci_instr_t *code = bcode->p;
-    size_t len = bcode->len;
-    if (neo_unlikely(!code || !len)) {
-        neo_error("invalid code pointer or length: %zu", len);
-        return false;
-    }
-    if (neo_unlikely(bci_unpackopc(code[0]) != OPC_NOP)) {
-        neo_error("first instruction must be NOP, but instead is: %s", opc_mnemonic[bci_unpackopc(code[0])]);
-        return false;
-    }
-    if (neo_unlikely(bci_unpackopc(code[len-1]) != OPC_HLT)) {
-        neo_error("last instruction must be HLT, but instead is: %s", opc_mnemonic[bci_unpackopc(code[len-1])]);
-        return false;
-    }
-    for (size_t i = 0; i < len; ++i) { /* Validate the encoding of all instructions. */
-        if (neo_unlikely(!bci_validate_instr(code[i]))) {
-            neo_error("invalid instruction at index: %zu", i);
-            return false;
-        }
-        genop_t opc = bci_unpackopc(code[i]);
-        if (neo_unlikely(opc == OPC_LDC)) { /* Specific instruction validation. */
-            uint32_t umm24 = bci_mod1unpack_umm24(code[i]);
-            if (neo_unlikely(umm24 >= isolate->constpool.len)) {
-                neo_error("invalid constant pool index: %" PRIi32, umm24);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
 #define NEO_VM_COMPUTED_GOTO
 #ifdef NEO_VM_COMPUTED_GOTO
 #   define decl_op(name) __##name##__:
@@ -50,7 +17,7 @@ bool vm_validate(const vmisolate_t *isolate, const bytecode_t *bcode) {
 #   define label_ref(op)
 #endif
 
-#define STK_PADD_MAGIC (~0ull)
+#define STK_PADD_MAGIC (~(uint64_t)0)
 
 #define stk_check_ov(n)\
     if (neo_unlikely((uintptr_t)(sp+(n))>spe)) {\
@@ -214,7 +181,7 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
     register const uintptr_t sps = (uintptr_t)isolate->stack.p+sizeof(*isolate->stack.p); /* Start of stack. +1 for padding. */
     register const uintptr_t spe = (uintptr_t)(isolate->stack.p+isolate->stack.len)-sizeof(*isolate->stack.p); /* End of stack (last element). */
     register record_t *restrict sp = isolate->stack.p; /* Current stack pointer. */
-    register const record_t *restrict cp = isolate->constpool.p; /* Constant pool pointer. */
+    register const record_t *restrict cp = bcode->pool.p; /* Constant pool pointer. */
     register vminterrupt_t vif = VMINT_OK; /* VM interrupt flag. */
 
     sp->as_uint = STK_PADD_MAGIC;

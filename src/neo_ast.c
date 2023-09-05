@@ -8,65 +8,26 @@
 #   include <graphviz/gvc.h>
 #endif
 
-void symtab_init(symtab_t *self, neo_mempool_t *pool, const char *dbg_name) {
-    neo_dassert(self && pool);
-    memset(self, 0, sizeof(*self));
-    self->cap = 1<<6;
-    self->p = neo_mempool_alloc(pool, self->cap*(sizeof(*self->p)));
-#if NEO_DBG
-    self->dbg_name = dbg_name ? dbg_name : "Default";
-#else
-    (void)dbg_name;
-#endif
-}
+static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCKSCOPE_LOCAL */
+    |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCKSCOPE_LOCAL */
+    |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCKSCOPE_LOCAL */
+    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_PARAMLIST */
+    ASTNODE_EXPR_MASK /* BLOCKSCOPE_ARGLIST */
+};
 
-bool symtab_insert(symtab_t *self, const symbol_t *sym, symbol_t **out) {
-    neo_dassert(self && sym);
-    neo_dassert(sym->hash && "Invalid hash");
-    for (uint32_t i = 0; i < self->len; ++i) {
-        if (self->p[i].hash == sym[i].hash) {
-            *out = self->p + i;
-            return false;
-        }
-    }
-    if (self->len >= self->cap) {
-        self->p = neo_mempool_realloc(self->pool, self->p, self->len, self->len + 1);
-    }
-    self->p[self->len++] = *sym;
-    return true;
-}
-
-astref_t symtab_lookup(symtab_t *self, uint32_t hash) {
-    neo_dassert(self && hash);
-    for (uint32_t i = 0; i < self->len; ++i) {
-        if (self->p[i].hash == hash) {
-            return self->p[i].node;
-        }
-    }
-    return ASTREF_NULL;
-}
-
-#if NEO_DBG
-void symtab_dump(const symtab_t *self, FILE *f) {
-    neo_dassert(self && f);
-    fprintf(f, "--- Begin Symbol Table '%s' ----\n", self->dbg_name);
-    for (uint32_t i = 0; i < self->len; ++i) {
-        fprintf(f, "\t\'%.*s\' : %"PRIx32"\n", self->p[i].span.len, self->p[i].span.p, self->p[i].hash);
-    }
-    fprintf(f, "--- End Symbol Table '%s' ----\n", self->dbg_name);
-}
-#endif
-
-/* Implement AST node factory methods */
-
-#define impl_ast_node_factory(name, ttype)\
-  astref_t astnode_new_##name(astpool_t *pool, const node_##name##_t *node) {\
-    neo_dassert(pool);\
-    astnode_t *nn = NULL;\
-    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_##ttype);\
-    nn->dat.n_##name = *node;\
-    return ref;\
-  }
+#define _(_1, _2) [_1] = _2
+const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
+#undef _
+static const char *const block_names[BLOCKSCOPE__COUNT] = {
+    "(BLK) MODULE",
+    "(BLK) CLASS",
+    "(BLK) LOCAL",
+    "(BLK) PARAMLIST",
+    "(BLK) ARGLIST"
+};
 
 #define impl_ast_node_hull_factory(name, ttype)\
   astref_t astnode_new_##name(astpool_t *pool) {\
@@ -74,35 +35,307 @@ void symtab_dump(const symtab_t *self, FILE *f) {
     return astpool_alloc(pool, NULL,  ASTNODE_##ttype);\
   }
 
-#define impl_ast_node_literal_factory(name, ttype)\
-  astref_t astnode_new_##name(astpool_t *pool, neo_##name##_t value) {\
-    neo_dassert(pool);\
-    astnode_t *nn = NULL;\
-    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_##ttype);\
-    nn->dat.n_##name##_lit.value = value;\
-    return ref;\
-  }
-
-impl_ast_node_factory(error, ERROR)
-impl_ast_node_factory(group, GROUP)
-impl_ast_node_factory(unary_op, UNARY_OP)
-impl_ast_node_factory(binary_op, BINARY_OP)
-impl_ast_node_factory(method, METHOD)
-impl_ast_node_factory(block, BLOCK)
-impl_ast_node_factory(variable, VARIABLE)
-impl_ast_node_factory(return, RETURN)
 impl_ast_node_hull_factory(break, BREAK)
 impl_ast_node_hull_factory(continue, CONTINUE)
-impl_ast_node_factory(branch, BRANCH)
-impl_ast_node_factory(loop, LOOP)
-impl_ast_node_factory(class, CLASS)
-impl_ast_node_factory(module, MODULE)
-
-impl_ast_node_literal_factory(int, INT_LIT)
-impl_ast_node_literal_factory(float, FLOAT_LIT)
-impl_ast_node_literal_factory(char, CHAR_LIT)
-impl_ast_node_literal_factory(bool, BOOL_LIT)
 impl_ast_node_hull_factory(self, SELF_LIT)
+
+#undef impl_ast_node_hull_factory
+
+#define astverify(expr, msg) neo_assert((expr) && "AST verification failed: " msg)
+static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
+    neo_dassert(pool);
+    astverify(astpool_isvalidref(pool, target), "AST reference is invalid");
+    astnode_t *node = astpool_resolve(pool, target);
+    astverify(node != NULL, "AST reference resolve returned NULL");
+    return node;
+}
+#define isexpr(node) (ASTNODE_EXPR_MASK&(astmask((node)->type)))
+#define verify_resolve(ref) verify_resolve_node(pool, (ref))
+#define verify_expr(node) astverify(isexpr((node)), "AST Node is not an expression")
+#define verify_type(node, expected) astverify((node)->type == (expected), "AST Node is not of expected type: " #expected)
+#define verify_block(node, expected)\
+    verify_type((node), ASTNODE_BLOCK); \
+    astverify((node)->dat.n_block.blktype == (expected), "AST Node block type is not of expected block type: " #expected)
+
+astref_t astnode_new_error(astpool_t *pool, const node_error_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_error_t *data = node;
+    astverify(data->message, "Error message is NULL");
+    astverify(data->token.lexeme.p && data->token.lexeme.len, "Error token lexeme is NULL");
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_ERROR);
+    nn->dat.n_error = *node;
+    return ref;
+}
+
+astref_t astnode_new_group(astpool_t *pool, const node_group_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_group_t *data = node;
+    const astnode_t *child_expr = verify_resolve(data->child_expr);
+    verify_expr(child_expr);
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_GROUP);
+    nn->dat.n_group = *node;
+    return ref;
+}
+
+astref_t astnode_new_unary_op(astpool_t *pool, const node_unary_op_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_unary_op_t *data = node;
+    astverify(data->opcode < UNOP__COUNT, "Unary op operator is invalid");
+    const astnode_t *expr = verify_resolve(data->child_expr);
+    verify_expr(expr);
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_UNARY_OP);
+    nn->dat.n_unary_op = *node;
+    return ref;
+}
+
+astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_binary_op_t *data = node;
+    astverify(data->opcode < BINOP__COUNT, "Binary op operator is invalid");
+    const astnode_t *lhs = verify_resolve(data->left_expr);
+    verify_expr(lhs);
+    const astnode_t *rhs = verify_resolve(data->right_expr);
+    if (data->opcode == BINOP_CALL) { /* Call has a block of arguments. */
+        verify_type(rhs, ASTNODE_BLOCK);
+        const node_block_t *block = &rhs->dat.n_block;
+        astverify(block->blktype == BLOCKSCOPE_ARGLIST, "Call block is not of type BLOCKSCOPE_ARGLIST");
+        const astref_t *args = astpool_resolvelist(pool, block->nodes);
+        for (uint32_t i = 0; i < block->len; ++i) { /* All arguments must be expressions. */
+            const astnode_t *arg = verify_resolve(args[i]);
+            verify_expr(arg);
+        }
+    } else {
+        verify_expr(rhs);
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BINARY_OP);
+    nn->dat.n_binary_op = *node;
+    return ref;
+}
+
+astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_method_t *data = node;
+    const astnode_t *ident = verify_resolve(data->ident);
+    verify_type(ident, ASTNODE_IDENT_LIT);
+    if (!astref_isnull(data->params)) { /* Optional. */
+        const astnode_t *params = verify_resolve(data->params);
+        verify_block(params, BLOCKSCOPE_PARAMLIST);
+    }
+    if (!astref_isnull(data->ret_type)) { /* Optional. */
+        const astnode_t *ret_type = verify_resolve(data->ret_type);
+        verify_type(ret_type, ASTNODE_IDENT_LIT);
+    }
+    if (!astref_isnull(data->body)) { /* Optional. */
+        const astnode_t *body = verify_resolve(data->body);
+        verify_block(body, BLOCKSCOPE_LOCAL);
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_METHOD);
+    nn->dat.n_method = *node;
+    return ref;
+}
+
+astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_block_t *data = node;
+    astverify(data->len > 0, "Block nodes array is empty");
+    const astref_t *children = astpool_resolvelist(pool, data->nodes);
+    for (uint32_t i = 0; i < data->len; ++i) {
+        astref_t child = children[i];
+        const astnode_t *child_node = verify_resolve(child);
+        uint64_t mask = block_valid_masks[data->blktype];
+        uint64_t node_mask = astmask(child_node->type);
+#if NEO_DBG
+        if (neo_unlikely((mask & node_mask) == 0)) {
+            neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[child_node->type], block_names[data->blktype]);
+        }
+#endif
+        astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
+    }
+
+    /* Create AST node. */
+    switch (data->blktype) {
+        case BLOCKSCOPE_MODULE: {
+            /* TODO: Create symtab. */
+        } break;
+        case BLOCKSCOPE_CLASS: {
+            /* TODO: Create symtab. */
+        } break;
+        case BLOCKSCOPE_LOCAL: {
+            /* TODO: Create symtab. */
+        } break;
+        case BLOCKSCOPE_PARAMLIST: {
+            /* TODO: Create symtab. */
+        } break;
+        case BLOCKSCOPE_ARGLIST: break;
+        default: neo_panic("Invalid block type: %d", data->blktype);
+    }
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BLOCK);
+    nn->dat.n_block = *node;
+    return ref;
+}
+
+astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_variable_t *data = node;
+    verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+    verify_type(verify_resolve(data->type), ASTNODE_IDENT_LIT);
+    if (data->var_scope != VARSCOPE_PARAM) {
+        verify_expr(verify_resolve(data->init_expr));
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_VARIABLE);
+    nn->dat.n_variable = *node;
+    return ref;
+}
+
+astref_t astnode_new_return(astpool_t *pool, const node_return_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_return_t *data = node;
+    if (!astref_isnull(data->child_expr)) { /* Optional. */
+        verify_expr(verify_resolve(data->child_expr));
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_RETURN);
+    nn->dat.n_return = *node;
+    return ref;
+}
+
+astref_t astnode_new_branch(astpool_t *pool, const node_branch_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_branch_t *data = node;
+    verify_expr(verify_resolve(data->cond_expr));
+    verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
+    if (!astref_isnull(data->false_block)) { /* Optional. */
+        verify_block(verify_resolve(data->false_block), BLOCKSCOPE_LOCAL);
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BRANCH);
+    nn->dat.n_branch = *node;
+    return ref;
+}
+
+astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_loop_t *data = node;
+    verify_expr(verify_resolve(data->cond_expr));
+    verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_LOOP);
+    nn->dat.n_loop = *node;
+    return ref;
+}
+
+astref_t astnode_new_class(astpool_t *pool, const node_class_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_class_t *data = node;
+    verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+    if (!astref_isnull(data->body)) { /* Optional. */
+        verify_block(verify_resolve(data->body), BLOCKSCOPE_CLASS);
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_CLASS);
+    nn->dat.n_class = *node;
+    return ref;
+}
+
+astref_t astnode_new_module(astpool_t *pool, const node_module_t *node) {
+    neo_dassert(pool && node);
+
+    /* Verify AST data. */
+    const node_module_t *data = node;
+    if (!astref_isnull(data->ident)) {
+        verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
+    }
+    if (!astref_isnull(data->body)) { /* Optional. */
+        verify_block(verify_resolve(data->body), BLOCKSCOPE_MODULE);
+    }
+
+    /* Create AST node. */
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_MODULE);
+    nn->dat.n_module = *node;
+    return ref;
+}
+
+astref_t astnode_new_int(astpool_t *pool, neo_int_t value) {
+    neo_dassert(pool);
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_INT_LIT);
+    nn->dat.n_int_lit.value = value;
+    return ref;
+}
+
+astref_t astnode_new_float(astpool_t *pool, neo_float_t value) {
+    neo_dassert(pool);
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_FLOAT_LIT);
+    nn->dat.n_float_lit.value = value;
+    return ref;
+}
+
+astref_t astnode_new_char(astpool_t *pool, neo_char_t value) {
+    neo_dassert(pool);
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_CHAR_LIT);
+    nn->dat.n_char_lit.value = value;
+    return ref;
+}
+
+astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value) {
+    neo_dassert(pool);
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BOOL_LIT);
+    nn->dat.n_bool_lit.value = value;
+    return ref;
+}
 
 astref_t astnode_new_string(astpool_t *pool, srcspan_t value) {
     neo_dassert(pool);
@@ -131,39 +364,17 @@ astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astre
     return ref;
 }
 
-static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCKSCOPE_LOCAL */
-    |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCKSCOPE_LOCAL */
-    |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCKSCOPE_LOCAL */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_PARAMLIST */
-    ASTNODE_EXPR_MASK /* BLOCKSCOPE_ARGLIST */
-};
-
-#define _(_1, _2) [_1] = _2
-const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };
-#undef _
-static const char *const block_names[BLOCKSCOPE__COUNT] = {
-    "(BLK) MODULE",
-    "(BLK) CLASS",
-    "(BLK) LOCAL",
-    "(BLK) PARAMLIST",
-    "(BLK) ARGLIST"
-};
-
 void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     neo_dassert(pool && self);
     if (neo_unlikely(astref_isnull(node))) {
         return;
     } else if (!self->cap) { /* No nodes yet, so allocate. */
-        self->cap=1 << 5;
+        self->cap = 1<<5;
         self->nodes = astpool_alloclist(pool, NULL, self->cap);
     } else if (self->len >= self->cap) { /* Reallocate if necessary. */
         size_t oldlen = self->cap;
         const astref_t *old = astpool_resolvelist(pool, self->nodes);
-        self->cap<<=2;
-        listref_t newref = astpool_alloclist(pool, NULL, self->cap);
+        listref_t newref = astpool_alloclist(pool, NULL, self->cap<<=2);
         astref_t *new = astpool_resolvelist(pool, newref);
         memcpy(new, old, oldlen*sizeof(*new));
         self->nodes = newref;
@@ -180,10 +391,6 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this self kind"); /* Check that the node type is allowed in this self type. For example, method declarations are not allowed in parameter list blocks.  */
 #endif
 }
-
-#undef impl_ast_node_literal_factory
-#undef impl_ast_node_hull_factory
-#undef impl_ast_node_factory
 
 static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
     neo_dassert(pool && visitor && c);
@@ -270,188 +477,6 @@ size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *
     size_t c = 0;
     astnode_visit_root_impl(pool, root, visitor, user, &c);
     return c;
-}
-
-#define astverify(expr, msg) neo_assert((expr) && "AST verification failed: " msg)
-#define isexpr(node) (ASTNODE_EXPR_MASK&(astmask((node)->type)))
-
-static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
-    neo_dassert(pool);
-    astverify(astpool_isvalidref(pool, target), "AST reference is invalid");
-    astnode_t *node = astpool_resolve(pool, target);
-    astverify(node != NULL, "AST reference resolve returned NULL");
-    return node;
-}
-
-#define verify_resolve(ref) verify_resolve_node(pool, (ref))
-#define verify_expr(node) astverify(isexpr((node)), "AST Node is not an expression")
-#define verify_type(node, expected) astverify((node)->type == (expected), "AST Node is not of expected type: " #expected)
-#define verify_block(node, expected)\
-    verify_type((node), ASTNODE_BLOCK); \
-    astverify((node)->dat.n_block.blktype == (expected), "AST Node block type is not of expected block type: " #expected)
-
-static void ast_validator(astpool_t *pool, astref_t noderef, void *user) {
-    astnode_t *node = astpool_resolve(pool, noderef); (void)user;
-    switch (node->type) {
-        case ASTNODE_ERROR: {
-            const node_error_t *data = &node->dat.n_error;
-            astverify(data->message, "Error message is NULL");
-            astverify(data->token.lexeme.p && data->token.lexeme.len, "Error token lexeme is NULL");
-        } return;
-        case ASTNODE_BREAK: /* No assoc data. */
-        case ASTNODE_CONTINUE: /* No assoc data. */
-        case ASTNODE_INT_LIT: /* No validation needed. */
-        case ASTNODE_FLOAT_LIT: /* No validation needed. */
-        case ASTNODE_CHAR_LIT: /* No validation needed. */
-        case ASTNODE_BOOL_LIT: /* No validation needed. */
-        case ASTNODE_STRING_LIT: /* No validation needed. */
-        case ASTNODE_IDENT_LIT: /* No validation needed. */
-        case ASTNODE_SELF_LIT:
-            return;
-        case ASTNODE_GROUP: {
-            const node_group_t *data = &node->dat.n_group;
-            const astnode_t *child_expr = verify_resolve(data->child_expr);
-            verify_expr(child_expr);
-        } return;
-        case ASTNODE_UNARY_OP: {
-            const node_unary_op_t *data = &node->dat.n_unary_op;
-            astverify(data->opcode < UNOP__COUNT, "Unary op operator is invalid");
-            const astnode_t *expr = verify_resolve(data->child_expr);
-            verify_expr(expr);
-        } return;
-        case ASTNODE_BINARY_OP: {
-            const node_binary_op_t *data = &node->dat.n_binary_op;
-            astverify(data->opcode < BINOP__COUNT, "Binary op operator is invalid");
-            const astnode_t *lhs = verify_resolve(data->left_expr);
-            verify_expr(lhs);
-            const astnode_t *rhs = verify_resolve(data->right_expr);
-            if (data->opcode == BINOP_CALL) { /* Call has a block of arguments. */
-                verify_type(rhs, ASTNODE_BLOCK);
-                const node_block_t *block = &rhs->dat.n_block;
-                astverify(block->blktype == BLOCKSCOPE_ARGLIST, "Call block is not of type BLOCKSCOPE_ARGLIST");
-                const astref_t *args = astpool_resolvelist(pool, block->nodes);
-                for (uint32_t i = 0; i < block->len; ++i) { /* All arguments must be expressions. */
-                    const astnode_t *arg = verify_resolve(args[i]);
-                    verify_expr(arg);
-                }
-            } else {
-                verify_expr(rhs);
-            }
-        } return;
-        case ASTNODE_METHOD: {
-            const node_method_t *data = &node->dat.n_method;
-            const astnode_t *ident = verify_resolve(data->ident);
-            verify_type(ident, ASTNODE_IDENT_LIT);
-            if (!astref_isnull(data->params)) { /* Optional. */
-                const astnode_t *params = verify_resolve(data->params);
-                verify_block(params, BLOCKSCOPE_PARAMLIST);
-            }
-            if (!astref_isnull(data->ret_type)) { /* Optional. */
-                const astnode_t *ret_type = verify_resolve(data->ret_type);
-                verify_type(ret_type, ASTNODE_IDENT_LIT);
-            }
-            if (!astref_isnull(data->body)) { /* Optional. */
-                const astnode_t *body = verify_resolve(data->body);
-                verify_block(body, BLOCKSCOPE_LOCAL);
-            }
-        } return;
-        case ASTNODE_BLOCK: {
-            const node_block_t *data = &node->dat.n_block;
-            astverify(data->len > 0, "Block nodes array is empty");
-            const astref_t *children = astpool_resolvelist(pool, data->nodes);
-            for (uint32_t i = 0; i < data->len; ++i) {
-                astref_t child = children[i];
-                const astnode_t *child_node = verify_resolve(child);
-                uint64_t mask = block_valid_masks[data->blktype];
-                uint64_t node_mask = astmask(child_node->type);
-#if NEO_DBG
-                if (neo_unlikely((mask & node_mask) == 0)) {
-                    neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[child_node->type], block_names[data->blktype]);
-                }
-#endif
-                astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
-            }
-            switch (data->blktype) {
-                case BLOCKSCOPE_MODULE: {
-                    //const symtab_t *class_table = data->symtabs.sc_module.class_table;
-                    //astverify(class_table != NULL, "Module class table is NULL");
-                    /* TODO: Validate symtab itself. */
-                } break;
-                case BLOCKSCOPE_CLASS: {
-                    const symtab_t *var_table = data->symtabs.sc_class.var_table;
-                    (void)var_table;
-                    //astverify(var_table != NULL, "Class variable table is NULL");
-                    const symtab_t *method_table = data->symtabs.sc_class.method_table;
-                    (void)method_table;
-                    //astverify(method_table != NULL, "Class method table is NULL");
-                    /* TODO: Validate symtab itself. */
-                } break;
-                case BLOCKSCOPE_LOCAL: {
-                    const symtab_t *var_table = data->symtabs.sc_local.var_table;
-                    (void)var_table;
-                    //astverify(var_table != NULL, "Local variable table is NULL");
-                    /* TODO: Validate symtab itself. */
-                } break;
-                case BLOCKSCOPE_PARAMLIST: {
-                    const symtab_t *var_table = data->symtabs.sc_params.var_table;
-                    (void)var_table;
-                    //astverify(var_table != NULL, "Parameter list variable table is NULL");
-                    /* TODO: Validate symtab itself. */
-                } break;
-                case BLOCKSCOPE_ARGLIST: break;
-                default: neo_panic("Invalid block type: %d", data->blktype);
-            }
-        } return;
-        case ASTNODE_VARIABLE: {
-            const node_variable_t *data = &node->dat.n_variable;
-            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
-            verify_type(verify_resolve(data->type), ASTNODE_IDENT_LIT);
-            if (data->var_scope != VARSCOPE_PARAM) {
-                verify_expr(verify_resolve(data->init_expr));
-            }
-        } return;
-        case ASTNODE_RETURN: {
-            const node_return_t *data = &node->dat.n_return;
-            if (!astref_isnull(data->child_expr)) { /* Optional. */
-                verify_expr(verify_resolve(data->child_expr));
-            }
-        } return;
-        case ASTNODE_BRANCH: {
-            const node_branch_t *data = &node->dat.n_branch;
-            verify_expr(verify_resolve(data->cond_expr));
-            verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
-            if (!astref_isnull(data->false_block)) { /* Optional. */
-                verify_block(verify_resolve(data->false_block), BLOCKSCOPE_LOCAL);
-            }
-        } return;
-        case ASTNODE_LOOP: {
-            const node_loop_t *data = &node->dat.n_loop;
-            verify_expr(verify_resolve(data->cond_expr));
-            verify_block(verify_resolve(data->true_block), BLOCKSCOPE_LOCAL);
-        } return;
-        case ASTNODE_CLASS: {
-            const node_class_t *data = &node->dat.n_class;
-            verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
-            if (!astref_isnull(data->body)) { /* Optional. */
-                verify_block(verify_resolve(data->body), BLOCKSCOPE_CLASS);
-            }
-        } return;
-        case ASTNODE_MODULE: {
-            const node_module_t *data = &node->dat.n_module;
-            if (!astref_isnull(data->ident)) {
-                verify_type(verify_resolve(data->ident), ASTNODE_IDENT_LIT);
-            }
-            if (!astref_isnull(data->body)) { /* Optional. */
-                verify_block(verify_resolve(data->body), BLOCKSCOPE_MODULE);
-            }
-        } return;
-        case ASTNODE__COUNT: neo_unreachable();
-    }
-}
-
-void astnode_validate(astpool_t *pool, astref_t root) {
-    neo_dassert(pool);
-    astnode_visit(pool, root, &ast_validator, NULL);
 }
 
 astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) { /* TODO: Use mempool alloc. */

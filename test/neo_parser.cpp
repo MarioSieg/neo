@@ -210,6 +210,93 @@ TEST(parse, consume_ident) {
         errvec_free(&ev);\
     }
 
+// binary op between an ident and a literal
+#define BINARY_OP_IDENT_LITERAL(op, opcode2) \
+    TEST(parse, bin_expr_ident_literal_##opcode2) {\
+        error_vector_t ev;\
+        errvec_init(&ev);\
+        parser_t parser;\
+        parser_init(&parser, &ev);\
+        std::uniform_int_distribution<neo_int_t> dist {0, 0xffff};\
+        auto identA = srcspan_from("x");\
+        neo_int_t b = dist(prng);\
+        std::string source = std::string(reinterpret_cast<const char *>(identA.p)) + " " #op " " + std::to_string(b);\
+        std::cout << "Testing expression: " << source << "\n";\
+        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        \
+        parser_setup_source(&parser, src);\
+        \
+        astref_t expr = rule_expr(&parser);\
+        errvec_print(&ev, stderr);\
+        ASSERT_FALSE(parser.error);\
+        ASSERT_FALSE(astref_isnull(expr));\
+        ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\
+        astnode_t *expr_node = astpool_resolve(&parser.pool, expr);\
+        ASSERT_NE(expr_node, nullptr);\
+        ASSERT_EQ(expr_node->type, ASTNODE_BINARY_OP);\
+        ASSERT_EQ(expr_node->dat.n_binary_op.opcode, BINOP_##opcode2);\
+        ASSERT_FALSE(astref_isnull(expr_node->dat.n_binary_op.left_expr));\
+        ASSERT_FALSE(astref_isnull(expr_node->dat.n_binary_op.right_expr));\
+        \
+        astnode_t *left = astpool_resolve(&parser.pool, expr_node->dat.n_binary_op.left_expr);\
+        ASSERT_NE(left, nullptr);\
+        ASSERT_EQ(left->type, ASTNODE_IDENT_LIT);\
+        ASSERT_TRUE(srcspan_eq(left->dat.n_ident_lit.span, identA));\
+        \
+        astnode_t *right = astpool_resolve(&parser.pool, expr_node->dat.n_binary_op.right_expr);\
+        ASSERT_NE(right, nullptr);\
+        ASSERT_EQ(right->type, ASTNODE_INT_LIT);\
+        ASSERT_EQ(right->dat.n_int_lit.value, b);\
+        \
+        source_free(src);\
+        parser_free(&parser);\
+        errvec_free(&ev);\
+    }
+
+// binary op between a literal and an ident
+#define BINARY_OP_LITERAL_IDENT(op, opcode2) \
+    TEST(parse, bin_expr_literal_ident_##opcode2) {\
+        error_vector_t ev;\
+        errvec_init(&ev);\
+        parser_t parser;\
+        parser_init(&parser, &ev);\
+        std::uniform_int_distribution<neo_int_t> dist {0, 0xffff};\
+        neo_int_t a = dist(prng);\
+        auto identB = srcspan_from("y");\
+        std::string source = std::to_string(a) + " " #op " " + std::string(reinterpret_cast<const char *>(identB.p));\
+        std::cout << "Testing expression: " << source << "\n";\
+        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        \
+        parser_setup_source(&parser, src);\
+        \
+        astref_t expr = rule_expr(&parser);\
+        errvec_print(&ev, stderr);\
+        ASSERT_FALSE(parser.error);\
+        ASSERT_FALSE(astref_isnull(expr));\
+        ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\
+        astnode_t *expr_node = astpool_resolve(&parser.pool, expr);\
+        ASSERT_NE(expr_node, nullptr);\
+        ASSERT_EQ(expr_node->type, ASTNODE_BINARY_OP);\
+        ASSERT_EQ(expr_node->dat.n_binary_op.opcode, BINOP_##opcode2);\
+        ASSERT_FALSE(astref_isnull(expr_node->dat.n_binary_op.left_expr));\
+        ASSERT_FALSE(astref_isnull(expr_node->dat.n_binary_op.right_expr));\
+        \
+        astnode_t *left = astpool_resolve(&parser.pool, expr_node->dat.n_binary_op.left_expr);\
+        ASSERT_NE(left, nullptr);\
+        ASSERT_EQ(left->type, ASTNODE_INT_LIT);\
+        ASSERT_EQ(left->dat.n_int_lit.value, a);\
+        \
+        astnode_t *right = astpool_resolve(&parser.pool, expr_node->dat.n_binary_op.right_expr);\
+        ASSERT_NE(right, nullptr);\
+        ASSERT_EQ(right->type, ASTNODE_IDENT_LIT);\
+        ASSERT_TRUE(srcspan_eq(right->dat.n_ident_lit.span, identB));\
+        \
+        source_free(src);\
+        parser_free(&parser);\
+        errvec_free(&ev);\
+    }
+
+
 BINARY_OP_LITERAL_LITERAL(=, ASSIGN)
 BINARY_OP_LITERAL_LITERAL(+, ADD)
 BINARY_OP_LITERAL_LITERAL(-, SUB)
@@ -301,6 +388,98 @@ BINARY_OP_IDENT_IDENT(>>>=, BIT_ROR_ASSIGN)
 BINARY_OP_IDENT_IDENT(>>>>=, BIT_LSHR_ASSIGN)
 BINARY_OP_IDENT_IDENT(and, LOG_AND)
 BINARY_OP_IDENT_IDENT(or, LOG_OR)
+
+BINARY_OP_IDENT_LITERAL(=, ASSIGN)
+BINARY_OP_IDENT_LITERAL(+, ADD)
+BINARY_OP_IDENT_LITERAL(-, SUB)
+BINARY_OP_IDENT_LITERAL(*, MUL)
+BINARY_OP_IDENT_LITERAL(**, POW)
+BINARY_OP_IDENT_LITERAL(!+, ADD_NO_OV)
+BINARY_OP_IDENT_LITERAL(!-, SUB_NO_OV)
+BINARY_OP_IDENT_LITERAL(!*, MUL_NO_OV)
+BINARY_OP_IDENT_LITERAL(!**, POW_NO_OV)
+BINARY_OP_IDENT_LITERAL(/, DIV)
+BINARY_OP_IDENT_LITERAL(%, MOD)
+BINARY_OP_IDENT_LITERAL(+=, ADD_ASSIGN)
+BINARY_OP_IDENT_LITERAL(-=, SUB_ASSIGN)
+BINARY_OP_IDENT_LITERAL(*=, MUL_ASSIGN)
+BINARY_OP_IDENT_LITERAL(**=, POW_ASSIGN)
+BINARY_OP_IDENT_LITERAL(!+=, ADD_ASSIGN_NO_OV)
+BINARY_OP_IDENT_LITERAL(!-=, SUB_ASSIGN_NO_OV)
+BINARY_OP_IDENT_LITERAL(!*=, MUL_ASSIGN_NO_OV)
+BINARY_OP_IDENT_LITERAL(!**=, POW_ASSIGN_NO_OV)
+BINARY_OP_IDENT_LITERAL(/=, DIV_ASSIGN)
+BINARY_OP_IDENT_LITERAL(%=, MOD_ASSIGN)
+BINARY_OP_IDENT_LITERAL(==, EQUAL)
+BINARY_OP_IDENT_LITERAL(!=, NOT_EQUAL)
+BINARY_OP_IDENT_LITERAL(<, LESS)
+BINARY_OP_IDENT_LITERAL(<=, LESS_EQUAL)
+BINARY_OP_IDENT_LITERAL(>, GREATER)
+BINARY_OP_IDENT_LITERAL(>=, GREATER_EQUAL)
+BINARY_OP_IDENT_LITERAL(&, BIT_AND)
+BINARY_OP_IDENT_LITERAL(|, BIT_OR)
+BINARY_OP_IDENT_LITERAL(^, BIT_XOR)
+BINARY_OP_IDENT_LITERAL(&=, BIT_AND_ASSIGN)
+BINARY_OP_IDENT_LITERAL(|=, BIT_OR_ASSIGN)
+BINARY_OP_IDENT_LITERAL(^=, BIT_XOR_ASSIGN)
+BINARY_OP_IDENT_LITERAL(<<, BIT_ASHL)
+BINARY_OP_IDENT_LITERAL(>>, BIT_ASHR)
+BINARY_OP_IDENT_LITERAL(<<<, BIT_ROL)
+BINARY_OP_IDENT_LITERAL(>>>, BIT_ROR)
+BINARY_OP_IDENT_LITERAL(>>>>, BIT_LSHR)
+BINARY_OP_IDENT_LITERAL(<<=, BIT_ASHL_ASSIGN)
+BINARY_OP_IDENT_LITERAL(>>=, BIT_ASHR_ASSIGN)
+BINARY_OP_IDENT_LITERAL(<<<=, BIT_ROL_ASSIGN)
+BINARY_OP_IDENT_LITERAL(>>>=, BIT_ROR_ASSIGN)
+BINARY_OP_IDENT_LITERAL(>>>>=, BIT_LSHR_ASSIGN)
+BINARY_OP_IDENT_LITERAL(and, LOG_AND)
+BINARY_OP_IDENT_LITERAL(or, LOG_OR)
+
+BINARY_OP_LITERAL_IDENT(=, ASSIGN)
+BINARY_OP_LITERAL_IDENT(+, ADD)
+BINARY_OP_LITERAL_IDENT(-, SUB)
+BINARY_OP_LITERAL_IDENT(*, MUL)
+BINARY_OP_LITERAL_IDENT(**, POW)
+BINARY_OP_LITERAL_IDENT(!+, ADD_NO_OV)
+BINARY_OP_LITERAL_IDENT(!-, SUB_NO_OV)
+BINARY_OP_LITERAL_IDENT(!*, MUL_NO_OV)
+BINARY_OP_LITERAL_IDENT(!**, POW_NO_OV)
+BINARY_OP_LITERAL_IDENT(/, DIV)
+BINARY_OP_LITERAL_IDENT(%, MOD)
+BINARY_OP_LITERAL_IDENT(+=, ADD_ASSIGN)
+BINARY_OP_LITERAL_IDENT(-=, SUB_ASSIGN)
+BINARY_OP_LITERAL_IDENT(*=, MUL_ASSIGN)
+BINARY_OP_LITERAL_IDENT(**=, POW_ASSIGN)
+BINARY_OP_LITERAL_IDENT(!+=, ADD_ASSIGN_NO_OV)
+BINARY_OP_LITERAL_IDENT(!-=, SUB_ASSIGN_NO_OV)
+BINARY_OP_LITERAL_IDENT(!*=, MUL_ASSIGN_NO_OV)
+BINARY_OP_LITERAL_IDENT(!**=, POW_ASSIGN_NO_OV)
+BINARY_OP_LITERAL_IDENT(/=, DIV_ASSIGN)
+BINARY_OP_LITERAL_IDENT(%=, MOD_ASSIGN)
+BINARY_OP_LITERAL_IDENT(==, EQUAL)
+BINARY_OP_LITERAL_IDENT(!=, NOT_EQUAL)
+BINARY_OP_LITERAL_IDENT(<, LESS)
+BINARY_OP_LITERAL_IDENT(<=, LESS_EQUAL)
+BINARY_OP_LITERAL_IDENT(>, GREATER)
+BINARY_OP_LITERAL_IDENT(>=, GREATER_EQUAL)
+BINARY_OP_LITERAL_IDENT(&, BIT_AND)
+BINARY_OP_LITERAL_IDENT(|, BIT_OR)
+BINARY_OP_LITERAL_IDENT(^, BIT_XOR)
+BINARY_OP_LITERAL_IDENT(&=, BIT_AND_ASSIGN)
+BINARY_OP_LITERAL_IDENT(|=, BIT_OR_ASSIGN)
+BINARY_OP_LITERAL_IDENT(^=, BIT_XOR_ASSIGN)
+BINARY_OP_LITERAL_IDENT(<<, BIT_ASHL)
+BINARY_OP_LITERAL_IDENT(>>, BIT_ASHR)
+BINARY_OP_LITERAL_IDENT(<<<, BIT_ROL)
+BINARY_OP_LITERAL_IDENT(>>>, BIT_ROR)
+BINARY_OP_LITERAL_IDENT(>>>>, BIT_LSHR)
+BINARY_OP_LITERAL_IDENT(<<=, BIT_ASHL_ASSIGN)
+BINARY_OP_LITERAL_IDENT(>>=, BIT_ASHR_ASSIGN)
+BINARY_OP_LITERAL_IDENT(<<<=, BIT_ROL_ASSIGN)
+BINARY_OP_LITERAL_IDENT(>>>=, BIT_ROR_ASSIGN)
+BINARY_OP_LITERAL_IDENT(>>>>=, BIT_LSHR_ASSIGN)
+BINARY_OP_LITERAL_IDENT(and, LOG_AND)
+BINARY_OP_LITERAL_IDENT(or, LOG_OR)
 
 static inline bool parse_int2(srcspan_t str, neo_int_t *x) {
     return parse_int((const char *) str.p, str.len, RADIX_UNKNOWN, x);

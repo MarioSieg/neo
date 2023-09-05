@@ -3,6 +3,36 @@
 #include <gtest/gtest.h>
 #include <neo_bc.h>
 
+TEST(bytecode, append) {
+    bytecode_t bc {};
+    bc_init(&bc);
+    ASSERT_EQ(bc.len, 0);
+    bc_emit(&bc, bci_comp_mod1_imm24(OPC_IPUSH, 0));
+    ASSERT_EQ(bc.len, 1);
+    bc_emit(&bc, bci_comp_mod1_imm24(OPC_IPUSH, 1));
+    ASSERT_EQ(bc.len, 2);
+    bc_free(&bc);
+}
+
+TEST(bytecode, disassemble) {
+    bytecode_t bc {};
+    bc_init(&bc);
+    bc_emit_ipush(&bc, 0);
+    bc_emit_ipush(&bc, 0x7ffff);
+    bc_emit_ipush(&bc, NEO_INT_MAX);
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_IXOR));
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_IXOR));
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_IADDO));
+    bc_emit(&bc, bci_comp_mod1_imm24(OPC_IPUSH, 2));
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_IMULO));
+    bc_emit_ipush(&bc, NEO_INT_MIN>>1);
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_ISUB));
+    bc_emit(&bc, bci_comp_mod1_no_imm(OPC_POP));
+    bc_finalize(&bc);
+    bc_disassemble(&bc, stdout, true);
+    bc_free(&bc);
+}
+
 TEST(bytecode, encode_imm24) {
     ASSERT_EQ(bci_mod1unpack_imm24(bci_comp_mod1_imm24(OPC_IPUSH, 0)), 0);
     ASSERT_EQ(bci_mod1unpack_imm24(bci_comp_mod1_imm24(OPC_IPUSH, BCI_MOD1IMM24MIN)), BCI_MOD1IMM24MIN);

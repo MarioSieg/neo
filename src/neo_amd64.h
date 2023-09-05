@@ -171,7 +171,7 @@ neo_static_assert(CALLEE_SAVED_REG_MASK <= 0xffff);
 typedef enum genop_t {
     XI_INT3 = 0xcc, XI_NOP = 0x90, XI_RET = 0xc3,
     XI_CALL = 0xe8, XI_JMP = 0xe9
-} genop_t;
+} opcode_t;
 
 /* ALU instructions. */
 typedef enum aluop_t {
@@ -234,7 +234,7 @@ static void emit_rex(mcode_t **mxp, mcode_t mod, mcode_t idx, mcode_t rmo, bool 
 
 /* REX + OPC. */
 static NEO_AINLINE void emit_si_opc(mcode_t **mxp, mcode_t opc, mcode_t r, bool x64) {
-    *--*mxp = opc|(r&7);
+    *--*mxp = opc | (r & 7);
     emit_rex(mxp, 0, 0, r, x64);
 }
 /* REX + OPC + MODRM. */
@@ -245,48 +245,48 @@ static NEO_AINLINE void emit_si_opc_modrm(mcode_t **mxp, mcode_t opc, mcode_t r0
 }
 
 /* OP reg, reg. OP is an ALU opcode like add, sub, xor etc. Example: addq %r8, %rax. */
-static void emit_alu_reg_reg(mcode_t **mxp, aluop_t opc, gpr_t dst, gpr_t src, bool x64) {
+static void xop_rr(mcode_t **mxp, aluop_t opc, gpr_t dst, gpr_t src, bool x64) {
     *--*mxp = pack_modrm(XM_DIRECT, dst, src);
     *--*mxp = (opc << 3) + 3;
     emit_rex(mxp, dst, 0, src, x64);
 }
 
 /* MOV reg, imm. Example: movq $10, %rax. */
-static void emit_mov_reg_imm(mcode_t **mxp, gpr_t reg, imm_t x) {
+static void mov_ri(mcode_t **mxp, gpr_t reg, imm_t x) {
     if (x.u64 == 0) { /* Optimization: xorl %reg, %reg for zeroing. */
-        emit_alu_reg_reg(mxp, XA_XOR, reg, reg, false);
+        xop_rr(mxp, XA_XOR, reg, reg, false);
         return;
     }
     bool x64 = !checku32(x.u64); /* Requires 64-bit load. */
     if (x64) { /* Full 64-bit load. Example: movabsq $10, %rax. */
-        *mxp -= sizeof(x.u64);
-        *(uint64_t *)*mxp = x.u64;
+        *mxp -= 8;
+        *(uint64_t *)*mxp = *(uint64_t *)&x;
     } else { /* Small 32-bit load. Example: movl $10, %eax. */
-        *mxp -= sizeof(x.u32);
-        *(uint32_t *)*mxp = x.u32;
+        *mxp -= 4;
+        *(uint32_t *)*mxp = *(uint32_t *)&x;
     }
     emit_si_opc(mxp, 0xb8, reg, x64);
 }
 
 /* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: addq $10, %rax. */
-static void emit_alu_reg_imm(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
+static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
     neo_assert(checku32(x.u64) && "32-bit Imm out of range");
     mcode_t *p = *mxp; /* Pointer to current machine code buffer. */
     if (checku8(x.u64)) { /* Small 8-bit immediate. */
         *--p = 0x83;
         *--p = pack_modrm(XM_DIRECT, opc, reg);
-        *--p = x.u8;
+        *--p = *(mcode_t *)&x;
         emit_rex(&p, 0, 0, reg, x64);
     } else if (reg == RID_RAX) { /* Optimize for accumulator. */
-        *(uint32_t *)p = x.u32;
-        p -= sizeof(x.u32);
+        *(uint32_t *)p = *(uint32_t *)&x;
+        p -= 4;
         *--p = (opc << 3) + 5;
         emit_rex(&p, 0, 0, 0, x64);
     } else { /* Full 32-bit immediate. */
         *--p = 0x81;
         *--p = pack_modrm(XM_DIRECT, opc, reg);
-        p -= sizeof(x.u32);
-        *(uint32_t *)p = x.u32;
+        p -= 4;
+        *(uint32_t *)p = *(uint32_t *)&x;
         emit_rex(&p, 0, 0, 0, x64);
     }
     *mxp = p; /* Update pointer to current machine code buffer. */
