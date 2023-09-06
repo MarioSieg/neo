@@ -179,7 +179,7 @@ static void gen_code_binary_expr(bytecode_t *bc , binary_op_type_t op) {
     }
 }
 
-static void gen_code_visitor(astpool_t *pool, astref_t root, void *usr) {
+static void gen_code_visitor(const astpool_t *pool, astref_t root, void *usr) {
     bytecode_t *bc = (bytecode_t *)usr;
     astnode_t *node = astpool_resolve(pool, root);
     switch (node->type) {
@@ -194,7 +194,7 @@ static void gen_code_visitor(astpool_t *pool, astref_t root, void *usr) {
     }
 }
 
-static void gen_code(astpool_t *pool, astref_t root) {
+static void gen_code(const astpool_t *pool, astref_t root) {
     bytecode_t bc;
     bc_init(&bc);
     astnode_visit(pool, root, &gen_code_visitor, &bc);
@@ -252,8 +252,9 @@ const error_vector_t *compiler_get_errors(const neo_compiler_t *self) {
     return &self->errors;
 }
 
-astref_t compiler_get_ast_root(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+astref_t compiler_get_ast_root(const neo_compiler_t *self, const astpool_t **pool) {
+    neo_assert(self && pool && "Compiler pointer is NULL");
+    *pool = &self->parser.pool;
     return self->ast;
 }
 

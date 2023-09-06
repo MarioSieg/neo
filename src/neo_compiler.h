@@ -79,7 +79,7 @@ extern NEO_EXPORT void compiler_free(neo_compiler_t **self);
 extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user);
 
 extern NEO_EXPORT const error_vector_t *compiler_get_errors(const neo_compiler_t *self);
-extern NEO_EXPORT astref_t compiler_get_ast_root(const neo_compiler_t *self);
+extern NEO_EXPORT astref_t compiler_get_ast_root(const neo_compiler_t *self, const astpool_t **pool);
 extern NEO_EXPORT neo_compiler_flag_t compiler_get_flags(const neo_compiler_t *self);
 extern NEO_EXPORT bool compiler_has_flags(const neo_compiler_t *self, neo_compiler_flag_t flags);
 extern NEO_EXPORT neo_compile_callback_hook_t *compiler_get_pre_compile_callback(const neo_compiler_t *self);

@@ -79,8 +79,8 @@ namespace neo {
             }
             return result;
         }
-        [[nodiscard]] inline const astref_t get_ast_root() const noexcept {
-            return compiler_get_ast_root(m_compiler);
+        [[nodiscard]] inline const astref_t get_ast_root(const astpool_t *&pool) const noexcept {
+            return compiler_get_ast_root(m_compiler, &pool);
         }
         [[nodiscard]] inline neo_compiler_flag_t get_flags() const noexcept {
             return compiler_get_flags(m_compiler);

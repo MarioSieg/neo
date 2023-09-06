@@ -328,7 +328,7 @@ extern NEO_EXPORT astref_t astnode_new_class(astpool_t *pool, const node_class_t
 extern NEO_EXPORT astref_t astnode_new_module(astpool_t *pool, const node_module_t *node);
 extern NEO_EXPORT astref_t astnode_new_self(astpool_t *pool);
 
-extern NEO_EXPORT size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
+extern NEO_EXPORT size_t astnode_visit(const astpool_t *pool, astref_t root, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
 
 struct astpool_t {
     neo_mempool_t node_pool; /* Stores the astnode_t objects. */
@@ -338,18 +338,18 @@ extern NEO_EXPORT void astpool_init(astpool_t *self);
 extern NEO_EXPORT void astpool_free(astpool_t *self);
 extern NEO_EXPORT astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type);
 extern NEO_EXPORT listref_t astpool_alloclist(astpool_t *self, astref_t ** o, uint32_t len);
-static NEO_AINLINE bool astpool_isvalidref(astpool_t *self, astref_t ref) {
+static NEO_AINLINE bool astpool_isvalidref(const astpool_t *self, astref_t ref) {
     neo_dassert(self);
     return neo_likely(!astref_isnull(ref) && ((size_t)ref*sizeof(astnode_t))-sizeof(astnode_t) < self->node_pool.len);
 }
-static NEO_AINLINE bool astpool_isvalidlistref(astpool_t *self, listref_t ref) {
+static NEO_AINLINE bool astpool_isvalidlistref(const astpool_t *self, listref_t ref) {
     neo_dassert(self);
     return neo_likely((size_t)ref*sizeof(astref_t) < self->list_pool.len); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 /* Resolves AST reference to node pointer! Do NOT keep the node pointer alive, it might be invalidated on reallocation.
 ** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
 */
-static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
+static NEO_AINLINE astnode_t *astpool_resolve(const astpool_t *self, astref_t ref) {
     neo_dassert(self);
 #if NEO_DBG
     if (!astref_isnull(ref)) {
@@ -358,15 +358,15 @@ static NEO_AINLINE astnode_t *astpool_resolve(astpool_t *self, astref_t ref) {
 #endif
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
-static NEO_AINLINE astref_t *astpool_resolvelist(astpool_t *self, listref_t ref) {
+static NEO_AINLINE astref_t *astpool_resolvelist(const astpool_t *self, listref_t ref) {
     neo_dassert(self);
     neo_assert(astpool_isvalidlistref(self, ref));
     return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 
 #ifdef NEO_EXTENSION_AST_RENDERING
-extern NEO_EXPORT void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
-extern NEO_EXPORT void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
+extern NEO_EXPORT void ast_node_graphviz_dump(const astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
+extern NEO_EXPORT void ast_node_graphviz_render(const astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
 #endif
 
 #ifdef __cplusplus
