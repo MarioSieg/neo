@@ -1,0 +1,41 @@
+class Dimension
+    let width: int
+    let height: int
+end
+
+# Represents a neuronal network layer
+class Layer
+    let dim: Dimension
+    let in: float[]
+    let out: float[]
+    let weights: float[][]
+    let prev: Layer?
+    let next: Layer?
+end
+
+# Represents a neural network
+class NeuralNet
+    let layers: Layer[]
+    let epochs: int
+    let learning_rate: float
+end
+
+class Perceptron
+
+    # Sigmoid activation function
+    static method sigmoid(z: float) -> float
+        if z >= 45.0 then
+            return 1.0
+        else if z <= -45.0 then
+            return 0.0
+        else
+            return 1.0 / (1.0 + (-z).exp())
+        end
+    end
+
+    # Sigmoid derivative
+    static method sigmoid_derivative(x: float) -> float
+        return x * (1.0 - x)
+    end
+
+end

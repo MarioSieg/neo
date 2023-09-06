@@ -392,7 +392,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
 #endif
 }
 
-static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
+static void astnode_visit_root_impl(const astpool_t *pool, astref_t rootref, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
     neo_dassert(pool && visitor && c);
     if (astref_isnull(rootref)) { return; } /* Skip NULL nodes. */
     astnode_t *root = astpool_resolve(pool, rootref);
@@ -473,7 +473,7 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
     (*visitor)(pool, rootref, user);
 }
 
-size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user) {
+size_t astnode_visit(const astpool_t *pool, astref_t root, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user) {
     size_t c = 0;
     astnode_visit_root_impl(pool, root, visitor, user, &c);
     return c;
@@ -641,7 +641,7 @@ static Agnode_t *graph_append(
 }
 
 static void graphviz_ast_visitor(
-    astpool_t *pool,
+    const astpool_t *pool,
     Agraph_t *graph,
     Agnode_t *anode,
     astref_t noderef,
@@ -775,7 +775,7 @@ static void graphviz_ast_visitor(
     }
 }
 
-static void graph_submit(astpool_t *pool, Agraph_t *g, astref_t node) {
+static void graph_submit(const astpool_t *pool, Agraph_t *g, astref_t node) {
     neo_dassert(pool && g);
     char statsbuf[512];
     int off = snprintf(
@@ -809,7 +809,7 @@ static void graph_submit(astpool_t *pool, Agraph_t *g, astref_t node) {
     graphviz_ast_visitor(pool, g, program, node, &id, NULL);
 }
 
-void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f) {
+void ast_node_graphviz_dump(const astpool_t *pool, astref_t root, FILE *f) {
     neo_dassert(pool && f);
     neo_info("dumping AST to graphviz representation...%s", "");
     time_t timer = time(NULL);
@@ -834,7 +834,7 @@ void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f) {
     gvFreeContext(gvc);
 }
 
-void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename) {
+void ast_node_graphviz_render(const astpool_t *pool, astref_t root, const char *filename) {
     neo_dassert(pool && filename);
     neo_info("rendering AST to image: '%s'...", filename);
     GVC_t *gvc = gvContext();
@@ -850,7 +850,7 @@ void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filena
 #endif
 
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
-static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
+static void my_ast_visitor(const astpool_t *pool, astref_t noderef, void *user) {
     astnode_t *node = astpool_resolve(pool, noderef); (void)user;
     switch (node->type) {
         case ASTNODE_ERROR: {
@@ -879,6 +879,9 @@ static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
         } return;
         case ASTNODE_IDENT_LIT: {
             const node_ident_literal_t *data = &node->dat.n_ident_lit;
+        } return;
+        case ASTNODE_SELF_LIT: {
+
         } return;
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
@@ -913,9 +916,7 @@ static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
         case ASTNODE_MODULE: {
             const node_module_t *data = &node->dat.n_module;
         } return;
-        default: {
-            neo_panic("Invalid node type: %d", node->type);
-        }
+        case ASTNODE__COUNT: neo_unreachable();
     }
 }
 #endif
