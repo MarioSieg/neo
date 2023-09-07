@@ -309,28 +309,28 @@ struct astnode_t {
 };
 
 /* AST allocation routines. */
-extern NEO_EXPORT astref_t astnode_new_error(astpool_t *pool, const node_error_t *node);
-extern NEO_EXPORT astref_t astnode_new_group(astpool_t *pool, const node_group_t *node);
-extern NEO_EXPORT astref_t astnode_new_int(astpool_t *pool, neo_int_t value);
-extern NEO_EXPORT astref_t astnode_new_float(astpool_t *pool, neo_float_t value);
-extern NEO_EXPORT astref_t astnode_new_char(astpool_t *pool, neo_char_t value);
-extern NEO_EXPORT astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value);
-extern NEO_EXPORT astref_t astnode_new_string(astpool_t *pool, srcspan_t value);
-extern NEO_EXPORT astref_t astnode_new_ident(astpool_t *pool, srcspan_t value);
-extern NEO_EXPORT astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
-extern NEO_EXPORT astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
-extern NEO_EXPORT astref_t astnode_new_method(astpool_t *pool, const node_method_t *node);
-extern NEO_EXPORT astref_t astnode_new_block(astpool_t *pool, const node_block_t *node);
-extern NEO_EXPORT astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
-extern NEO_EXPORT astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node);
-extern NEO_EXPORT astref_t astnode_new_return(astpool_t *pool, const node_return_t *node);
-extern NEO_EXPORT astref_t astnode_new_break(astpool_t *pool);
-extern NEO_EXPORT astref_t astnode_new_continue(astpool_t *pool);
-extern NEO_EXPORT astref_t astnode_new_branch(astpool_t *pool, const node_branch_t *node);
-extern NEO_EXPORT astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node);
-extern NEO_EXPORT astref_t astnode_new_class(astpool_t *pool, const node_class_t *node);
-extern NEO_EXPORT astref_t astnode_new_module(astpool_t *pool, const node_module_t *node);
-extern NEO_EXPORT astref_t astnode_new_self(astpool_t *pool);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_error(astpool_t *pool, const node_error_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_group(astpool_t *pool, const node_group_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_int_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcspan_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_method(astpool_t *pool, const node_method_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, const node_block_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_return(astpool_t *pool, const node_return_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_break(astpool_t *pool);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_continue(astpool_t *pool);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_branch(astpool_t *pool, const node_branch_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_class(astpool_t *pool, const node_class_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_module(astpool_t *pool, const node_module_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_self(astpool_t *pool);
 
 extern NEO_EXPORT size_t astnode_visit(const astpool_t *pool, astref_t root, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
 
