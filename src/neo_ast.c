@@ -572,15 +572,15 @@ void astpool_init(astpool_t *self) {
 
 void astpool_free(astpool_t *self) {
     neo_dassert(self);
-    neo_mempool_free(&self->list_pool);
-    neo_mempool_free(&self->node_pool);
-    /* Now free all symbol tables. */
+    /* First, free all symbol tables. */
     for (uint32_t i = 0; i < self->symtabsblk_len; ++i) {
         astnode_t *node = astpool_resolve(self, self->tracked_symtabsblk[i]);
         if (node) {
             node_block_free(&node->dat.n_block);
         }
     }
+    neo_mempool_free(&self->list_pool);
+    neo_mempool_free(&self->node_pool);
     neo_memalloc(self->tracked_symtabsblk, 0);
 }
 
