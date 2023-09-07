@@ -172,6 +172,12 @@ typedef enum block_scope_t {
     BLOCKSCOPE__COUNT
 } block_scope_t;
 
+typedef struct block_symbol_t {
+    node_ident_literal_t ident;
+    astref_t node;
+    token_t token;
+} block_symbol_t;
+
 typedef struct node_block_t {
     block_scope_t scope : 8; /* Discriminator. */
     union {

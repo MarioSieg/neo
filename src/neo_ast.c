@@ -2,6 +2,7 @@
 
 #include "neo_ast.h"
 #include "neo_lexer.h"
+#include "neo_utils.h"
 
 #ifdef NEO_EXTENSION_AST_RENDERING
 #   include <time.h>
@@ -391,20 +392,56 @@ void node_block_init(node_block_t *self, block_scope_t scope) {
 #endif
 }
 
+static NEO_NODISCARD bool symtab_try_register( /* Insert symbol into symbol table, if it doesn't exist yet. If it does exist, emit error. */
+    neo_hashmap_t *target,
+    const node_ident_literal_t *ident,
+    astref_t node,
+    const token_t *tok,
+    error_vector_t *errors
+) {
+    neo_dassert(target && ident && !astref_isnull(node) && tok);
+    uintptr_t existing = 0;
+    const void *key = ident->span.p;
+    uint32_t klen = ident->span.len;
+    if (neo_unlikely(neo_hashmap_get(target, key, klen, &existing))) { /* Symbol already exists. */
+        neo_dassert(existing != 0);
+        const block_symbol_t *sym = (const block_symbol_t *)existing;
+        char buf[512]; /* TODO: error formatting API. */
+        snprintf(buf, sizeof(buf), "Identifier '%.*s' is already used in this scope", klen, (const char *)key);
+        errvec_push(errors, comerror_from_token(tok, buf)); /* Emit error. */
+        return false;
+    }
+    block_symbol_t *sym = neo_memalloc(NULL, sizeof(*sym));
+    sym->ident = *ident;
+    sym->node = node;
+    sym->token = *tok;
+    neo_hashmap_put(target, key, klen, (uintptr_t)sym); /* Register symbol. */
+}
+
+static void symtab_free_symbols_visitor(const void *key, uint32_t klen, uintptr_t value, void *usr) {
+    (void)key, (void)klen, (void)usr;
+    neo_memalloc((void *)value, 0);
+}
+
 static void node_block_free(node_block_t *self) {
     neo_dassert(self);
     switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
         case BLOCKSCOPE_MODULE:
+            neo_hashmap_iter(&self->symtabs.sc_module.class_table, &symtab_free_symbols_visitor, NULL);
             neo_hashmap_free(&self->symtabs.sc_module.class_table);
             break;
         case BLOCKSCOPE_CLASS:
+            neo_hashmap_iter(&self->symtabs.sc_class.method_table, &symtab_free_symbols_visitor, NULL);
             neo_hashmap_free(&self->symtabs.sc_class.method_table);
+            neo_hashmap_iter(&self->symtabs.sc_class.var_table, &symtab_free_symbols_visitor, NULL);
             neo_hashmap_free(&self->symtabs.sc_class.var_table);
             break;
         case BLOCKSCOPE_LOCAL:
+            neo_hashmap_iter(&self->symtabs.sc_local.var_table, &symtab_free_symbols_visitor, NULL);
             neo_hashmap_free(&self->symtabs.sc_local.var_table);
             break;
         case BLOCKSCOPE_PARAMLIST:
+            neo_hashmap_iter(&self->symtabs.sc_params.var_table, &symtab_free_symbols_visitor, NULL);
             neo_hashmap_free(&self->symtabs.sc_params.var_table);
             break;
         case BLOCKSCOPE_ARGLIST: break;
@@ -566,7 +603,7 @@ void astpool_init(astpool_t *self) {
     memset(self, 0, sizeof(*self));
     neo_mempool_init(&self->node_pool, sizeof(astnode_t)*(1<<10));
     neo_mempool_init(&self->list_pool, sizeof(astref_t)*(1<<10));
-    self->symtabsblk_cap = 4;
+    self->symtabsblk_cap = 1<<2;
     self->tracked_symtabsblk = neo_memalloc(NULL, self->symtabsblk_cap*sizeof(self->tracked_symtabsblk));
 }
 
@@ -701,6 +738,7 @@ static Agnode_t *graph_append(
     const char *color,
     const char *edge
 ) {
+    neo_dassert(anode && graph && gnode && id);
     Agnode_t *node = create_colored_node(graph, anode, name, *id);
     Agedge_t *edge2 = agedge(graph, gnode, node, NULL, 1);
     if (edge) {
@@ -720,6 +758,7 @@ static void graphviz_ast_visitor(
     uint32_t *id,
     const char *edge
 ) {
+    neo_dassert(pool && graph && anode && id);
     if (astref_isnull(noderef)) { return; }
     astnode_t *node = astpool_resolve(pool, noderef);
     neo_dassert(node);
