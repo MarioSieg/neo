@@ -4,7 +4,6 @@
 #include <cstring>
 
 #include "neo_lexer.h"
-#include "neo_utils.h"
 #include "neo_compiler.h"
 
 TEST(utils, comerror_from_token) {
@@ -20,7 +19,8 @@ TEST(utils, comerror_from_token) {
     ASSERT_EQ(std::memcmp(tok.lexeme.p, "01234567890_100111", sizeof("01234567890_100111")-1), 0);
     ASSERT_EQ(tok.radix, RADIX_DEC);
 
-    const compile_error_t *error = comerror_from_token(&tok, "Oh no!");
+    const compile_error_t *error = comerror_from_token(COMERR_INTERNAL_COMPILER_ERROR, &tok,
+                                                       reinterpret_cast<const uint8_t *>("Oh no!"));
     ASSERT_NE(error, nullptr);
     ASSERT_EQ(error->line, 1);
     ASSERT_EQ(error->col, 1);
@@ -54,13 +54,15 @@ TEST(utils, errvec_push) {
     ASSERT_EQ(ev.cap, 0);
     ASSERT_EQ(ev.p, nullptr);
 
-    errvec_push(&ev, comerror_from_token(&tok, "Oh no!"));
+    errvec_push(&ev, comerror_from_token(COMERR_INTERNAL_COMPILER_ERROR, &tok,
+                                         reinterpret_cast<const uint8_t *>("Oh no!")));
     ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 1);
     ASSERT_NE(ev.cap, 0);
     ASSERT_NE(ev.p, nullptr);
 
-    errvec_push(&ev, comerror_new(0, 0, NULL, NULL, NULL, "Helpy"));
+    errvec_push(&ev, comerror_new(COMERR_INTERNAL_COMPILER_ERROR, 0, 0, NULL, NULL, NULL,
+                                  reinterpret_cast<const uint8_t *>("Helpy")));
     ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 2);
 

@@ -6,11 +6,57 @@
 
 #include "neo_ast.h"
 #include "neo_core.h"
-#include "neo_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Compilation error codes. */
+typedef enum error_type_t {
+    COMERR_OK = 0, /* No error. */
+    COMERR_INTERNAL_COMPILER_ERROR, /* Internal compiler error. */
+    COMERR_SYNTAX_ERROR, /* Syntax error. */
+    COMERR_SYMBOL_REDEFINITION, /* Symbol redefinition. */
+    COMERR__LEN
+} error_type_t;
+
+/* Represents an error or warning emitted during static compilation from source to bytecode. */
+typedef struct compile_error_t {
+    error_type_t type;
+    uint32_t line;
+    uint32_t col;
+    const uint8_t *lexeme;
+    const uint8_t *lexeme_line;
+    const uint8_t *file;
+    const uint8_t *msg; /* Error-specific message. */
+} compile_error_t;
+
+/* Create error from lexer token.  */
+extern NEO_COLDPROC const compile_error_t *comerror_new(
+    error_type_t type,
+    uint32_t line,
+    uint32_t col,
+    const uint8_t *lexeme,
+    const uint8_t *lexeme_line,
+    const uint8_t *file,
+    const uint8_t *msg
+);
+extern NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg);
+extern NEO_COLDPROC void comerror_free(const compile_error_t *self);
+
+/* Collection of all errors from all phases emitted during a single source file compilation. */
+typedef struct error_vector_t {
+    const compile_error_t **p;
+    uint32_t len;
+    uint32_t cap;
+} error_vector_t;
+
+#define errvec_isempty(self) (!!((self).len))
+extern NEO_EXPORT NEO_COLDPROC void errvec_init(error_vector_t *self);
+extern NEO_EXPORT NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t* error);
+extern NEO_EXPORT NEO_COLDPROC void errvec_print(const error_vector_t *self, FILE *f);
+extern NEO_EXPORT NEO_COLDPROC void errvec_clear(error_vector_t *self);
+extern NEO_EXPORT NEO_COLDPROC void errvec_free(error_vector_t *self);
 
 typedef struct source_t {
     const uint8_t *filename; /* Encoded in UTF-8 and terminated. */

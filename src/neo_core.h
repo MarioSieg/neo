@@ -735,6 +735,7 @@ extern NEO_EXPORT void neo_hashmap_free(neo_hashmap_t *self);
 
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
+extern NEO_EXPORT void neo_printutf8(FILE *f, const uint8_t *str); /* Print UTF-8 string to stdout. */
 
 #ifdef __cplusplus
 }

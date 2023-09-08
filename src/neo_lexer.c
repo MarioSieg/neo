@@ -4,7 +4,7 @@
 #include "neo_core.h"
 #include "neo_compiler.h"
 
-const uint8_t *srcspan_clone(srcspan_t span) {
+const uint8_t *srcspan_heap_clone(srcspan_t span) {
     uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';

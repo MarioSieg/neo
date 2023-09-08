@@ -6,11 +6,12 @@
 
 #include "neo_ast.h"
 #include "neo_lexer.h"
-#include "neo_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct error_vector_t error_vector_t;
 
 /* Represents the parser context for a single source file. */
 typedef struct parser_t {

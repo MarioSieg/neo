@@ -426,7 +426,7 @@ uint32_t neo_hashmap_len(const neo_hashmap_t *self) {
 }
 
 void neo_hashmap_iter(const neo_hashmap_t *self, neo_hashmap_callback_t *cb, void *usr) {
-    neo_dassert(self && cb && usr);
+    neo_dassert(self && cb);
     for (neo_bucket_t *bucket = self->first; bucket; bucket = bucket->next) {
         if (bucket->key) {
             (*cb)(bucket->key, bucket->klen, bucket->val, usr);
@@ -451,4 +451,14 @@ char *neo_strdup(const char *str) {
     memcpy(dup, str, len);
     dup[len] = '\0';
     return dup;
+}
+
+void neo_printutf8(FILE *f, const uint8_t *str) {
+    neo_assert(f != NULL && "Invalid file ptr");
+    if (neo_unlikely(!str || !*str)) { return; }
+#if NEO_OS_LINUX
+    fputs((const char *)str, f); /* Linux terminal is UTF-8 by default. */
+#else
+#  error "unsupported platform"
+#endif
 }

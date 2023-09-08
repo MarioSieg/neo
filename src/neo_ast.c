@@ -2,7 +2,7 @@
 
 #include "neo_ast.h"
 #include "neo_lexer.h"
-#include "neo_utils.h"
+#include "neo_compiler.h"
 
 #ifdef NEO_EXTENSION_AST_RENDERING
 #   include <time.h>
@@ -392,7 +392,7 @@ void node_block_init(node_block_t *self, block_scope_t scope) {
 #endif
 }
 
-static NEO_NODISCARD bool symtab_try_register( /* Insert symbol into symbol table, if it doesn't exist yet. If it does exist, emit error. */
+static NEO_NODISCARD NEO_UNUSED bool symtab_try_register( /* Insert symbol into symbol table, if it doesn't exist yet. If it does exist, emit error. */
     neo_hashmap_t *target,
     const node_ident_literal_t *ident,
     astref_t node,
@@ -401,14 +401,12 @@ static NEO_NODISCARD bool symtab_try_register( /* Insert symbol into symbol tabl
 ) {
     neo_dassert(target && ident && !astref_isnull(node) && tok);
     uintptr_t existing = 0;
-    const void *key = ident->span.p;
+    const uint8_t *key = ident->span.p;
     uint32_t klen = ident->span.len;
     if (neo_unlikely(neo_hashmap_get(target, key, klen, &existing))) { /* Symbol already exists. */
-        neo_dassert(existing != 0);
-        const block_symbol_t *sym = (const block_symbol_t *)existing;
-        char buf[512]; /* TODO: error formatting API. */
-        snprintf(buf, sizeof(buf), "Identifier '%.*s' is already used in this scope", klen, (const char *)key);
-        errvec_push(errors, comerror_from_token(tok, buf)); /* Emit error. */
+        uint8_t *cloned;
+        srcspan_stack_clone(ident->span, cloned); /* Clone span into zero terminated string. */
+        errvec_push(errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, tok, cloned)); /* Emit error. */
         return false;
     }
     block_symbol_t *sym = neo_memalloc(NULL, sizeof(*sym));
@@ -416,6 +414,7 @@ static NEO_NODISCARD bool symtab_try_register( /* Insert symbol into symbol tabl
     sym->node = node;
     sym->token = *tok;
     neo_hashmap_put(target, key, klen, (uintptr_t)sym); /* Register symbol. */
+    return true;
 }
 
 static void symtab_free_symbols_visitor(const void *key, uint32_t klen, uintptr_t value, void *usr) {

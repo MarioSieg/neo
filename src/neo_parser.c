@@ -184,7 +184,7 @@ neo_static_assert(sizeof(parse_rules_lut)/sizeof(*parse_rules_lut) == TOK__COUNT
 #define isok(self) neo_likely((!(self)->panic && !(self)->error))
 
 static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *msg) {
-    const compile_error_t *error = comerror_from_token(tok, msg);
+    const compile_error_t *error = comerror_from_token(COMERR_SYNTAX_ERROR, tok, (const uint8_t *)msg);
     errvec_push(self->errors, error);
     self->error = self->panic = true;
     self->prev_error = msg;
