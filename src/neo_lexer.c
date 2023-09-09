@@ -31,28 +31,28 @@ const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
 
 static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
-    else if ((x>>5) == 0x6/*0000'0110*/) { return 2; } /* 2 bytes */
-    else if ((x>>4) == 0xe/*0000'1110*/) { return 3; } /* 3 bytes */
-    else if ((x>>3) == 0x1e/*0001'1110*/) { return 4; } /* 4 bytes */
+    else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
+    else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
+    else if ((x>>3) == 0x1e) { return 4; } /* 4 bytes */
     else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
 }
 
 static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
     uint32_t len = utf8_seqlen(cp);
-    if (neo_likely(len == 1)) { ++*p; return cp & 0x7f/*0111'1111*/; } /* ASCII and most common case. */
+    if (neo_likely(len == 1)) { ++*p; return cp & 0x7f; } /* ASCII and most common case. */
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
         switch (len) {
-            case 2: cp = ((cp<<6) & 0x7ff/*0111'1111'1111*/)|(*++*p & 0x3f/*0011'1111*/); break; /* 2 bytes */
+            case 2: cp = ((cp<<6) & 0x7ff)|(*++*p & 0x3f); break; /* 2 bytes */
             case 3: /* 3 bytes */
-                cp = ((cp<<12) & 0xffff/*1111'1111'1111'1111*/)|((*++*p<<6) & 0xfff/*1111'1111'1111*/);
-                cp += *++*p & 0x3f/*0011'1111*/;
+                cp = ((cp<<12) & 0xffff)|((*++*p<<6) & 0xfff);
+                cp += *++*p & 0x3f;
                 break;
             case 4: /* 4 bytes */
-                cp = ((cp<<18) & 0x1fffff/*0001'1111'1111'1111'1111'1111*/)|((*++*p<<12) & 0x3ffff/*0011'1111'1111'1111'1111*/);
-                cp += (*++*p<<6) & 0xfff/*1111'1111'1111*/;
-                cp += *++*p & 0x3f/*0011'1111*/;
+                cp = ((cp<<18) & 0x1fffff)|((*++*p<<12) & 0x3ffff);
+                cp += (*++*p<<6) & 0xfff;
+                cp += *++*p & 0x3f;
                 break;
             default:;
         }
