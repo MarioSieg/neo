@@ -41,10 +41,10 @@ void neo_osi_init(void) {
     neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
     SYSTEM_INFO info;
     GetSystemInfo(&info);
-    osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 1<<12;
+    osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 0x1000;
 #elif NEO_OS_LINUX || NEO_OS_BSD
     long ps = sysconf(_SC_PAGESIZE);
-    osi_data.page_size = ps > 0 ? (uint32_t)ps : 1<<12;
+    osi_data.page_size = ps > 0 ? (uint32_t)ps : 0x1000;
 #else
 #   error "unsupported platform"
 #endif
@@ -152,7 +152,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
     if (neo_unlikely(!len)) {
         return false;
     }
-    bool heap = len >= (1u<<12);
+    bool heap = len > 0x1000;
     WCHAR *wstr = heap ? neo_memalloc(NULL, len*sizeof(*wstr)) : alloca(len*sizeof(*wstr));
     if (neo_unlikely(!MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, wstr, len))) {
         return false;
