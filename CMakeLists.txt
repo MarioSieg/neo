@@ -60,7 +60,7 @@ file(GLOB_RECURSE neo_sources src/*.h src/*.c)
 add_library(libneo STATIC ${neo_sources}) # NEO compiler.
 target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
 
-if (${NEO_EXTENSION_AST_RENDERING} OR ${NEO_BUILD_TESTS}) # Currently only supported on UNIX
+if (${NEO_EXTENSION_AST_RENDERING} OR ${NEO_BUILD_TESTS})
     message("[EXTENSION] Enabled AST rendering support")
     target_link_libraries(libneo PRIVATE cgraph gvc)
     target_compile_definitions(libneo PUBLIC NEO_EXTENSION_AST_RENDERING)
@@ -80,16 +80,8 @@ target_compile_options(neo PRIVATE "${COMPILE_OPTIONS}")
 target_include_directories(neo PRIVATE src)
 
 if (${NEO_BUILD_TESTS}) # Requires C++ 20
-    set(DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
-    include(FetchContent)
-    FetchContent_Declare(
-        googletest
-        URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-    )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
+    add_subdirectory(ext/googletest)
     enable_testing()
-
     file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp test/*.c src/*.hpp)
     add_executable(neo_test ${neo_test_sources})
     target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

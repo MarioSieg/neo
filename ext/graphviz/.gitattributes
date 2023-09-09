@@ -1,3 +1,0 @@
-# Prevent git from interpreting dot as Microsoft Word documents while diffing.
-*.dot !diff
-*.DOT !diff

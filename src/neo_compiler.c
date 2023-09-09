@@ -228,79 +228,6 @@ void compiler_free(neo_compiler_t **self) {
     *self = NULL;
 }
 
-static void gen_code_unary_expr(bytecode_t *bc , unary_op_type_t op) {
-    neo_dassert(bc);
-    switch (op) {
-        case UNOP_PLUS: bc_emit(bc, OPC_IADDO); return;
-        case UNOP_MINUS: bc_emit(bc, OPC_ISUBO); return;
-        case UNOP_LOG_NOT: bc_emit_ipush(bc, -1); bc_emit(bc, OPC_IXOR); return;
-        case UNOP_BIT_COMPL: bc_emit_ipush(bc, -1); bc_emit(bc, OPC_IXOR); return;
-        case UNOP_INC: bc_emit_ipush(bc, 1); bc_emit(bc, OPC_IADDO); return;
-        case UNOP_DEC:  bc_emit_ipush(bc, 1); bc_emit(bc, OPC_ISUBO); return;
-        default: neo_unreachable();
-    }
-}
-
-static void gen_code_binary_expr(bytecode_t *bc , binary_op_type_t op) {
-    neo_dassert(bc);
-    switch (op) {
-        case BINOP_DOT: return; /* TODO */
-        case BINOP_ASSIGN: return; /* TODO */
-        case BINOP_ADD: case BINOP_ADD_ASSIGN: bc_emit(bc, OPC_IADDO); return;
-        case BINOP_SUB: case BINOP_SUB_ASSIGN: bc_emit(bc, OPC_ISUBO); return;
-        case BINOP_MUL: case BINOP_MUL_ASSIGN: bc_emit(bc, OPC_IMULO); return;
-        case BINOP_POW: case BINOP_POW_ASSIGN: bc_emit(bc, OPC_IPOWO); return;
-        case BINOP_ADD_NO_OV: case BINOP_ADD_ASSIGN_NO_OV: bc_emit(bc, OPC_IADD); return;
-        case BINOP_SUB_NO_OV: case BINOP_SUB_ASSIGN_NO_OV: bc_emit(bc, OPC_ISUB); return;
-        case BINOP_MUL_NO_OV: case BINOP_MUL_ASSIGN_NO_OV: bc_emit(bc, OPC_IMUL); return;
-        case BINOP_POW_NO_OV: case BINOP_POW_ASSIGN_NO_OV: bc_emit(bc, OPC_IPOW); return;
-        case BINOP_DIV_ASSIGN: case BINOP_DIV: bc_emit(bc, OPC_IDIV); return;
-        case BINOP_MOD_ASSIGN: case BINOP_MOD: bc_emit(bc, OPC_IMOD); return;
-        case BINOP_EQUAL:  return; /* TODO */
-        case BINOP_NOT_EQUAL: return; /* TODO */
-        case BINOP_LESS: return; /* TODO */
-        case BINOP_LESS_EQUAL: return; /* TODO */
-        case BINOP_GREATER: return; /* TODO */
-        case BINOP_GREATER_EQUAL: return; /* TODO */
-        case BINOP_BIT_AND: case BINOP_BIT_AND_ASSIGN: bc_emit(bc, OPC_IAND); return;
-        case BINOP_BIT_OR: case BINOP_BIT_OR_ASSIGN: bc_emit(bc, OPC_IOR); return;
-        case BINOP_BIT_XOR: case BINOP_BIT_XOR_ASSIGN: bc_emit(bc, OPC_IXOR); return;
-        case BINOP_BIT_ASHL: case BINOP_BIT_ASHL_ASSIGN: bc_emit(bc, OPC_ISAL); return;
-        case BINOP_BIT_ASHR: case BINOP_BIT_ASHR_ASSIGN: bc_emit(bc, OPC_ISAR); return;
-        case BINOP_BIT_ROL: case BINOP_BIT_ROL_ASSIGN: bc_emit(bc, OPC_IROL); return;
-        case BINOP_BIT_ROR: case BINOP_BIT_ROR_ASSIGN: bc_emit(bc, OPC_IROR); return;
-        case BINOP_BIT_LSHR: case BINOP_BIT_LSHR_ASSIGN: bc_emit(bc, OPC_ISLR); return;
-        case BINOP_LOG_AND: return; /* TODO */
-        case BINOP_LOG_OR: return; /* TODO */
-        case BINOP_CALL: return; /* TODO */
-        default: return;
-    }
-}
-
-static void gen_code_visitor(const astpool_t *pool, astref_t root, void *usr) {
-    bytecode_t *bc = (bytecode_t *)usr;
-    astnode_t *node = astpool_resolve(pool, root);
-    switch (node->type) {
-        case ASTNODE_INT_LIT: bc_emit_ipush(bc, node->dat.n_int_lit.value); return;
-        case ASTNODE_FLOAT_LIT: bc_emit_fpush(bc, node->dat.n_float_lit.value); return;
-        case ASTNODE_CHAR_LIT: bc_emit_ipush(bc, node->dat.n_char_lit.value); return;
-        case ASTNODE_BOOL_LIT: bc_emit_ipush(bc, node->dat.n_bool_lit.value); return;
-        case ASTNODE_GROUP: return;
-        case ASTNODE_UNARY_OP: gen_code_unary_expr(bc, node->dat.n_unary_op.opcode); return;
-        case ASTNODE_BINARY_OP: gen_code_binary_expr(bc, node->dat.n_binary_op.opcode); return;
-        default: return;
-    }
-}
-
-static void gen_code(const astpool_t *pool, astref_t root) {
-    bytecode_t bc;
-    bc_init(&bc);
-    astnode_visit(pool, root, &gen_code_visitor, &bc);
-    bc_finalize(&bc);
-    bc_disassemble(&bc, stdout, true);
-    bc_free(&bc);
-}
-
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
@@ -316,7 +243,6 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     if (self->post_compile_callback) {
         (*self->post_compile_callback)(src, self->flags, user);
     }
-    gen_code(&self->parser.pool, self->ast);
     if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
 #ifdef NEO_EXTENSION_AST_RENDERING
         size_t len = strlen((const char *)src->filename);

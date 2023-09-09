@@ -1,5 +1,0 @@
-digraph G {
- node [style=filled,shape=ellipse];
- node [label=""];
- ellipse;
-}

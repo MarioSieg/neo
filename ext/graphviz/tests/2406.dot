@@ -1,5 +1,0 @@
-digraph Blah {
-  node [shape="box"];
-  A -> B -> C [arrowhead=invdot];
-  B -> D;
-}

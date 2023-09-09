@@ -1,5 +1,0 @@
-digraph G {
-        myNodeImg [shape=none label="" image="img.png" height=2 width=4 imagescale=true]
-        myNode [label = "something"]
-        myNode -> myNodeImg
-}

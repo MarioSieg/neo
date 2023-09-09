@@ -1,2 +1,0 @@
-cp nshare/* ../nshare
-
