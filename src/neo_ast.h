@@ -19,14 +19,6 @@ typedef uint32_t astref_t, listref_t;
 typedef struct astnode_t astnode_t; /* Node. */
 typedef struct astpool_t astpool_t; /* AST memory pool. */
 
-typedef struct symbol_t {
-    uint32_t hash;
-    astref_t node;
-#if NEO_DBG
-    srcspan_t span;
-#endif
-} symbol_t;
-
 typedef struct node_error_t {
     const char *message;
     token_t token;
@@ -56,6 +48,42 @@ typedef struct node_string_literal_t {
     srcspan_t span;
     uint32_t hash;
 } node_string_literal_t, node_ident_literal_t;
+
+#define SYMTAB_DEFAULT_CAPACITY 32
+#define SYMTAB_MAX_LOAD 0.75
+
+/* Symbol table entry data structure. */
+typedef struct symrecord_t {
+    token_t tok;
+    astref_t node;
+} symrecord_t;
+
+/* Symbol table bucket data structure. */
+typedef struct symbuck_t symbuck_t;
+struct symbuck_t {
+    symbuck_t *next;
+    union {
+        node_ident_literal_t key;
+    };
+    symrecord_t val;
+};
+
+/* Symbol table hashmap data structure which associates identifier spans as keys with symbols as values in constant time. */
+typedef struct symtab_t {
+    symbuck_t *buckets;
+    uint32_t len;
+    uint32_t cap;
+    symbuck_t *first; /* Ordered linked list of all buckets. */
+    symbuck_t *last;
+} symtab_t;
+
+extern NEO_EXPORT void symtab_init(symtab_t *self, uint32_t cap);
+extern NEO_EXPORT void symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val);
+extern NEO_EXPORT bool symtab_get(symtab_t *self, const node_ident_literal_t *key, const symrecord_t **val);
+extern NEO_EXPORT uint32_t symtab_len(const symtab_t *self);
+extern NEO_EXPORT void symtab_iter(const symtab_t *self, void (*callback)(const node_ident_literal_t *key, const symrecord_t *val, void *usr), void *usr);
+extern NEO_EXPORT void symtab_free(symtab_t *self);
+extern NEO_EXPORT NEO_COLDPROC void symtab_print(const symtab_t *self, FILE *f);
 
 typedef enum unary_op_type_t {
     UNOP_PLUS, /* +1. */
@@ -182,17 +210,17 @@ typedef struct node_block_t {
     block_scope_t scope : 8; /* Discriminator. */
     union {
         struct {
-            neo_hashmap_t class_table; /* Global symbol table. */
+            symtab_t class_table; /* Global symbol table. */
         } sc_module; /* Scope of: BLOCKSCOPE_MODULE */
         struct {
-            neo_hashmap_t var_table; /* Class variables (static and local). */
-            neo_hashmap_t method_table; /* Class methods (static and local). */
+            symtab_t var_table; /* Class variables (static and local). */
+            symtab_t method_table; /* Class methods (static and local). */
         } sc_class; /* Scope of: BLOCKSCOPE_CLASS */
         struct {
-            neo_hashmap_t var_table; /* Local variables. */
+            symtab_t var_table; /* Local variables. */
         } sc_local; /* Scope of: BLOCKSCOPE_LOCAL */
         struct {
-            neo_hashmap_t var_table; /* Local parameter variables. */
+            symtab_t var_table; /* Local parameter variables. */
         } sc_params; /* Scope of: BLOCKSCOPE_PARAMLIST */
     } symtabs;
     listref_t nodes; /* Child nodes. */

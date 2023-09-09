@@ -9,6 +9,114 @@
 #   include <graphviz/gvc.h>
 #endif
 
+static NEO_NODISCARD symbuck_t *symtab_resize_entry(symtab_t *self, symbuck_t *old) {
+    neo_dassert(self != NULL && old != NULL);
+    uint32_t i = (old->key.hash & ~0x80000000u) % self->cap;
+    for (;;) {
+        symbuck_t *bucket = self->buckets + i;
+        if ((bucket->key.hash & 0x80000000u) == 0) { /* Found empty bucket. */
+            *bucket = *old; /* Clone data. */
+            return bucket;
+        }
+        i = (i+1) % self->cap;
+    }
+}
+
+static void symtab_resize(symtab_t *self) {
+    neo_dassert(self != NULL);
+    symbuck_t *old = self->buckets;
+    size_t len = (self->cap<<=1)*sizeof(*self->buckets);
+    self->buckets = neo_memalloc(NULL, len);
+    memset(self->buckets, 0, len);
+    self->last = (symbuck_t *)&self->first; /* Trick to avoid branching: Treat first as a next ptr into an imaginary bucket. When an item is added, the correct address is resolved. */
+    do {
+        self->last->next = symtab_resize_entry(self, self->last->next);
+        self->last = self->last->next;
+    } while (self->last->next); /* Assumes that empty map is not resized. */
+    neo_memalloc(old, 0);
+}
+
+static NEO_NODISCARD symbuck_t *symtab_search(symtab_t *self, const node_ident_literal_t *ident_key) {
+    neo_dassert(self != NULL && ident_key != NULL && ident_key->hash != 0 && ident_key->span.len != 0);
+    uint32_t hash = ident_key->hash & ~0x80000000u; /* Truncate used flag. */
+    uint32_t i = hash % self->cap;
+    for (;;) {
+        symbuck_t *bucket = self->buckets + i;
+        bool match = (bucket->key.hash & 0x80000000u) == 0 /* Empty bucket. */
+                || ((bucket->key.hash & ~0x80000000u) == hash /* Hash equality OR deep equality. */
+                && srcspan_eq(bucket->key.span, ident_key->span));
+        if (match) {
+            return bucket; /* Match or empty bucket. */
+        }
+        i = (i+1) % self->cap;
+    }
+}
+
+void symtab_init(symtab_t *self, uint32_t cap) {
+    neo_dassert(self != NULL);
+    memset(self, 0, sizeof(*self));
+    cap = cap ? cap : SYMTAB_DEFAULT_CAPACITY;
+    self->cap = cap;
+    self->buckets = neo_memalloc(NULL, self->cap*sizeof(*self->buckets));
+    memset(self->buckets, 0, self->cap*sizeof(*self->buckets));
+    self->first = NULL;
+    self->last = (symbuck_t *)&self->first; /* Trick to avoid branching: Treat first as a next ptr into an imaginary bucket. When an item is added, the correct address is resolved. */
+}
+
+void symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val) {
+    neo_dassert(self != NULL && key != NULL && key->hash != 0 && (key->hash & 0x80000000u) == 0 && val != NULL);
+    if ((double)(self->len+1) > SYMTAB_MAX_LOAD*(double)self->cap) {
+        symtab_resize(self);
+    }
+    symbuck_t *bucket = symtab_search(self, key);
+    if ((bucket->key.hash & 0x80000000u) == 0) { /* Empty bucket. */
+        ++self->len;
+        self->last->next = bucket;
+        self->last = bucket;
+        bucket->next = NULL;
+        bucket->key = *key;
+        bucket->key.hash ^= 0x80000000u; /* Mark as used. */
+    }
+    bucket->val = *val;
+}
+
+bool symtab_get(symtab_t *self, const node_ident_literal_t *key, const symrecord_t **val) {
+    neo_dassert(self  != NULL&& key != NULL && key->hash != 0 && val != NULL);
+    symbuck_t *bucket = symtab_search(self, key);
+    *val = &bucket->val;
+    return bucket->key.hash & 0x80000000u;
+}
+
+uint32_t symtab_len(const symtab_t *self) {
+    neo_dassert(self);
+    return self->len;
+}
+
+void symtab_iter(const symtab_t *self, void (*callback)(const node_ident_literal_t *key, const symrecord_t *sym, void *usr), void *usr) {
+    neo_dassert(self && callback);
+    for (symbuck_t *bucket = self->first; bucket; bucket = bucket->next) {
+        if (bucket->key.hash & 0x80000000u) {
+            (*callback)(&bucket->key, &bucket->val, usr);
+        }
+    }
+}
+
+void symtab_free(symtab_t *self) {
+    neo_dassert(self);
+    neo_memalloc(self->buckets, 0);
+}
+
+static NEO_COLDPROC void symtab_print_visitor(const node_ident_literal_t *key, const symrecord_t *sym, void *usr) {
+    neo_dassert(key != NULL && sym != NULL && usr != NULL);
+    FILE *f = (FILE *)usr;
+    fprintf(f, "%.*s\n", (int)key->span.len, key->span.p);
+}
+
+void symtab_print(const symtab_t *self, FILE *f) {
+    neo_dassert(self && f);
+    symtab_iter(self, &symtab_print_visitor, f);
+}
+
 static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
     astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
@@ -166,37 +274,8 @@ astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
     /* Verify AST data. */
     const node_block_t *data = node;
     astverify(data->len > 0, "Block nodes array is empty");
-    const astref_t *children = astpool_resolvelist(pool, data->nodes);
-    for (uint32_t i = 0; i < data->len; ++i) {
-        astref_t child = children[i];
-        const astnode_t *child_node = verify_resolve(child);
-        uint64_t mask = block_valid_masks[data->scope];
-        uint64_t node_mask = astmask(child_node->type);
-#if NEO_DBG
-        if (neo_unlikely((mask & node_mask) == 0)) {
-            neo_error("Block node type '%s' is not allowed in '%s' block kind.", astnode_names[child_node->type], block_names[data->scope]);
-        }
-#endif
-        astverify((mask & node_mask) != 0, "Block node type is not allowed in this block kind"); /* Check that the node type is allowed in this block type. For example, method declarations are not allowed in parameter list blocks.  */
-    }
 
     /* Create AST node. */
-    switch (data->scope) {
-        case BLOCKSCOPE_MODULE: {
-            /* TODO: Create symtab. */
-        } break;
-        case BLOCKSCOPE_CLASS: {
-            /* TODO: Create symtab. */
-        } break;
-        case BLOCKSCOPE_LOCAL: {
-            /* TODO: Create symtab. */
-        } break;
-        case BLOCKSCOPE_PARAMLIST: {
-            /* TODO: Create symtab. */
-        } break;
-        case BLOCKSCOPE_ARGLIST: break;
-        default: neo_panic("Invalid block type: %d", data->scope);
-    }
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BLOCK);
     nn->dat.n_block = *node;
@@ -372,17 +451,17 @@ void node_block_init(node_block_t *self, block_scope_t scope) {
     self->scope = scope;
     switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
         case BLOCKSCOPE_MODULE:
-            neo_hashmap_init(&self->symtabs.sc_module.class_table, 4);
+            symtab_init(&self->symtabs.sc_module.class_table, 4);
             break;
         case BLOCKSCOPE_CLASS:
-            neo_hashmap_init(&self->symtabs.sc_class.method_table, 32);
-            neo_hashmap_init(&self->symtabs.sc_class.var_table, 32);
+            symtab_init(&self->symtabs.sc_class.method_table, 32);
+            symtab_init(&self->symtabs.sc_class.var_table, 32);
             break;
         case BLOCKSCOPE_LOCAL:
-            neo_hashmap_init(&self->symtabs.sc_local.var_table, 32);
+            symtab_init(&self->symtabs.sc_local.var_table, 32);
             break;
         case BLOCKSCOPE_PARAMLIST:
-            neo_hashmap_init(&self->symtabs.sc_params.var_table, 8);
+            symtab_init(&self->symtabs.sc_params.var_table, 8);
             break;
         case BLOCKSCOPE_ARGLIST: break;
         case BLOCKSCOPE__COUNT: neo_unreachable();
@@ -392,6 +471,31 @@ void node_block_init(node_block_t *self, block_scope_t scope) {
 #endif
 }
 
+static void node_block_free(node_block_t *self) {
+    neo_dassert(self);
+    switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
+        case BLOCKSCOPE_MODULE:
+            symtab_free(&self->symtabs.sc_module.class_table);
+            break;
+        case BLOCKSCOPE_CLASS:
+            symtab_free(&self->symtabs.sc_class.method_table);
+            symtab_free(&self->symtabs.sc_class.var_table);
+            break;
+        case BLOCKSCOPE_LOCAL:
+            symtab_free(&self->symtabs.sc_local.var_table);
+            break;
+        case BLOCKSCOPE_PARAMLIST:
+            symtab_free(&self->symtabs.sc_params.var_table);
+            break;
+        case BLOCKSCOPE_ARGLIST: break;
+        case BLOCKSCOPE__COUNT: neo_unreachable();
+    }
+#if NEO_DBG
+    self->_init_sentinel = false;
+#endif
+}
+
+#if 0
 static NEO_NODISCARD NEO_UNUSED bool symtab_try_register( /* Insert symbol into symbol table, if it doesn't exist yet. If it does exist, emit error. */
     neo_hashmap_t *target,
     const node_ident_literal_t *ident,
@@ -416,40 +520,7 @@ static NEO_NODISCARD NEO_UNUSED bool symtab_try_register( /* Insert symbol into 
     neo_hashmap_put(target, key, klen, (uintptr_t)sym); /* Register symbol. */
     return true;
 }
-
-static void symtab_free_symbols_visitor(const void *key, uint32_t klen, uintptr_t value, void *usr) {
-    (void)key, (void)klen, (void)usr;
-    neo_memalloc((void *)value, 0);
-}
-
-static void node_block_free(node_block_t *self) {
-    neo_dassert(self);
-    switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
-        case BLOCKSCOPE_MODULE:
-            neo_hashmap_iter(&self->symtabs.sc_module.class_table, &symtab_free_symbols_visitor, NULL);
-            neo_hashmap_free(&self->symtabs.sc_module.class_table);
-            break;
-        case BLOCKSCOPE_CLASS:
-            neo_hashmap_iter(&self->symtabs.sc_class.method_table, &symtab_free_symbols_visitor, NULL);
-            neo_hashmap_free(&self->symtabs.sc_class.method_table);
-            neo_hashmap_iter(&self->symtabs.sc_class.var_table, &symtab_free_symbols_visitor, NULL);
-            neo_hashmap_free(&self->symtabs.sc_class.var_table);
-            break;
-        case BLOCKSCOPE_LOCAL:
-            neo_hashmap_iter(&self->symtabs.sc_local.var_table, &symtab_free_symbols_visitor, NULL);
-            neo_hashmap_free(&self->symtabs.sc_local.var_table);
-            break;
-        case BLOCKSCOPE_PARAMLIST:
-            neo_hashmap_iter(&self->symtabs.sc_params.var_table, &symtab_free_symbols_visitor, NULL);
-            neo_hashmap_free(&self->symtabs.sc_params.var_table);
-            break;
-        case BLOCKSCOPE_ARGLIST: break;
-        case BLOCKSCOPE__COUNT: neo_unreachable();
-    }
-#if NEO_DBG
-    self->_init_sentinel = false;
 #endif
-}
 
 void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     neo_dassert(pool && self);
@@ -471,15 +542,12 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     }
     astref_t *reflist = astpool_resolvelist(pool, self->nodes);
     reflist[self->len++] = node;
-#if NEO_DBG
     const astnode_t *pnode = astpool_resolve(pool, node);
     uint64_t mask = block_valid_masks[self->scope];
     uint64_t node_mask = astmask(pnode->type);
     if (neo_unlikely((mask & node_mask) == 0)) {
         neo_error("Block node type '%s' is not allowed in '%s' self kind.", astnode_names[pnode->type], block_names[self->scope]);
     }
-    neo_assert((mask & node_mask) != 0 && "Block node type is not allowed in this self kind"); /* Check that the node type is allowed in this self type. For example, method declarations are not allowed in parameter list blocks.  */
-#endif
 }
 
 static void astnode_visit_root_impl(const astpool_t *pool, astref_t rootref, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
