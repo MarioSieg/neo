@@ -17,7 +17,7 @@ TEST(parse, advance) {
     errvec_init(&ev);
     parser_t parser;
     parser_init(&parser, &ev);
-    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+    const source_t *src = source_from_memory_ref(u8"test"_neo, u8"3 1.4 hello"_neo, nullptr);
 
     parser_setup_source(&parser, src);
 
@@ -43,7 +43,7 @@ TEST(parse, consume_match) {
     errvec_init(&ev);
     parser_t parser;
     parser_init(&parser, &ev);
-    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+    const source_t *src = source_from_memory_ref(u8"test"_neo, u8"3 1.4 hello"_neo, nullptr);
 
     parser_setup_source(&parser, src);
 
@@ -74,7 +74,7 @@ TEST(parse, consume_or_err) {
     errvec_init(&ev);
     parser_t parser;
     parser_init(&parser, &ev);
-    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+    const source_t *src = source_from_memory_ref(u8"test"_neo, u8"3 1.4 hello"_neo, nullptr);
 
     parser_setup_source(&parser, src);
 
@@ -99,7 +99,7 @@ TEST(parse, consume_ident) {
     errvec_init(&ev);
     parser_t parser;
     parser_init(&parser, &ev);
-    const source_t *src = source_from_memory(u8"test"_neo, u8"3 1.4 hello"_neo);
+    const source_t *src = source_from_memory_ref(u8"test"_neo, u8"3 1.4 hello"_neo, nullptr);
 
     parser_setup_source(&parser, src);
     advance(&parser);
@@ -136,12 +136,12 @@ TEST(parse, consume_ident) {
         neo_int_t b = dist(prng);\
         std::string source = std::to_string(a) + " " #op " " + std::to_string(b);\
         std::cout << "Testing expression: " << source << "\n";\
-        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        const source_t *src = source_from_memory_ref(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()), nullptr);\
         \
         parser_setup_source(&parser, src);\
         \
         astref_t expr = rule_expr(&parser);\
-        errvec_print(&ev, stderr);\
+        errvec_print(&ev, stderr, true);\
         ASSERT_FALSE(parser.error);\
         ASSERT_FALSE(astref_isnull(expr));\
         ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\
@@ -179,12 +179,12 @@ TEST(parse, consume_ident) {
         auto identB = srcspan_from("y");\
         std::string source = std::string(reinterpret_cast<const char *>(identA.p)) + " " #op " " + std::string(reinterpret_cast<const char *>(identB.p));\
         std::cout << "Testing expression: " << source << "\n";\
-        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        const source_t *src = source_from_memory_ref(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()), nullptr);\
         \
         parser_setup_source(&parser, src);\
         \
         astref_t expr = rule_expr(&parser);\
-        errvec_print(&ev, stderr);\
+        errvec_print(&ev, stderr, true);\
         ASSERT_FALSE(parser.error);\
         ASSERT_FALSE(astref_isnull(expr));\
         ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\
@@ -222,12 +222,12 @@ TEST(parse, consume_ident) {
         neo_int_t b = dist(prng);\
         std::string source = std::string(reinterpret_cast<const char *>(identA.p)) + " " #op " " + std::to_string(b);\
         std::cout << "Testing expression: " << source << "\n";\
-        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        const source_t *src = source_from_memory_ref(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()), nullptr);\
         \
         parser_setup_source(&parser, src);\
         \
         astref_t expr = rule_expr(&parser);\
-        errvec_print(&ev, stderr);\
+        errvec_print(&ev, stderr, true);\
         ASSERT_FALSE(parser.error);\
         ASSERT_FALSE(astref_isnull(expr));\
         ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\
@@ -265,12 +265,12 @@ TEST(parse, consume_ident) {
         auto identB = srcspan_from("y");\
         std::string source = std::to_string(a) + " " #op " " + std::string(reinterpret_cast<const char *>(identB.p));\
         std::cout << "Testing expression: " << source << "\n";\
-        const source_t *src = source_from_memory(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()));\
+        const source_t *src = source_from_memory_ref(u8"test"_neo, reinterpret_cast<const std::uint8_t *>(source.c_str()), nullptr);\
         \
         parser_setup_source(&parser, src);\
         \
         astref_t expr = rule_expr(&parser);\
-        errvec_print(&ev, stderr);\
+        errvec_print(&ev, stderr, true);\
         ASSERT_FALSE(parser.error);\
         ASSERT_FALSE(astref_isnull(expr));\
         ASSERT_TRUE(astpool_isvalidref(&parser.pool, expr));\

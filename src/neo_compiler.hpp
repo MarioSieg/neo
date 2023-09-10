@@ -28,7 +28,18 @@ namespace neo {
         inline explicit neo_source_code(const std::string &filename)
             : neo_source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str())} {}
         inline explicit neo_source_code(const uint8_t *filename, const uint8_t *src) {
-            m_src = source_from_memory(filename, src);
+            source_load_error_info_t info {};
+            m_src = source_from_memory_ref(filename, src, &info);
+            if (neo_unlikely(!m_src || info.error != SRCLOAD_OK)) {
+                const char *msg;
+                switch (info.error) {
+                    case SRCLOAD_INVALID_UTF8: msg = "Invalid UTF-8"; break;
+                    case SRCLOAD_FILE_NOT_FOUND: msg = "File not found"; break;
+                    case SRCLOAD_FILE_READ_ERROR: msg = "File read error"; break;
+                    default: msg = "Unknown error"; break;
+                }
+                throw std::runtime_error("Failed to load source file: " + std::string {msg});
+            }
         }
         inline explicit neo_source_code(const std::string &filename, const std::string &src)
             : neo_source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str()), reinterpret_cast<const std::uint8_t *>(src.c_str())} {}

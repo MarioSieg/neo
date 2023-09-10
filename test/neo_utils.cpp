@@ -7,7 +7,8 @@
 #include "neo_compiler.h"
 
 TEST(utils, comerror_from_token) {
-    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
+    const source_t *source = source_from_memory_ref(reinterpret_cast<const std::uint8_t *>(u8"test.neo"),
+                                                    reinterpret_cast<const std::uint8_t *>("01234567890_100111"), nullptr);
 
     lexer_t lexer;
     lexer_init(&lexer);
@@ -35,7 +36,8 @@ TEST(utils, comerror_from_token) {
 }
 
 TEST(utils, errvec_push) {
-    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
+    const source_t *source = source_from_memory_ref(reinterpret_cast<const std::uint8_t *>(u8"test.neo"),
+                                                    reinterpret_cast<const std::uint8_t *>("01234567890_100111"), nullptr);
 
     lexer_t lexer;
     lexer_init(&lexer);

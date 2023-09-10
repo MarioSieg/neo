@@ -88,11 +88,13 @@ NEO_COLDPROC void errvec_free(error_vector_t *self) {
     neo_memalloc(self->p, 0); /* Free error list. */
 }
 
-void errvec_print(const error_vector_t *self, FILE *f) {
+void errvec_print(const error_vector_t *self, FILE *f, bool colored) {
     neo_dassert(self && f);
+    const char *color = colored ? NEO_CCRED : NULL;
+    const char *reset = colored ? NEO_CCRESET : NULL;
     for (uint32_t i = 0; i < self->len; ++i) {
         const compile_error_t *e = self->p[i];
-        neo_error("%s:%"PRIu32":%"PRIu32": %s", e->file, e->line, e->col, e->msg);
+        fprintf(f, "%s:%"PRIu32":%"PRIu32": %s%s%s\n", e->file, e->line, e->col, color, e->msg, reset);
     }
 }
 
@@ -144,14 +146,14 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     /* Verify that the file is valid UTF-8. */
     size_t pos = 0;
     neo_unicode_error_t result = neo_utf8_validate(buf, size, &pos);
-    if (result != NEO_UNIERR_OK) {
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
         neo_memalloc(buf, 0);
         if (err_info) {
             err_info->error = SRCLOAD_INVALID_UTF8;
             err_info->invalid_utf8pos = pos;
             err_info->unicode_error = result;
         }
-        return false;
+        return NULL;
     }
 #if NEO_OS_WINDOWS
     /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
@@ -176,14 +178,35 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     return self;
 }
 
-const source_t *source_from_memory(const uint8_t *path, const uint8_t *src) {
+const source_t *source_from_memory_ref(const uint8_t *path, const uint8_t *src, source_load_error_info_t *err_info) {
     if (neo_unlikely(!path || !src)) {
+        return NULL;
+    }
+    size_t len = strlen((const char *)src);
+    /* Verify that the src and path is valid UTF-8. */
+    size_t pos = 0;
+    neo_unicode_error_t result = neo_utf8_validate(src, len, &pos);
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
+        if (err_info) {
+            err_info->error = SRCLOAD_INVALID_UTF8;
+            err_info->invalid_utf8pos = pos;
+            err_info->unicode_error = result;
+        }
+        return NULL;
+    }
+    result = neo_utf8_validate(path, strlen((const char *)src), &pos);
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
+        if (err_info) {
+            err_info->error = SRCLOAD_INVALID_UTF8;
+            err_info->invalid_utf8pos = pos;
+            err_info->unicode_error = result;
+        }
         return NULL;
     }
     source_t *self = neo_memalloc(NULL, sizeof(*self));
     self->filename = path;
     self->src = src;
-    self->len = strlen((const char *)src);
+    self->len = len;
     self->is_file = false;
     return self;
 }
@@ -195,6 +218,22 @@ void source_free(const source_t *self) {
         neo_memalloc((void *)self->src, 0);
     }
     neo_memalloc((void *)self, 0);
+}
+
+void source_dump(const source_t *self, FILE *f) {
+    neo_dassert(self != NULL && f != NULL);
+    fprintf(f, "Source: %s\n", self->filename);
+    fprintf(f, "Length: %"PRIu32"\n", (uint32_t)self->len);
+    fprintf(f, "Content: %s\n", self->src);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        fprintf(f, "\\x%02x", self->src[i]);
+    }
+    fputc('\n', f);
+}
+
+bool source_is_empty(const source_t *self) {
+    neo_dassert(self);
+    return self->len == 0 || *self->src == '\0' || *self->src == '\n';
 }
 
 struct neo_compiler_t {
@@ -228,9 +267,25 @@ void compiler_free(neo_compiler_t **self) {
     *self = NULL;
 }
 
+static void print_status_msg(const neo_compiler_t *self, const char *color, const char *msg, ...) {
+    if (compiler_has_flags(self, COM_FLAG_NO_STATUS)) { return; }
+    va_list args;
+    va_start(args, msg);
+    if (compiler_has_flags(self, COM_FLAG_NO_COLOR) || !color) {
+        vprintf(msg, args);
+    } else {
+        printf("%s", color);
+        vprintf(msg, args);
+        printf(NEO_CCRESET);
+    }
+    va_end(args);
+    putchar('\n');
+}
+
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
+    if (source_is_empty(src)) { return true; } /* Empty source -> we're done here. */
     clock_t begin = clock();
     if (self->pre_compile_callback) {
         (*self->pre_compile_callback)(src, self->flags, user);
@@ -247,7 +302,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
 #ifdef NEO_EXTENSION_AST_RENDERING
         size_t len = strlen((const char *)src->filename);
         if (!neo_utf8_is_ascii(src->filename, len)) {
-            neo_error("Failed to render AST, filename is not ASCII.");
+            print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
         } else {
             char *filename = alloca(len+sizeof("_ast.jpg"));
             memcpy(filename, src->filename, len);
@@ -256,17 +311,17 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
             ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
         }
 #else
-        neo_error("Failed to render AST, Graphviz extension is not enabled.");
+        print_status_msg("Failed to render AST, Graphviz extension is not enabled.");
 #endif
     }
     if (neo_unlikely(self->errors.len)) {
-        neo_error("Compilation failed with %"PRIu32" errors.", self->errors.len);
-        errvec_print(&self->errors, stderr);
+        print_status_msg(self, NEO_CCRED, "Compilation failed with %"PRIu32" error%s.", self->errors.len, self->errors.len > 1 ? "s" : "");
+        errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
         return false;
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
-        printf("Compiled %s in %.03fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
+        print_status_msg(self, NULL, "Compiled '%s' in %.03fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
     }
     return true;
 }

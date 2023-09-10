@@ -690,7 +690,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_module(parser_t *self, bool *skip) 
     } else if (neo_unlikely(consume_match(self, TOK_ME_EOF))) {
         return ASTREF_NULL;
     } else {
-        error(self, &self->curr, "Expected class definition within module");
+        error(self, &self->curr, "No class found to execute. Did you forget to add a class to your source file?");
         return ASTREF_NULL;
     }
 }

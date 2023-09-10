@@ -29,7 +29,7 @@ const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
     TOK_OP_LOG_NOT
 };
 
-static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
     else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
