@@ -1,0 +1,93 @@
+Dictionary: 69 entries
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1322274224
+INFO: Loaded 1 modules   (54 inline 8-bit counters): 54 [0x55f734f952f0, 0x55f734f95326), 
+INFO: Loaded 1 PC tables (54 PCs): 54 [0x55f734f95328,0x55f734f95688), 
+INFO:      318 files found in corpus/
+INFO: seed corpus: files: 318 min: 1b max: 4626b total: 260173b rss: 32Mb
+#319	INITED cov: 34 ft: 45 corp: 24/13902b exec/s: 0 rss: 60Mb
+#365	NEW    cov: 35 ft: 46 corp: 25/13907b lim: 4608 exec/s: 0 rss: 63Mb L: 5/4608 MS: 1 CMP- DE: "\000\000\000\000"-
+#456	NEW    cov: 38 ft: 49 corp: 26/13926b lim: 4608 exec/s: 0 rss: 68Mb L: 19/4608 MS: 1 InsertRepeatedBytes-
+#496	NEW    cov: 39 ft: 50 corp: 27/13947b lim: 4608 exec/s: 0 rss: 71Mb L: 21/4608 MS: 5 PersAutoDict-InsertByte-CrossOver-ManualDict-ChangeByte- DE: "\000\000\000\000"-"%"-
+#523	NEW    cov: 40 ft: 52 corp: 28/13966b lim: 4608 exec/s: 0 rss: 73Mb L: 19/4608 MS: 2 CopyPart-CrossOver-
+#574	REDUCE cov: 40 ft: 52 corp: 28/13965b lim: 4608 exec/s: 0 rss: 76Mb L: 18/4608 MS: 1 EraseBytes-
+#600	REDUCE cov: 41 ft: 53 corp: 29/13983b lim: 4608 exec/s: 0 rss: 79Mb L: 18/4608 MS: 1 ChangeByte-
+#668	NEW    cov: 41 ft: 54 corp: 30/14003b lim: 4608 exec/s: 0 rss: 84Mb L: 20/4608 MS: 3 EraseBytes-ShuffleBytes-ManualDict- DE: ">>>="-
+#689	NEW    cov: 41 ft: 55 corp: 31/14023b lim: 4608 exec/s: 0 rss: 86Mb L: 20/4608 MS: 1 InsertByte-
+#716	REDUCE cov: 41 ft: 55 corp: 31/14020b lim: 4608 exec/s: 0 rss: 88Mb L: 17/4608 MS: 2 CopyPart-EraseBytes-
+#830	REDUCE cov: 41 ft: 55 corp: 31/13925b lim: 4608 exec/s: 0 rss: 98Mb L: 198/4608 MS: 4 ShuffleBytes-EraseBytes-EraseBytes-ChangeByte-
+#983	REDUCE cov: 41 ft: 55 corp: 31/13909b lim: 4608 exec/s: 0 rss: 110Mb L: 182/4608 MS: 3 InsertRepeatedBytes-PersAutoDict-EraseBytes- DE: ">>>="-
+#1559	REDUCE cov: 41 ft: 55 corp: 31/13908b lim: 4608 exec/s: 0 rss: 151Mb L: 16/4608 MS: 1 EraseBytes-
+#1560	REDUCE cov: 41 ft: 55 corp: 31/13856b lim: 4608 exec/s: 0 rss: 151Mb L: 130/4608 MS: 1 EraseBytes-
+#1585	REDUCE cov: 41 ft: 55 corp: 31/13838b lim: 4608 exec/s: 0 rss: 153Mb L: 112/4608 MS: 5 ChangeBit-EraseBytes-ChangeByte-PersAutoDict-InsertByte- DE: ">>>="-
+#1667	REDUCE cov: 41 ft: 55 corp: 31/13797b lim: 4608 exec/s: 0 rss: 160Mb L: 71/4608 MS: 2 PersAutoDict-EraseBytes- DE: ">>>="-
+#2003	NEW    cov: 41 ft: 56 corp: 32/13893b lim: 4608 exec/s: 0 rss: 186Mb L: 96/4608 MS: 1 InsertRepeatedBytes-
+#2110	NEW    cov: 42 ft: 57 corp: 33/13894b lim: 4608 exec/s: 0 rss: 197Mb L: 1/4608 MS: 2 CrossOver-EraseBytes-
+#2178	NEW    cov: 42 ft: 58 corp: 34/14012b lim: 4608 exec/s: 0 rss: 202Mb L: 118/4608 MS: 3 InsertByte-InsertRepeatedBytes-CrossOver-
+#2266	REDUCE cov: 42 ft: 58 corp: 34/14002b lim: 4608 exec/s: 0 rss: 211Mb L: 11/4608 MS: 3 ShuffleBytes-ChangeBinInt-EraseBytes-
+#2403	REDUCE cov: 42 ft: 58 corp: 34/13991b lim: 4608 exec/s: 0 rss: 219Mb L: 107/4608 MS: 2 PersAutoDict-EraseBytes- DE: ">>>="-
+#2554	NEW    cov: 42 ft: 59 corp: 35/14149b lim: 4608 exec/s: 0 rss: 232Mb L: 158/4608 MS: 1 CopyPart-
+#2630	REDUCE cov: 42 ft: 59 corp: 35/14146b lim: 4608 exec/s: 0 rss: 238Mb L: 15/4608 MS: 1 EraseBytes-
+#2702	NEW    cov: 43 ft: 60 corp: 36/14150b lim: 4608 exec/s: 0 rss: 243Mb L: 4/4608 MS: 2 ShuffleBytes-CrossOver-
+#2741	REDUCE cov: 43 ft: 60 corp: 36/14136b lim: 4608 exec/s: 0 rss: 247Mb L: 93/4608 MS: 4 CMP-CrossOver-ChangeBinInt-EraseBytes- DE: "\000\000\000\000"-
+#2838	REDUCE cov: 43 ft: 60 corp: 36/14133b lim: 4608 exec/s: 0 rss: 256Mb L: 13/4608 MS: 2 ChangeBinInt-EraseBytes-
+#2906	REDUCE cov: 43 ft: 60 corp: 36/14105b lim: 4608 exec/s: 0 rss: 262Mb L: 68/4608 MS: 3 ShuffleBytes-ChangeByte-EraseBytes-
+#2937	REDUCE cov: 43 ft: 60 corp: 36/14100b lim: 4608 exec/s: 0 rss: 265Mb L: 6/4608 MS: 1 EraseBytes-
+#2993	REDUCE cov: 43 ft: 60 corp: 36/14095b lim: 4608 exec/s: 0 rss: 269Mb L: 13/4608 MS: 1 EraseBytes-
+#3300	REDUCE cov: 43 ft: 60 corp: 36/14079b lim: 4608 exec/s: 0 rss: 293Mb L: 77/4608 MS: 2 ShuffleBytes-EraseBytes-
+#3320	REDUCE cov: 43 ft: 60 corp: 36/14078b lim: 4608 exec/s: 0 rss: 295Mb L: 12/4608 MS: 5 InsertRepeatedBytes-CMP-EraseBytes-EraseBytes-EraseBytes- DE: "\377\377\377\377\377\377\377\002"-
+#3346	REDUCE cov: 43 ft: 60 corp: 36/14077b lim: 4608 exec/s: 0 rss: 297Mb L: 14/4608 MS: 1 EraseBytes-
+#3415	REDUCE cov: 43 ft: 60 corp: 36/14071b lim: 4608 exec/s: 0 rss: 304Mb L: 7/4608 MS: 4 ShuffleBytes-CrossOver-CrossOver-EraseBytes-
+#3591	REDUCE cov: 43 ft: 60 corp: 36/14067b lim: 4608 exec/s: 0 rss: 317Mb L: 8/4608 MS: 1 EraseBytes-
+#3727	REDUCE cov: 43 ft: 60 corp: 36/14047b lim: 4608 exec/s: 0 rss: 326Mb L: 57/4608 MS: 1 EraseBytes-
+#4182	REDUCE cov: 43 ft: 60 corp: 36/14039b lim: 4608 exec/s: 0 rss: 345Mb L: 63/4608 MS: 5 EraseBytes-CMP-PersAutoDict-ManualDict-ChangeByte- DE: "\000\000"-"%"-">="-
+#4258	REDUCE cov: 43 ft: 60 corp: 36/14036b lim: 4608 exec/s: 0 rss: 345Mb L: 4/4608 MS: 1 EraseBytes-
+#4829	REDUCE cov: 43 ft: 60 corp: 36/14034b lim: 4608 exec/s: 0 rss: 350Mb L: 4/4608 MS: 1 EraseBytes-
+#5140	REDUCE cov: 43 ft: 60 corp: 36/14032b lim: 4608 exec/s: 0 rss: 350Mb L: 12/4608 MS: 1 EraseBytes-
+#5462	REDUCE cov: 43 ft: 60 corp: 36/14031b lim: 4608 exec/s: 0 rss: 350Mb L: 56/4608 MS: 2 ChangeBit-EraseBytes-
+#5753	REDUCE cov: 43 ft: 60 corp: 36/14016b lim: 4608 exec/s: 0 rss: 350Mb L: 143/4608 MS: 1 EraseBytes-
+#5795	REDUCE cov: 43 ft: 60 corp: 36/14006b lim: 4608 exec/s: 0 rss: 350Mb L: 133/4608 MS: 2 InsertRepeatedBytes-EraseBytes-
+#5820	REDUCE cov: 43 ft: 60 corp: 36/13999b lim: 4608 exec/s: 0 rss: 350Mb L: 56/4608 MS: 5 PersAutoDict-CMP-ChangeBit-CopyPart-EraseBytes- DE: ">="-"\020\000\000\000\000\000\000\000"-
+#6791	REDUCE cov: 43 ft: 60 corp: 36/13987b lim: 4608 exec/s: 0 rss: 350Mb L: 44/4608 MS: 1 EraseBytes-
+#7155	REDUCE cov: 43 ft: 60 corp: 36/13969b lim: 4608 exec/s: 0 rss: 350Mb L: 26/4608 MS: 4 ChangeBinInt-ChangeBit-InsertByte-EraseBytes-
+#7752	REDUCE cov: 43 ft: 60 corp: 36/13968b lim: 4608 exec/s: 0 rss: 350Mb L: 4/4608 MS: 2 CopyPart-EraseBytes-
+#7869	REDUCE cov: 43 ft: 60 corp: 36/13948b lim: 4608 exec/s: 0 rss: 350Mb L: 36/4608 MS: 2 CrossOver-EraseBytes-
+#9487	REDUCE cov: 43 ft: 60 corp: 36/13940b lim: 4620 exec/s: 0 rss: 351Mb L: 18/4608 MS: 3 ShuffleBytes-InsertByte-EraseBytes-
+#10276	REDUCE cov: 43 ft: 60 corp: 36/13939b lim: 4620 exec/s: 0 rss: 351Mb L: 17/4608 MS: 4 CrossOver-ChangeBit-ChangeByte-EraseBytes-
+#10473	REDUCE cov: 43 ft: 60 corp: 36/13935b lim: 4620 exec/s: 0 rss: 351Mb L: 13/4608 MS: 2 InsertRepeatedBytes-EraseBytes-
+#10799	REDUCE cov: 43 ft: 60 corp: 36/13931b lim: 4620 exec/s: 0 rss: 351Mb L: 9/4608 MS: 1 EraseBytes-
+#12592	REDUCE cov: 43 ft: 60 corp: 36/13930b lim: 4632 exec/s: 0 rss: 351Mb L: 8/4608 MS: 3 ShuffleBytes-ChangeBinInt-EraseBytes-
+#12908	REDUCE cov: 43 ft: 60 corp: 36/13928b lim: 4632 exec/s: 0 rss: 351Mb L: 6/4608 MS: 1 EraseBytes-
+#13689	REDUCE cov: 43 ft: 60 corp: 36/13927b lim: 4632 exec/s: 0 rss: 351Mb L: 5/4608 MS: 1 EraseBytes-
+#14732	REDUCE cov: 43 ft: 60 corp: 36/13925b lim: 4632 exec/s: 0 rss: 351Mb L: 3/4608 MS: 3 ChangeBit-ManualDict-EraseBytes- DE: "%"-
+#15752	REDUCE cov: 43 ft: 60 corp: 36/13924b lim: 4632 exec/s: 0 rss: 351Mb L: 2/4608 MS: 5 CrossOver-ChangeBinInt-ChangeBit-EraseBytes-ChangeByte-
+#17173	REDUCE cov: 43 ft: 60 corp: 36/13923b lim: 4644 exec/s: 0 rss: 351Mb L: 1/4608 MS: 1 EraseBytes-
+#22503	REDUCE cov: 43 ft: 60 corp: 36/13922b lim: 4692 exec/s: 22503 rss: 353Mb L: 132/4608 MS: 1 EraseBytes-
+#65536	pulse  cov: 43 ft: 60 corp: 36/13922b lim: 5112 exec/s: 32768 rss: 355Mb
+#69132	RELOAD cov: 43 ft: 61 corp: 37/14513b lim: 5148 exec/s: 23044 rss: 356Mb
+#75556	REDUCE cov: 43 ft: 61 corp: 37/14473b lim: 5220 exec/s: 25185 rss: 356Mb L: 551/4608 MS: 4 PersAutoDict-CrossOver-CopyPart-EraseBytes- DE: "\000\000\000\000"-
+#104066	REDUCE cov: 43 ft: 61 corp: 37/14470b lim: 5496 exec/s: 26016 rss: 357Mb L: 548/4608 MS: 1 EraseBytes-
+#116369	REDUCE cov: 43 ft: 61 corp: 37/14453b lim: 5616 exec/s: 23273 rss: 357Mb L: 531/4608 MS: 2 CopyPart-EraseBytes-
+#121357	REDUCE cov: 43 ft: 61 corp: 37/14445b lim: 5664 exec/s: 24271 rss: 357Mb L: 523/4608 MS: 3 EraseBytes-ShuffleBytes-CopyPart-
+#131072	pulse  cov: 43 ft: 61 corp: 37/14445b lim: 5760 exec/s: 26214 rss: 357Mb
+#262144	pulse  cov: 43 ft: 61 corp: 37/14445b lim: 7056 exec/s: 21845 rss: 359Mb
+#320471	REDUCE cov: 43 ft: 61 corp: 37/14442b lim: 7644 exec/s: 21364 rss: 361Mb L: 520/4608 MS: 2 CopyPart-EraseBytes-
+#363983	REDUCE cov: 43 ft: 61 corp: 37/14440b lim: 8076 exec/s: 21410 rss: 364Mb L: 518/4608 MS: 2 ShuffleBytes-EraseBytes-
+#399955	REDUCE cov: 43 ft: 61 corp: 37/14439b lim: 8430 exec/s: 21050 rss: 365Mb L: 517/4608 MS: 2 ShuffleBytes-EraseBytes-
+#442302	RELOAD cov: 43 ft: 62 corp: 38/22Kb lim: 8846 exec/s: 21062 rss: 366Mb
+#489662	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 9314 exec/s: 21289 rss: 371Mb L: 8757/8757 MS: 2 ShuffleBytes-EraseBytes-
+#524288	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 9652 exec/s: 20971 rss: 372Mb
+#652061	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 10926 exec/s: 21735 rss: 374Mb L: 8729/8729 MS: 4 EraseBytes-InsertRepeatedBytes-ChangeBit-InsertRepeatedBytes-
+#740668	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 11797 exec/s: 21784 rss: 377Mb L: 8713/8713 MS: 3 ManualDict-EraseBytes-InsertRepeatedBytes- DE: "*="-
+#844310	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 12824 exec/s: 22218 rss: 381Mb L: 516/8713 MS: 2 PersAutoDict-EraseBytes- DE: "\000\000\000\000"-
+#991399	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 14280 exec/s: 22031 rss: 386Mb L: 8705/8705 MS: 5 PersAutoDict-ChangeByte-InsertRepeatedBytes-CMP-CrossOver- DE: "\377\377\377\377\377\377\377\002"-"\002\000\000\000\000\000\000\000"-
+#1048576	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 14839 exec/s: 21845 rss: 388Mb
+#2097152	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 16384 exec/s: 22075 rss: 422Mb
+#4194304	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 16384 exec/s: 20867 rss: 489Mb
+#7020063	REDUCE cov: 43 ft: 62 corp: 38/22Kb lim: 16384 exec/s: 20708 rss: 581Mb L: 8704/8704 MS: 1 EraseBytes-
+#8388608	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 16384 exec/s: 20460 rss: 625Mb
+#16777216	pulse  cov: 43 ft: 62 corp: 38/22Kb lim: 16384 exec/s: 20311 rss: 894Mb
+Slowest unit: 12 s:
+artifact_prefix='./'; Test unit written to bin/fuzz
+Base64: OjAwMTAwPD0wMCAgKlUgIEN+ICAgICAgICAgICAgIA==
+==52215== libFuzzer: run interrupted; exiting
