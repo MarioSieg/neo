@@ -262,15 +262,12 @@ astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
     return ref;
 }
 
-astref_t astnode_new_block(astpool_t *pool, node_block_t *node) {
+astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
     neo_dassert(pool && node);
 
     /* Verify AST data. */
-    node_block_t *data = node;
-    if (!data->len) { /* Block is empty -> return NULL. */
-        node_block_free(data);
-        return ASTREF_NULL;
-    }
+    const node_block_t *data = node;
+    astverify(data->len > 0, "Block nodes array is empty");
 
     /* Create AST node. */
     astnode_t *nn = NULL;

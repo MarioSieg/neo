@@ -355,8 +355,8 @@ extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcs
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_method(astpool_t *pool, const node_method_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, node_block_t *node); /* Returns ASTREF_NULL and frees the block if the block is empty. */
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! Returns ASTREF_NULL if the block is empty. */
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, const node_block_t *node);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_return(astpool_t *pool, const node_return_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_break(astpool_t *pool);

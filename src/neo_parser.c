@@ -442,7 +442,12 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
                 node_block_push_child(&self->pool, &arguments, arg);
             } while (consume_match(self, TOK_PU_COMMA));
             consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
-            *node = astnode_new_block(&self->pool, &arguments);
+            if (arguments.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+                *node = astnode_new_block(&self->pool, &arguments);
+            } else {
+                *node = ASTREF_NULL;
+                node_block_free(&arguments);
+            }
         }
         return BINOP_CALL;
     } else {
@@ -579,7 +584,12 @@ static astref_t rule_method(parser_t *self, bool is_static) {
             ++depth;
         } while (isok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
-        parameters = astnode_new_block(&self->pool, &param_list);
+        if (param_list.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+            parameters = astnode_new_block(&self->pool, &param_list);
+        } else {
+            parameters = ASTREF_NULL;
+            node_block_free(&param_list);
+        }
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
@@ -646,7 +656,12 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end");
-    return astnode_new_block(&self->pool, &block);
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        return astnode_new_block(&self->pool, &block);
+    } else {
+        node_block_free(&block);
+        return ASTREF_NULL;
+    }
 }
 
 /*
@@ -672,7 +687,12 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end");
-    return astnode_new_block(&self->pool, &block);
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        return astnode_new_block(&self->pool, &block);
+    } else {
+        node_block_free(&block);
+        return ASTREF_NULL;
+    }
 }
 
 /*
@@ -723,8 +743,15 @@ static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
         neo_assert(astpool_isvalidref(&self->pool, node) && "Invalid AST-Reference emitted");
         node_block_push_child(&self->pool, &block, node);
     }
+    astref_t body = ASTREF_NULL;
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        body = astnode_new_block(&self->pool, &block);
+    } else {
+        body = ASTREF_NULL;
+        node_block_free(&block);
+    }
     return astnode_new_module(&self->pool, &(node_module_t) {
-        .body = astnode_new_block(&self->pool, &block)
+        .body = body
     });
 }
 
