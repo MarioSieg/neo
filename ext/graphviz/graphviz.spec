@@ -1,1 +1,0 @@
-redhat/graphviz.spec.fedora

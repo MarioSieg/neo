@@ -448,11 +448,7 @@ extern NEO_EXPORT const neo_osi_t *neo_osi;
 
 /* ---- Memory ---- */
 #ifndef neo_alloc_malloc
-#if NEO_DBG
-#   define neo_alloc_malloc(size) calloc(1, (size))
-#else
 #   define neo_alloc_malloc(size) malloc(size)
-#endif
 #endif
 #ifndef neo_alloc_realloc
 #   define neo_alloc_realloc(blk, size) realloc((blk),(size))
@@ -469,19 +465,20 @@ extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 ** All memory is freed simultaneously when the pool is destroyed with neo_mempool_free.
 */
 typedef struct neo_mempool_t {
-    void *needle;
+    void *top;
     size_t len;
     size_t cap;
     size_t num_allocs;
 } neo_mempool_t;
 
-#define neo_mempool_getelementptr(self, idx, type) (((type *)((self).needle))+(idx))
+#define neo_mempool_getelementptr(self, idx, type) (((type *)((self).top))+(idx))
 #define neo_mempool_top(self, type) ((type *)(self).needle)
 extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *self, size_t cap);
 extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *self, size_t len);
 extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align);
 extern NEO_EXPORT size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp);
 extern NEO_EXPORT void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen);
+extern NEO_EXPORT void neo_mempool_reset(neo_mempool_t *self);
 extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *self);
 
 /* ---- Types ---- */
@@ -698,43 +695,11 @@ extern NEO_EXPORT bool neo_utf8_is_ascii(const uint8_t *buf, size_t len);
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 extern NEO_EXPORT uint32_t neo_hash_fnv1a(const void *key, size_t len);
 
-/* ---- Hashmap ---- */
-
-#define NEO_HASHMAP_DEFAULT_CAPACITY 32
-#define NEO_HASHMAP_MAX_LOAD 0.75f
-typedef void (neo_hashmap_callback_t)(const void *key, uint32_t klen, uintptr_t value, void *usr);
-typedef struct neo_bucket_t neo_bucket_t;
-struct neo_bucket_t {
-    neo_bucket_t *next;
-    const void *key;
-    uint32_t klen;
-    uint32_t hash;
-    uintptr_t val;
-};
-typedef struct neo_hashmap_t {
-    neo_bucket_t *buckets;
-    uint32_t len;
-    uint32_t cap;
-    uint32_t tombstones;
-    neo_bucket_t *first;
-    neo_bucket_t *last;
-} neo_hashmap_t;
-
-extern NEO_EXPORT void neo_hashmap_init(neo_hashmap_t *self, uint32_t cap);
-extern NEO_EXPORT void neo_hashmap_put(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val);
-extern NEO_EXPORT bool neo_hashmap_get_set(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_in);
-extern NEO_EXPORT void neo_hashmap_put_free(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val, neo_hashmap_callback_t *cb, void *usr);
-extern NEO_EXPORT bool neo_hashmap_get(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_val);
-extern NEO_EXPORT void neo_hashmap_remove(neo_hashmap_t *self, const void *key, uint32_t klen);
-extern NEO_EXPORT void neo_hashmap_remove_free(neo_hashmap_t *self, const void *key, uint32_t klen, neo_hashmap_callback_t *cb, void *usr);
-extern NEO_EXPORT uint32_t neo_hashmap_len(const neo_hashmap_t *self);
-extern NEO_EXPORT void neo_hashmap_iter(const neo_hashmap_t *self, neo_hashmap_callback_t *cb, void *usr);
-extern NEO_EXPORT void neo_hashmap_free(neo_hashmap_t *self);
-
 /* ---- Utilities ---- */
 
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
+extern NEO_EXPORT void neo_printutf8(FILE *f, const uint8_t *str); /* Print UTF-8 string to stdout. */
 
 #ifdef __cplusplus
 }

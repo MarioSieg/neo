@@ -4,8 +4,10 @@
 #include "neo_core.h"
 #include "neo_compiler.h"
 
-const uint8_t *srcspan_clone(srcspan_t span) {
-    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+/* This file is included into C++ from the unit tests, that's why there are some redundant casts from void* to T*, which are nedded in C++ but not in C. */
+
+const uint8_t *srcspan_heap_clone(srcspan_t span) {
+    uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';
     return p;
@@ -29,30 +31,30 @@ const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
     TOK_OP_LOG_NOT
 };
 
-static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. Assumes valid UTF-8. */
+static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
-    else if ((x>>5) == 0x6/*0000'0110*/) { return 2; } /* 2 bytes */
-    else if ((x>>4) == 0xe/*0000'1110*/) { return 3; } /* 3 bytes */
-    else if ((x>>3) == 0x1e/*0001'1110*/) { return 4; } /* 4 bytes */
+    else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
+    else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
+    else if ((x>>3) == 0x1e) { return 4; } /* 4 bytes */
     else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
 }
 
 static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
     uint32_t len = utf8_seqlen(cp);
-    if (neo_likely(len == 1)) { ++*p; return cp & 0x7f/*0111'1111*/; } /* ASCII and most common case. */
+    if (neo_likely(len == 1)) { ++*p; return cp & 0x7f; } /* ASCII and most common case. */
     else if (neo_unlikely(len == 0)) { return 0; }
     else {
         switch (len) {
-            case 2: cp = ((cp<<6) & 0x7ff/*0111'1111'1111*/)|(*++*p & 0x3f/*0011'1111*/); break; /* 2 bytes */
+            case 2: cp = ((cp<<6) & 0x7ff)|(*++*p & 0x3f); break; /* 2 bytes */
             case 3: /* 3 bytes */
-                cp = ((cp<<12) & 0xffff/*1111'1111'1111'1111*/)|((*++*p<<6) & 0xfff/*1111'1111'1111*/);
-                cp += *++*p & 0x3f/*0011'1111*/;
+                cp = ((cp<<12) & 0xffff)|((*++*p<<6) & 0xfff);
+                cp += *++*p & 0x3f;
                 break;
             case 4: /* 4 bytes */
-                cp = ((cp<<18) & 0x1fffff/*0001'1111'1111'1111'1111'1111*/)|((*++*p<<12) & 0x3ffff/*0011'1111'1111'1111'1111*/);
-                cp += (*++*p<<6) & 0xfff/*1111'1111'1111*/;
-                cp += *++*p & 0x3f/*0011'1111*/;
+                cp = ((cp<<18) & 0x1fffff)|((*++*p<<12) & 0x3ffff);
+                cp += (*++*p<<6) & 0xfff;
+                cp += *++*p & 0x3f;
                 break;
             default:;
         }
@@ -359,12 +361,12 @@ token_t lexer_scan_next(lexer_t *self) {
 size_t lexer_drain(lexer_t *self, token_t **tok) {
     neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
-    *tok = neo_memalloc(NULL, cap*sizeof(**tok));
+    *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {
         token_t t = lexer_scan_next(self);
         if (neo_unlikely(t.type == TOK_ME_EOF)) { break; }
         if (neo_unlikely(len >= cap)) {
-            *tok = neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
+            *tok = (token_t *)neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
         }
         (*tok)[len++] = t;
     }

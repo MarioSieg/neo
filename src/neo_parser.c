@@ -184,7 +184,7 @@ neo_static_assert(sizeof(parse_rules_lut)/sizeof(*parse_rules_lut) == TOK__COUNT
 #define isok(self) neo_likely((!(self)->panic && !(self)->error))
 
 static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *msg) {
-    const compile_error_t *error = comerror_from_token(tok, msg);
+    const compile_error_t *error = comerror_from_token(COMERR_SYNTAX_ERROR, tok, (const uint8_t *)msg);
     errvec_push(self->errors, error);
     self->error = self->panic = true;
     self->prev_error = msg;
@@ -366,81 +366,90 @@ static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
     return EXPR_OP_DONE;
 }
 
+#define map_prec(type, prec)  case TOK_OP_##type: expr_eval_precedence(self, node, (precedence_t)(1+(PREC_##prec))); return BINOP_##type
 static binary_op_type_t expr_binary_op(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     advance(self);
     switch (self->prev.type) {
-        case TOK_OP_ADD: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_ADD;
-        case TOK_OP_SUB: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_SUB;
-        case TOK_OP_MUL: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MUL;
-        case TOK_OP_POW: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_POW;
-        case TOK_OP_ADD_NO_OV: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_ADD_NO_OV;
-        case TOK_OP_SUB_NO_OV: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_SUB_NO_OV;
-        case TOK_OP_MUL_NO_OV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MUL_NO_OV;
-        case TOK_OP_POW_NO_OV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_POW_NO_OV;
-        case TOK_OP_DIV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_DIV;
-        case TOK_OP_MOD: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MOD;
-        case TOK_OP_BIT_AND: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_AND;
-        case TOK_OP_BIT_OR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_OR;
-        case TOK_OP_BIT_XOR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_XOR;
-        case TOK_OP_BIT_ASHL: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ASHL;
-        case TOK_OP_BIT_ASHR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ASHR;
-        case TOK_OP_BIT_ROL: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ROL;
-        case TOK_OP_BIT_ROR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ROR;
-        case TOK_OP_BIT_LSHR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_LSHR;
-        case TOK_OP_LOG_AND: expr_eval_precedence(self, node, PREC_AND + 1); return BINOP_LOG_AND;
-        case TOK_OP_LOG_OR: expr_eval_precedence(self, node, PREC_OR + 1); return BINOP_LOG_OR;
+        map_prec(ADD, TERM);
+        map_prec(SUB, TERM);
+        map_prec(MUL, FACTOR);
+        map_prec(POW, FACTOR);
+        map_prec(ADD_NO_OV, TERM);
+        map_prec(SUB_NO_OV, TERM);
+        map_prec(MUL_NO_OV, FACTOR);
+        map_prec(POW_NO_OV, FACTOR);
+        map_prec(DIV, FACTOR);
+        map_prec(MOD, FACTOR);
+        map_prec(BIT_AND, TERM);
+        map_prec(BIT_OR, TERM);
+        map_prec(BIT_XOR, TERM);
+        map_prec(BIT_ASHL, TERM);
+        map_prec(BIT_ASHR, TERM);
+        map_prec(BIT_ROL, TERM);
+        map_prec(BIT_ROR, TERM);
+        map_prec(BIT_LSHR, TERM);
+        map_prec(LOG_AND, AND);
+        map_prec(LOG_OR, OR);
 
-        case TOK_OP_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ASSIGN;
-        case TOK_OP_ADD_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ADD_ASSIGN;
-        case TOK_OP_SUB_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_SUB_ASSIGN;
-        case TOK_OP_MUL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MUL_ASSIGN;
-        case TOK_OP_POW_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_POW_ASSIGN;
-        case TOK_OP_ADD_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ADD_ASSIGN_NO_OV;
-        case TOK_OP_SUB_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_SUB_ASSIGN_NO_OV;
-        case TOK_OP_MUL_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MUL_ASSIGN_NO_OV;
-        case TOK_OP_POW_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_POW_ASSIGN_NO_OV;
-        case TOK_OP_DIV_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_DIV_ASSIGN;
-        case TOK_OP_MOD_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MOD_ASSIGN;
-        case TOK_OP_BIT_AND_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_AND_ASSIGN;
-        case TOK_OP_BIT_OR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_OR_ASSIGN;
-        case TOK_OP_BIT_XOR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_XOR_ASSIGN;
-        case TOK_OP_BIT_ASHL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ASHL_ASSIGN;
-        case TOK_OP_BIT_ASHR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ASHR_ASSIGN;
-        case TOK_OP_BIT_ROL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ROL_ASSIGN;
-        case TOK_OP_BIT_ROR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ROR_ASSIGN;
-        case TOK_OP_BIT_LSHR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_LSHR_ASSIGN;
+        map_prec(ASSIGN, ASSIGNMENT);
+        map_prec(ADD_ASSIGN, ASSIGNMENT);
+        map_prec(SUB_ASSIGN, ASSIGNMENT);
+        map_prec(MUL_ASSIGN, ASSIGNMENT);
+        map_prec(POW_ASSIGN, ASSIGNMENT);
+        map_prec(ADD_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(SUB_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(MUL_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(POW_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(DIV_ASSIGN, ASSIGNMENT);
+        map_prec(MOD_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_AND_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_OR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_XOR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ASHL_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ASHR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ROL_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ROR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_LSHR_ASSIGN, ASSIGNMENT);
 
-        case TOK_OP_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_EQUAL;
-        case TOK_OP_NOT_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_NOT_EQUAL;
-        case TOK_OP_LESS: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_LESS;
-        case TOK_OP_LESS_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_LESS_EQUAL;
-        case TOK_OP_GREATER: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_GREATER;
-        case TOK_OP_GREATER_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_GREATER_EQUAL;
+        map_prec(EQUAL, COMPARISON);
+        map_prec(NOT_EQUAL, COMPARISON);
+        map_prec(LESS, COMPARISON);
+        map_prec(LESS_EQUAL, COMPARISON);
+        map_prec(GREATER, COMPARISON);
+        map_prec(GREATER_EQUAL, COMPARISON);
 
         default:
             error(self, &self->prev, "Invalid binary operator");
             return EXPR_OP_DONE;
     }
 }
+#undef map_prec
 
 static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     advance(self); /* Eat LPAREN. */
     if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
         if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
-            node_block_t arguments = {.blktype = BLOCKSCOPE_ARGLIST};
+            node_block_t arguments;
+            node_block_init(&arguments, BLOCKSCOPE_ARGLIST);
             do { /* Parse arguments. */
                 astref_t arg = ASTREF_NULL;
                 expr_eval_precedence(self, &arg, PREC_TERNARY);
                 if (neo_unlikely(astref_isnull(arg))) {
                     error(self, &self->prev, "Invalid argument in function call");
+                    node_block_free(&arguments); /* Free block because it is not added to the AST pool for automatic memory management. */
                     return EXPR_OP_DONE;
                 }
                 node_block_push_child(&self->pool, &arguments, arg);
             } while (consume_match(self, TOK_PU_COMMA));
             consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
-            *node = astnode_new_block(&self->pool, &arguments);
+            if (arguments.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+                *node = astnode_new_block(&self->pool, &arguments);
+            } else {
+                *node = ASTREF_NULL;
+                node_block_free(&arguments);
+            }
         }
         return BINOP_CALL;
     } else {
@@ -550,6 +559,7 @@ static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
             init_expr = rule_expr(self);
         } else {
             error(self, &self->curr, "Variable must be initialized");
+            return ASTREF_NULL;
         }
         consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after variable definition");
     }
@@ -568,7 +578,8 @@ static astref_t rule_method(parser_t *self, bool is_static) {
     consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after method identifier");
     astref_t parameters = ASTREF_NULL;
     if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
-        node_block_t param_list = {.blktype = BLOCKSCOPE_PARAMLIST};
+        node_block_t param_list;
+        node_block_init(&param_list, BLOCKSCOPE_PARAMLIST);
         int depth = 0;
         do { /* Eat all parameters. */
             check_depth_lim(depth);
@@ -576,7 +587,12 @@ static astref_t rule_method(parser_t *self, bool is_static) {
             ++depth;
         } while (isok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
-        parameters = neo_likely(param_list.len) ? astnode_new_block(&self->pool, &param_list) : ASTREF_NULL;
+        if (param_list.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+            parameters = astnode_new_block(&self->pool, &param_list);
+        } else {
+            parameters = ASTREF_NULL;
+            node_block_free(&param_list);
+        }
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
@@ -612,7 +628,8 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 */
 static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
     neo_dassert(self);
-    node_block_t block = {.blktype = BLOCKSCOPE_LOCAL};
+    node_block_t block;
+    node_block_init(&block, BLOCKSCOPE_LOCAL);
     for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         if (consume_match(self, TOK_KW_LET)) {
@@ -628,12 +645,14 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
                 node_block_push_child(&self->pool, &block, astnode_new_break(&self->pool));
             } else {
                 error(self, &self->prev, "'break'-statement can only be used within loops");
+                return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_KW_CONTINUE)) {
             if (neo_likely(within_loop)) {
                 node_block_push_child(&self->pool, &block, astnode_new_continue(&self->pool));
             } else {
                 error(self, &self->prev, "'continue'-statement can only be used within loops");
+                return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
@@ -642,7 +661,12 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end");
-    return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        return astnode_new_block(&self->pool, &block);
+    } else {
+        node_block_free(&block);
+        return ASTREF_NULL;
+    }
 }
 
 /*
@@ -651,7 +675,8 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
 */
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self);
-    node_block_t block = {.blktype = BLOCKSCOPE_CLASS};
+    node_block_t block;
+    node_block_init(&block, BLOCKSCOPE_CLASS);
     for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
@@ -667,7 +692,12 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end");
-    return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        return astnode_new_block(&self->pool, &block);
+    } else {
+        node_block_free(&block);
+        return ASTREF_NULL;
+    }
 }
 
 /*
@@ -686,7 +716,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_module(parser_t *self, bool *skip) 
     } else if (neo_unlikely(consume_match(self, TOK_ME_EOF))) {
         return ASTREF_NULL;
     } else {
-        error(self, &self->curr, "Expected class definition within module");
+        error(self, &self->curr, "No class found to execute. Did you forget to add a class to your source file?");
         return ASTREF_NULL;
     }
 }
@@ -707,7 +737,8 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
 
 static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
     neo_dassert(self);
-    node_block_t block = { .blktype = BLOCKSCOPE_MODULE };
+    node_block_t block;
+    node_block_init(&block, BLOCKSCOPE_MODULE);
     for (int depth = 0; isok(self); ++depth) {
         check_depth_lim(depth);
         bool skip = false;
@@ -717,8 +748,15 @@ static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
         neo_assert(astpool_isvalidref(&self->pool, node) && "Invalid AST-Reference emitted");
         node_block_push_child(&self->pool, &block, node);
     }
+    astref_t body = ASTREF_NULL;
+    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
+        body = astnode_new_block(&self->pool, &block);
+    } else {
+        body = ASTREF_NULL;
+        node_block_free(&block);
+    }
     return astnode_new_module(&self->pool, &(node_module_t) {
-        .body = neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL
+        .body = body
     });
 }
 
@@ -753,6 +791,7 @@ astref_t parser_drain(parser_t *self) {
 
 void parser_setup_source(parser_t *self, const source_t *src) {
     neo_dassert(self && src);
+    astpool_reset(&self->pool); /* Reset AST pool. */
     lexer_setup_source(&self->lex, src);
     self->error = self->panic = false;
     advance(self); /* Consume first token. */
@@ -849,7 +888,7 @@ bool parse_int(const char *str, size_t len, radix_t radix_hint, neo_int_t *o) {
 }
 
 bool parse_float(const char *str, size_t len, neo_float_t *o) {
-    char *buf = alloca(len+1);
+    char *buf = (char *)alloca(len+1);
     memcpy(buf, str, len);
     buf[len] = '\0';
     *o = strtod(buf, &buf);

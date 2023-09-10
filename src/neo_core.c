@@ -41,10 +41,10 @@ void neo_osi_init(void) {
     neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
     SYSTEM_INFO info;
     GetSystemInfo(&info);
-    osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 1<<12;
+    osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 0x1000;
 #elif NEO_OS_LINUX || NEO_OS_BSD
     long ps = sysconf(_SC_PAGESIZE);
-    osi_data.page_size = ps > 0 ? (uint32_t)ps : 1<<12;
+    osi_data.page_size = ps > 0 ? (uint32_t)ps : 0x1000;
 #else
 #   error "unsupported platform"
 #endif
@@ -76,8 +76,8 @@ void neo_mempool_init(neo_mempool_t *self, size_t cap) {
     memset(self, 0, sizeof(*self));
     cap = cap ? cap : 1<<9;
     self->cap = cap;
-    self->needle = neo_memalloc(NULL, cap);
-    memset(self->needle, 0, cap); /* Zero the memory. */
+    self->top = neo_memalloc(NULL, cap);
+    memset(self->top, 0, cap); /* Zero the memory. */
 }
 
 void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
@@ -89,11 +89,11 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
         do {
             self->cap<<=1;
         } while (self->cap <= total);
-        self->needle = neo_memalloc(self->needle, self->cap);
+        self->top = neo_memalloc(self->top, self->cap);
         size_t delta = self->cap-old;
-        memset((uint8_t *)self->needle+old, 0, delta); /* Zero the new memory. */
+        memset((uint8_t *)self->top + old, 0, delta); /* Zero the new memory. */
     }
-    void *p = (uint8_t *)self->needle+self->len;
+    void *p = (uint8_t *)self->top + self->len;
     self->len += len;
     ++self->num_allocs;
     return p;
@@ -127,9 +127,15 @@ void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t 
     return blk;
 }
 
+void neo_mempool_reset(neo_mempool_t *self) {
+    neo_dassert(self);
+    self->len = 0;
+    self->num_allocs = 0;
+}
+
 void neo_mempool_free(neo_mempool_t *self) {
     neo_dassert(self);
-    neo_memalloc(self->needle, 0);
+    neo_memalloc(self->top, 0);
 }
 
 #define get_fmodstr(_)\
@@ -152,7 +158,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
     if (neo_unlikely(!len)) {
         return false;
     }
-    bool heap = len >= (1u<<12);
+    bool heap = len > 0x1000;
     WCHAR *wstr = heap ? neo_memalloc(NULL, len*sizeof(*wstr)) : alloca(len*sizeof(*wstr));
     if (neo_unlikely(!MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, wstr, len))) {
         return false;
@@ -252,191 +258,18 @@ uint32_t neo_hash_fnv1a(const void *key, size_t len) {
     size_t rest = len & 255;
     switch (len % 8)
     {
-        case 7: rest |= (uint64_t)data[6] << 56; /* fallthrough */
-        case 6: rest |= (uint64_t)data[5] << 48; /* fallthrough */
-        case 5: rest |= (uint64_t)data[4] << 40; /* fallthrough */
-        case 4: rest |= (uint64_t)data[3] << 32; /* fallthrough */
-        case 3: rest |= (uint64_t)data[2] << 24; /* fallthrough */
-        case 2: rest |= (uint64_t)data[1] << 16; /* fallthrough */
+        case 7: rest |= (uint64_t)data[6] << 56; NEO_FALLTHROUGH; /* fallthrough */
+        case 6: rest |= (uint64_t)data[5] << 48; NEO_FALLTHROUGH; /* fallthrough */
+        case 5: rest |= (uint64_t)data[4] << 40; NEO_FALLTHROUGH; /* fallthrough */
+        case 4: rest |= (uint64_t)data[3] << 32; NEO_FALLTHROUGH; /* fallthrough */
+        case 3: rest |= (uint64_t)data[2] << 24; NEO_FALLTHROUGH; /* fallthrough */
+        case 2: rest |= (uint64_t)data[1] << 16; NEO_FALLTHROUGH; /* fallthrough */
         case 1:
             rest |= (uint64_t)data[0] << 8;
             r ^= rest;
             r *= 0xd6e8feb86659fd93;
     }
     return (uint32_t )(r ^ (r >> 32));
-}
-
-static neo_bucket_t *map_resize_entry(neo_hashmap_t *self, neo_bucket_t *old) {
-    neo_dassert(self && old);
-    uint32_t i = old->hash % self->cap;
-    for (;;) {
-        neo_bucket_t *bucket = self->buckets + i;
-        if (!bucket->key) { /* Found empty bucket. */
-            *bucket = *old; /* Clone data. */
-            return bucket;
-        }
-        i = (i+1) % self->cap;
-    }
-}
-
-static void map_resize(neo_hashmap_t *self) {
-    neo_dassert(self);
-    self->buckets = neo_memalloc(self->buckets, (self->cap<<=1)*sizeof(*self->buckets));
-    self->last = (neo_bucket_t *)&self->first;
-    self->len -= self->tombstones;
-    self->tombstones = 0;
-    do {
-        neo_bucket_t *bucket = self->last->next;
-        if (!bucket->key) { /* Skip if tombstone. */
-            self->last->next = bucket->next;
-            continue;
-        }
-        self->last->next = map_resize_entry(self, self->last->next);
-        self->last = self->last->next;
-    } while (self->last); /* Assumes that empty map is not resized. */
-}
-
-static neo_bucket_t *map_search(neo_hashmap_t *self, const void *key, uint32_t klen, uint32_t hash) {
-    neo_dassert(self && key && klen);
-    uint32_t i = hash % self->cap;
-    for (;;) {
-        neo_bucket_t *bucket = self->buckets + i;
-        bool nk = bucket->key == NULL;
-        bool nv = bucket->val == 0;
-        bool match =
-            (nk && nv) ||
-            (!nk && bucket->klen == klen
-            && bucket->hash == hash
-            && memcmp(bucket->key, key, klen) == 0);
-        if (match) {
-            return bucket;
-        }
-        i = (i+1) % self->cap;
-    }
-}
-
-void neo_hashmap_init(neo_hashmap_t *self, uint32_t cap) {
-    neo_dassert(self);
-    memset(self, 0, sizeof(*self));
-    cap = cap ? cap : NEO_HASHMAP_DEFAULT_CAPACITY;
-    self->cap = cap;
-    self->buckets = neo_memalloc(NULL, cap*sizeof(*self->buckets));
-    self->first = NULL;
-    self->last = (neo_bucket_t *)&self->first;
-}
-
-void neo_hashmap_put(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val) {
-    neo_dassert(self && key);
-    if ((double)(self->len+1) > NEO_HASHMAP_MAX_LOAD*(double)self->cap) {
-        map_resize(self);
-    }
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    if (!bucket->key) {
-        self->last->next = bucket;
-        self->last = bucket;
-        bucket->next = NULL;
-        bucket->key = key;
-        bucket->klen = klen;
-        bucket->hash = hash;
-        ++self->len;
-    }
-    bucket->val = val;
-}
-
-bool neo_hashmap_get_set(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_in) {
-    neo_dassert(self && key);
-    if ((double)(self->len+1) > NEO_HASHMAP_MAX_LOAD*(double)self->cap) {
-        map_resize(self);
-    }
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    if (!bucket->key) {
-        self->last->next = bucket;
-        self->last = bucket;
-        bucket->next = NULL;
-        bucket->val = *out_in;
-        bucket->key = key;
-        bucket->klen = klen;
-        bucket->hash = hash;
-        ++self->len;
-        return false;
-    }
-    *out_in = bucket->val;
-    return true;
-}
-
-void neo_hashmap_put_free(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t val, neo_hashmap_callback_t *cb, void *usr) {
-    neo_dassert(self && key);
-    if ((double)(self->len+1) > NEO_HASHMAP_MAX_LOAD*(double)self->cap) {
-        map_resize(self);
-    }
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    if (!bucket->key) {
-        self->last->next = bucket;
-        self->last = bucket;
-        bucket->next = NULL;
-        bucket->val = val;
-        bucket->key = key;
-        bucket->klen = klen;
-        bucket->hash = hash;
-        ++self->len;
-        return;
-    }
-    (*cb)(bucket->key, klen, bucket->val, usr);
-    bucket->key = key;
-    bucket->val = val;
-}
-
-bool neo_hashmap_get(neo_hashmap_t *self, const void *key, uint32_t klen, uintptr_t *out_val) {
-    neo_dassert(self && key && klen && out_val);
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    *out_val = bucket->val;
-    return bucket->key != 0;
-}
-
-void neo_hashmap_remove(neo_hashmap_t *self, const void *key, uint32_t klen) {
-    neo_dassert(self && key);
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    if (bucket->key) {
-        bucket->key = NULL;
-        bucket->val = 0xdead; /* It's a tombstone hehe. */
-        ++self->tombstones;
-    }
-}
-
-void neo_hashmap_remove_free(neo_hashmap_t *self, const void *key, uint32_t klen, neo_hashmap_callback_t *cb, void *usr) {
-    neo_dassert(self && key);
-    uint32_t hash = neo_hash_fnv1a(key, klen);
-    neo_bucket_t *bucket = map_search(self, key, klen, hash);
-    if (bucket->key) {
-        (*cb)(bucket->key, klen, bucket->val, usr);
-        bucket->key = NULL;
-        bucket->val = 0xdead; /* It's a tombstone hehe. */
-        ++self->tombstones;
-    }
-}
-
-uint32_t neo_hashmap_len(const neo_hashmap_t *self) {
-    neo_dassert(self);
-    return self->len - self->tombstones;
-}
-
-void neo_hashmap_iter(const neo_hashmap_t *self, neo_hashmap_callback_t *cb, void *usr) {
-    neo_dassert(self && cb && usr);
-    for (neo_bucket_t *bucket = self->first; bucket; bucket = bucket->next) {
-        if (bucket->key) {
-            (*cb)(bucket->key, bucket->klen, bucket->val, usr);
-        }
-    }
-}
-
-void neo_hashmap_free(neo_hashmap_t *self) {
-    neo_dassert(self);
-    neo_memalloc(self->buckets, 0);
 }
 
 neo_static_assert(sizeof(char) == sizeof(uint8_t));
@@ -451,4 +284,14 @@ char *neo_strdup(const char *str) {
     memcpy(dup, str, len);
     dup[len] = '\0';
     return dup;
+}
+
+void neo_printutf8(FILE *f, const uint8_t *str) {
+    neo_assert(f != NULL && "Invalid file ptr");
+    if (neo_unlikely(!str || !*str)) { return; }
+#if NEO_OS_LINUX
+    fputs((const char *)str, f); /* Linux terminal is UTF-8 by default. */
+#else
+#  error "unsupported platform"
+#endif
 }

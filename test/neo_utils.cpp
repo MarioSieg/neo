@@ -4,11 +4,11 @@
 #include <cstring>
 
 #include "neo_lexer.h"
-#include "neo_utils.h"
 #include "neo_compiler.h"
 
 TEST(utils, comerror_from_token) {
-    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
+    const source_t *source = source_from_memory_ref(reinterpret_cast<const std::uint8_t *>(u8"test.neo"),
+                                                    reinterpret_cast<const std::uint8_t *>("01234567890_100111"), nullptr);
 
     lexer_t lexer;
     lexer_init(&lexer);
@@ -20,14 +20,15 @@ TEST(utils, comerror_from_token) {
     ASSERT_EQ(std::memcmp(tok.lexeme.p, "01234567890_100111", sizeof("01234567890_100111")-1), 0);
     ASSERT_EQ(tok.radix, RADIX_DEC);
 
-    const compile_error_t *error = comerror_from_token(&tok, "Oh no!");
+    const compile_error_t *error = comerror_from_token(COMERR_INTERNAL_COMPILER_ERROR, &tok,
+                                                       reinterpret_cast<const uint8_t *>("Oh no!"));
     ASSERT_NE(error, nullptr);
     ASSERT_EQ(error->line, 1);
     ASSERT_EQ(error->col, 1);
     ASSERT_STREQ((const char *)error->lexeme, "01234567890_100111");
     ASSERT_STREQ((const char *)error->lexeme_line, "01234567890_100111");
     ASSERT_STREQ((const char *)error->file, "test.neo");
-    ASSERT_STREQ(error->msg, "Oh no!");
+    ASSERT_STREQ((const char *)error->msg, "Oh no!");
     comerror_free(error);
 
     lexer_free(&lexer);
@@ -35,7 +36,8 @@ TEST(utils, comerror_from_token) {
 }
 
 TEST(utils, errvec_push) {
-    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test.neo"), reinterpret_cast<const std::uint8_t*>("01234567890_100111"));
+    const source_t *source = source_from_memory_ref(reinterpret_cast<const std::uint8_t *>(u8"test.neo"),
+                                                    reinterpret_cast<const std::uint8_t *>("01234567890_100111"), nullptr);
 
     lexer_t lexer;
     lexer_init(&lexer);
@@ -54,18 +56,20 @@ TEST(utils, errvec_push) {
     ASSERT_EQ(ev.cap, 0);
     ASSERT_EQ(ev.p, nullptr);
 
-    errvec_push(&ev, comerror_from_token(&tok, "Oh no!"));
+    errvec_push(&ev, comerror_from_token(COMERR_INTERNAL_COMPILER_ERROR, &tok,
+                                         reinterpret_cast<const uint8_t *>("Oh no!")));
     ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 1);
     ASSERT_NE(ev.cap, 0);
     ASSERT_NE(ev.p, nullptr);
 
-    errvec_push(&ev, comerror_new(0, 0, NULL, NULL, NULL, "Helpy"));
+    errvec_push(&ev, comerror_new(COMERR_INTERNAL_COMPILER_ERROR, 0, 0, NULL, NULL, NULL,
+                                  reinterpret_cast<const uint8_t *>("Helpy")));
     ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 2);
 
-    ASSERT_STREQ(ev.p[0]->msg, "Oh no!");
-    ASSERT_STREQ(ev.p[1]->msg, "Helpy");
+    ASSERT_STREQ((const char *)ev.p[0]->msg, "Oh no!");
+    ASSERT_STREQ((const char *)ev.p[1]->msg, "Helpy");
 
     errvec_free(&ev);
 

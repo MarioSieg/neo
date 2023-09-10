@@ -9,7 +9,7 @@
 TEST(lexer, complex_statement) {
     const auto *src = reinterpret_cast<const std::uint8_t*>("let x=0x22&129>>>=x\nnew Class()\nlet #*lol*# y class == 23.3%x\n#hello");
     const auto *filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
-    const source_t *source = source_from_memory(filename, src);
+    const source_t *source = source_from_memory_ref(filename, src, nullptr);
 
     lexer_t lexer;
     lexer_init(&lexer);
@@ -128,7 +128,7 @@ TEST(lexer, complex_statement) {
 
 #define generic_lexer_test(name, symbol, tokt)\
 TEST(lexer, tok_##name) {\
-    const source_t *source = source_from_memory(reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp"), reinterpret_cast<const std::uint8_t*>(symbol));\
+    const source_t *source = source_from_memory_ref(reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp"), reinterpret_cast<const std::uint8_t*>(symbol), nullptr);\
     \
     lexer_t lexer;\
     lexer_init(&lexer);\

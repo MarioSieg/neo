@@ -6,11 +6,57 @@
 
 #include "neo_ast.h"
 #include "neo_core.h"
-#include "neo_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Compilation error codes. */
+typedef enum error_type_t {
+    COMERR_OK = 0, /* No error. */
+    COMERR_INTERNAL_COMPILER_ERROR, /* Internal compiler error. */
+    COMERR_SYNTAX_ERROR, /* Syntax error. */
+    COMERR_SYMBOL_REDEFINITION, /* Symbol redefinition. */
+    COMERR__LEN
+} error_type_t;
+
+/* Represents an error or warning emitted during static compilation from source to bytecode. */
+typedef struct compile_error_t {
+    error_type_t type;
+    uint32_t line;
+    uint32_t col;
+    const uint8_t *lexeme;
+    const uint8_t *lexeme_line;
+    const uint8_t *file;
+    const uint8_t *msg; /* Error-specific message. */
+} compile_error_t;
+
+/* Create error from lexer token.  */
+extern NEO_COLDPROC const compile_error_t *comerror_new(
+    error_type_t type,
+    uint32_t line,
+    uint32_t col,
+    const uint8_t *lexeme,
+    const uint8_t *lexeme_line,
+    const uint8_t *file,
+    const uint8_t *msg
+);
+extern NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg);
+extern NEO_COLDPROC void comerror_free(const compile_error_t *self);
+
+/* Collection of all errors from all phases emitted during a single source file compilation. */
+typedef struct error_vector_t {
+    const compile_error_t **p;
+    uint32_t len;
+    uint32_t cap;
+} error_vector_t;
+
+#define errvec_isempty(self) (!!((self).len))
+extern NEO_EXPORT NEO_COLDPROC void errvec_init(error_vector_t *self);
+extern NEO_EXPORT NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t* error);
+extern NEO_EXPORT NEO_COLDPROC void errvec_print(const error_vector_t *self, FILE *f, bool colored);
+extern NEO_EXPORT NEO_COLDPROC void errvec_clear(error_vector_t *self);
+extern NEO_EXPORT NEO_COLDPROC void errvec_free(error_vector_t *self);
 
 typedef struct source_t {
     const uint8_t *filename; /* Encoded in UTF-8 and terminated. */
@@ -42,20 +88,24 @@ extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_file(const uint8_t *
 
 /**
  * Load source code from memory.
- * @param path The file path, which ownership is moved into self.
- * @param src The source code, which ownership is moved into self.
+ * @param path The file path, which is just referenced and not freed by self.
+ * @param src The source code, which is just referenced and not freed by self.
  * @return
  */
-extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_memory(const uint8_t *path, const uint8_t *src);
+extern NEO_EXPORT NEO_NODISCARD const source_t *source_from_memory_ref(const uint8_t *path, const uint8_t *src, source_load_error_info_t *err_info);
+extern NEO_EXPORT bool source_is_empty(const source_t *self);
 extern NEO_EXPORT void source_free(const source_t *self);
+extern NEO_EXPORT NEO_COLDPROC void source_dump(const source_t *self, FILE *f);
 
 /* Compiler option flags. */
 typedef enum neo_compiler_flag_t {
     COM_FLAG_NONE = 0,
-    COM_FLAG_DEBUG = 1<<0,          /* Print debug messages. */
-    COM_FLAG_DUMP_AST = 1<<1,       /* Dump AST graphviz code to text file. */
-    COM_FLAG_RENDER_AST = 1<<2,     /* Render AST graphviz code to image file. */
-    COM_FLAG_NO_STATUS = 1<<3,      /* Don't print status messages. */
+    COM_FLAG_DEBUG = 1 << 0,          /* Print debug messages. */
+    COM_FLAG_DUMP_AST = 1 << 1,       /* Dump AST graphviz code to text file. */
+    COM_FLAG_RENDER_AST = 1 << 2,     /* Render AST graphviz code to image file. */
+    COM_FLAG_NO_STATUS = 1 << 3,      /* Don't print status messages. */
+    COM_FLAG_NO_COLOR = 1 << 4,       /* Don't print colored messages. */
+    COM_FLAG_NO_ERROR_DUMP = 1 << 5,  /* Don't print error dump. */
 } neo_compiler_flag_t;
 
 typedef void (neo_compile_callback_hook_t)(const source_t *src, neo_compiler_flag_t flags, void *user);

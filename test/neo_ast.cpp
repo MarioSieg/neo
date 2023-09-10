@@ -3,6 +3,45 @@
 #include <gtest/gtest.h>
 #include <neo_ast.h>
 
+TEST(ast, symtab) {
+    symtab_t symtab {};
+    symtab_init(&symtab, 4);
+
+    for (int i = 0; i < 0xfff; ++i) {
+        ASSERT_EQ(symtab.len, i);
+
+        std::string val{std::to_string(i)};
+        srcspan_t span {
+            .p = reinterpret_cast<const std::uint8_t *>(val.c_str()),
+            .len = static_cast<std::uint32_t>(val.size())
+        };
+
+        node_ident_literal_t key {
+            .span = span,
+            .hash = srcspan_hash(span)
+        };
+
+        symrecord_t value {
+            .node =  static_cast<astref_t>(i)
+        };
+
+        symtab_put(&symtab, &key, &value);
+        ASSERT_EQ(symtab.len, i + 1);
+
+        const symrecord_t *rec {};
+        ASSERT_TRUE(symtab_get(&symtab, &key, &rec));
+        ASSERT_EQ(rec->node, i);
+
+        node_ident_literal_t key2 {
+            .span = srcspan_from("test1"),
+            .hash = srcspan_hash(srcspan_from("test1"))
+        };
+        ASSERT_FALSE(symtab_get(&symtab, &key2, &rec));
+    }
+
+    symtab_free(&symtab);
+}
+
 extern "C" astref_t get_mock_var(astpool_t *pool);
 extern "C" astref_t get_mock_class(astpool_t *pool);
 
@@ -147,7 +186,7 @@ TEST(ast, visit) {
     static astref_t *mmock;
     mmock = &mock;
     static int count {};
-    auto visitor = [](astpool_t *pool, astref_t node, void *data) -> void {
+    auto visitor = [](const astpool_t *pool, astref_t node, void *data) -> void {
         ASSERT_TRUE(astpool_isvalidref(pool, node));
         astnode_t *pnode = astpool_resolve(pool, node);
         ++node_type_counts[pnode->type];

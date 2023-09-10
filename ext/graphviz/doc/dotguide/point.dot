@@ -1,6 +1,0 @@
-digraph G {
- node [style=filled,shape=point];
- node [label=""];
- node [width="0.1"];
- point;
-}

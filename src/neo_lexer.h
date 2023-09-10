@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-typedef struct source_t source_t;
+struct source_t;
 
 #define tkdef(_, __)\
     /* Keywords */\
@@ -127,9 +127,13 @@ typedef struct srcspan_t {
     uint32_t len;
 } srcspan_t;
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
-#define srcspan_eq(a, b) ((a).len == (b).len && memcmp((a).p, (b).p, (a).len) == 0)
+#define srcspan_eq(a, b) ((a).len == (b).len && ((a).p == (b).p || memcmp((a).p, (b).p, (a).len) == 0))
 #define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
-extern NEO_EXPORT const uint8_t *srcspan_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
+#define srcspan_stack_clone(span, var) /* Create null-terminated stack copy of source span using alloca. */\
+    (var) = alloca((1+span.len)*sizeof(*(var))); /* +1 for \0. */\
+    memcpy((var), span.p, span.len*sizeof(*(var)));\
+    (var)[span.len] = '\0'
+extern NEO_EXPORT const uint8_t *srcspan_heap_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
@@ -153,7 +157,7 @@ extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
 
 /* Represents the lexer context for a single source file. */
 typedef struct lexer_t {
-    const source_t *src_data;
+    const struct source_t *src_data;
     const uint8_t *src;
     const uint8_t *needle;
     const uint8_t *tok_start;
@@ -169,7 +173,7 @@ typedef struct lexer_t {
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
 extern NEO_EXPORT void lexer_init(lexer_t *self);
-extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const source_t *src);
+extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const struct source_t *src);
 extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self);
 extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
 extern NEO_EXPORT void lexer_free(lexer_t *self);

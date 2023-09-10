@@ -7,6 +7,106 @@
 #include "neo_parser.h"
 #include "neo_bc.h"
 
+static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
+    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    memcpy(p, span.p, span.len*sizeof(*p));
+    p[span.len] = '\0';
+    return p;
+}
+
+NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg) {
+    neo_assert(tok && "Token is NULL");
+    neo_assert(msg && "Message is NULL");
+    compile_error_t *error = neo_memalloc(NULL, sizeof(*error));
+    error->type = type;
+    error->line = tok->line;
+    error->col = tok->col;
+    error->lexeme = clone_span(tok->lexeme);
+    error->lexeme_line = clone_span(tok->lexeme_line);
+    error->file = neo_strdup2(tok->file);
+    error->msg = neo_strdup2(msg);
+    return error;
+}
+
+NEO_COLDPROC const compile_error_t *comerror_new(
+    error_type_t type,
+    uint32_t line,
+    uint32_t col,
+    const uint8_t *lexeme,
+    const uint8_t *lexeme_line,
+    const uint8_t *file,
+    const uint8_t *msg
+) {
+    msg = msg ? msg : (const uint8_t *)"Unknown error";
+    lexeme = lexeme ? lexeme : (const uint8_t *)"?";
+    lexeme_line = lexeme_line ? lexeme_line : (const uint8_t *)"?";
+    file = file ? file : (const uint8_t *)"?";
+    compile_error_t *error = neo_memalloc(NULL, sizeof(*error));
+    error->type = type;
+    error->line = line;
+    error->col = col;
+    error->lexeme = neo_strdup2(lexeme);
+    error->lexeme_line = neo_strdup2(lexeme_line);
+    error->file = neo_strdup2(file);
+    error->msg = neo_strdup2(msg);
+    return error;
+}
+
+NEO_COLDPROC void comerror_free(const compile_error_t *self) {
+    if (!self) { return; }
+    neo_memalloc((void *)self->msg, 0);
+    neo_memalloc((void *)self->file, 0);
+    neo_memalloc((void *)self->lexeme_line, 0);
+    neo_memalloc((void *)self->lexeme, 0);
+    memset((void *)self, 0, sizeof(*self));
+    neo_memalloc((void *)self, 0);
+}
+
+NEO_COLDPROC void errvec_init(error_vector_t *self) {
+    neo_dassert(self);
+    memset(self, 0, sizeof(*self));
+}
+
+NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t *error) {
+    neo_dassert(self);
+    if (!self->cap) {
+        self->len = 0;
+        self->cap = 1<<7;
+        self->p = neo_memalloc(self->p, self->cap*sizeof(*self->p));
+    } else if (self->len >= self->cap) {
+        self->p = neo_memalloc(self->p, (self->cap<<=1)*sizeof(*self->p));
+    }
+    self->p[self->len++] = error;
+}
+
+NEO_COLDPROC void errvec_free(error_vector_t *self) {
+    neo_dassert(self);
+    for (uint32_t i = 0; i < self->len; ++i) { /* Free individual errors. */
+        comerror_free(self->p[i]);
+        self->p[i] = NULL;
+    }
+    neo_memalloc(self->p, 0); /* Free error list. */
+}
+
+void errvec_print(const error_vector_t *self, FILE *f, bool colored) {
+    neo_dassert(self && f);
+    const char *color = colored ? NEO_CCRED : NULL;
+    const char *reset = colored ? NEO_CCRESET : NULL;
+    for (uint32_t i = 0; i < self->len; ++i) {
+        const compile_error_t *e = self->p[i];
+        fprintf(f, "%s:%"PRIu32":%"PRIu32": %s%s%s\n", e->file, e->line, e->col, color, e->msg, reset);
+    }
+}
+
+void errvec_clear(error_vector_t *self) {
+    neo_dassert(self);
+    for (uint32_t i = 0; i < self->len; ++i) { /* Free individual errors. */
+        comerror_free(self->p[i]);
+        self->p[i] = NULL;
+    }
+    self->len = 0;
+}
+
 const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *err_info) {
     neo_dassert(path);
     FILE *f = NULL;
@@ -46,14 +146,14 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     /* Verify that the file is valid UTF-8. */
     size_t pos = 0;
     neo_unicode_error_t result = neo_utf8_validate(buf, size, &pos);
-    if (result != NEO_UNIERR_OK) {
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
         neo_memalloc(buf, 0);
         if (err_info) {
             err_info->error = SRCLOAD_INVALID_UTF8;
             err_info->invalid_utf8pos = pos;
             err_info->unicode_error = result;
         }
-        return false;
+        return NULL;
     }
 #if NEO_OS_WINDOWS
     /* We read the file as binary file, so we need to replace \r\n by ourselves, fuck you Windows! */
@@ -78,14 +178,35 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     return self;
 }
 
-const source_t *source_from_memory(const uint8_t *path, const uint8_t *src) {
+const source_t *source_from_memory_ref(const uint8_t *path, const uint8_t *src, source_load_error_info_t *err_info) {
     if (neo_unlikely(!path || !src)) {
+        return NULL;
+    }
+    size_t len = strlen((const char *)src);
+    /* Verify that the src and path is valid UTF-8. */
+    size_t pos = 0;
+    neo_unicode_error_t result = neo_utf8_validate(src, len, &pos);
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
+        if (err_info) {
+            err_info->error = SRCLOAD_INVALID_UTF8;
+            err_info->invalid_utf8pos = pos;
+            err_info->unicode_error = result;
+        }
+        return NULL;
+    }
+    result = neo_utf8_validate(path, strlen((const char *)src), &pos);
+    if (neo_unlikely(result != NEO_UNIERR_OK)) {
+        if (err_info) {
+            err_info->error = SRCLOAD_INVALID_UTF8;
+            err_info->invalid_utf8pos = pos;
+            err_info->unicode_error = result;
+        }
         return NULL;
     }
     source_t *self = neo_memalloc(NULL, sizeof(*self));
     self->filename = path;
     self->src = src;
-    self->len = strlen((const char *)src);
+    self->len = len;
     self->is_file = false;
     return self;
 }
@@ -97,6 +218,22 @@ void source_free(const source_t *self) {
         neo_memalloc((void *)self->src, 0);
     }
     neo_memalloc((void *)self, 0);
+}
+
+void source_dump(const source_t *self, FILE *f) {
+    neo_dassert(self != NULL && f != NULL);
+    fprintf(f, "Source: %s\n", self->filename);
+    fprintf(f, "Length: %"PRIu32"\n", (uint32_t)self->len);
+    fprintf(f, "Content: %s\n", self->src);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        fprintf(f, "\\x%02x", self->src[i]);
+    }
+    fputc('\n', f);
+}
+
+bool source_is_empty(const source_t *self) {
+    neo_dassert(self);
+    return self->len == 0 || *self->src == '\0' || *self->src == '\n';
 }
 
 struct neo_compiler_t {
@@ -130,100 +267,47 @@ void compiler_free(neo_compiler_t **self) {
     *self = NULL;
 }
 
-static void gen_code_unary_expr(bytecode_t *bc , unary_op_type_t op) {
-    neo_dassert(bc);
-    switch (op) {
-        case UNOP_PLUS: bc_emit(bc, OPC_IADDO); return;
-        case UNOP_MINUS: bc_emit(bc, OPC_ISUBO); return;
-        case UNOP_LOG_NOT: bc_emit_ipush(bc, -1); bc_emit(bc, OPC_IXOR); return;
-        case UNOP_BIT_COMPL: bc_emit_ipush(bc, -1); bc_emit(bc, OPC_IXOR); return;
-        case UNOP_INC: bc_emit_ipush(bc, 1); bc_emit(bc, OPC_IADDO); return;
-        case UNOP_DEC:  bc_emit_ipush(bc, 1); bc_emit(bc, OPC_ISUBO); return;
-        default: neo_unreachable();
+static void print_status_msg(const neo_compiler_t *self, const char *color, const char *msg, ...) {
+    if (compiler_has_flags(self, COM_FLAG_NO_STATUS)) { return; }
+    va_list args;
+    va_start(args, msg);
+    if (compiler_has_flags(self, COM_FLAG_NO_COLOR) || !color) {
+        vprintf(msg, args);
+    } else {
+        printf("%s", color);
+        vprintf(msg, args);
+        printf(NEO_CCRESET);
     }
+    va_end(args);
+    putchar('\n');
 }
 
-static void gen_code_binary_expr(bytecode_t *bc , binary_op_type_t op) {
-    neo_dassert(bc);
-    switch (op) {
-        case BINOP_DOT: return; /* TODO */
-        case BINOP_ASSIGN: return; /* TODO */
-        case BINOP_ADD: case BINOP_ADD_ASSIGN: bc_emit(bc, OPC_IADDO); return;
-        case BINOP_SUB: case BINOP_SUB_ASSIGN: bc_emit(bc, OPC_ISUBO); return;
-        case BINOP_MUL: case BINOP_MUL_ASSIGN: bc_emit(bc, OPC_IMULO); return;
-        case BINOP_POW: case BINOP_POW_ASSIGN: bc_emit(bc, OPC_IPOWO); return;
-        case BINOP_ADD_NO_OV: case BINOP_ADD_ASSIGN_NO_OV: bc_emit(bc, OPC_IADD); return;
-        case BINOP_SUB_NO_OV: case BINOP_SUB_ASSIGN_NO_OV: bc_emit(bc, OPC_ISUB); return;
-        case BINOP_MUL_NO_OV: case BINOP_MUL_ASSIGN_NO_OV: bc_emit(bc, OPC_IMUL); return;
-        case BINOP_POW_NO_OV: case BINOP_POW_ASSIGN_NO_OV: bc_emit(bc, OPC_IPOW); return;
-        case BINOP_DIV_ASSIGN: case BINOP_DIV: bc_emit(bc, OPC_IDIV); return;
-        case BINOP_MOD_ASSIGN: case BINOP_MOD: bc_emit(bc, OPC_IMOD); return;
-        case BINOP_EQUAL:  return; /* TODO */
-        case BINOP_NOT_EQUAL: return; /* TODO */
-        case BINOP_LESS: return; /* TODO */
-        case BINOP_LESS_EQUAL: return; /* TODO */
-        case BINOP_GREATER: return; /* TODO */
-        case BINOP_GREATER_EQUAL: return; /* TODO */
-        case BINOP_BIT_AND: case BINOP_BIT_AND_ASSIGN: bc_emit(bc, OPC_IAND); return;
-        case BINOP_BIT_OR: case BINOP_BIT_OR_ASSIGN: bc_emit(bc, OPC_IOR); return;
-        case BINOP_BIT_XOR: case BINOP_BIT_XOR_ASSIGN: bc_emit(bc, OPC_IXOR); return;
-        case BINOP_BIT_ASHL: case BINOP_BIT_ASHL_ASSIGN: bc_emit(bc, OPC_ISAL); return;
-        case BINOP_BIT_ASHR: case BINOP_BIT_ASHR_ASSIGN: bc_emit(bc, OPC_ISAR); return;
-        case BINOP_BIT_ROL: case BINOP_BIT_ROL_ASSIGN: bc_emit(bc, OPC_IROL); return;
-        case BINOP_BIT_ROR: case BINOP_BIT_ROR_ASSIGN: bc_emit(bc, OPC_IROR); return;
-        case BINOP_BIT_LSHR: case BINOP_BIT_LSHR_ASSIGN: bc_emit(bc, OPC_ISLR); return;
-        case BINOP_LOG_AND: return; /* TODO */
-        case BINOP_LOG_OR: return; /* TODO */
-        case BINOP_CALL: return; /* TODO */
-        default: return;
-    }
-}
-
-static void gen_code_visitor(const astpool_t *pool, astref_t root, void *usr) {
-    bytecode_t *bc = (bytecode_t *)usr;
-    astnode_t *node = astpool_resolve(pool, root);
-    switch (node->type) {
-        case ASTNODE_INT_LIT: bc_emit_ipush(bc, node->dat.n_int_lit.value); return;
-        case ASTNODE_FLOAT_LIT: bc_emit_fpush(bc, node->dat.n_float_lit.value); return;
-        case ASTNODE_CHAR_LIT: bc_emit_ipush(bc, node->dat.n_char_lit.value); return;
-        case ASTNODE_BOOL_LIT: bc_emit_ipush(bc, node->dat.n_bool_lit.value); return;
-        case ASTNODE_GROUP: return;
-        case ASTNODE_UNARY_OP: gen_code_unary_expr(bc, node->dat.n_unary_op.opcode); return;
-        case ASTNODE_BINARY_OP: gen_code_binary_expr(bc, node->dat.n_binary_op.opcode); return;
-        default: return;
-    }
-}
-
-static void gen_code(const astpool_t *pool, astref_t root) {
-    bytecode_t bc;
-    bc_init(&bc);
-    astnode_visit(pool, root, &gen_code_visitor, &bc);
-    bc_finalize(&bc);
-    bc_disassemble(&bc, stdout, true);
-    bc_free(&bc);
+/* Reset compiler state and prepare for new compilation. */
+static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src) {
+    errvec_clear(&self->errors);
+    self->ast = ASTREF_NULL;
+    parser_setup_source(&self->parser, src);
 }
 
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
+    if (source_is_empty(src)) { return true; } /* Empty source -> we're done here. */
     clock_t begin = clock();
     if (self->pre_compile_callback) {
         (*self->pre_compile_callback)(src, self->flags, user);
     }
-    errvec_clear(&self->errors);
-    self->ast = ASTREF_NULL;
-    parser_setup_source(&self->parser, src);
+    compiler_reset_and_prepare(self, src);
     self->ast = parser_drain(&self->parser);
     neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
     if (self->post_compile_callback) {
         (*self->post_compile_callback)(src, self->flags, user);
     }
-    gen_code(&self->parser.pool, self->ast);
     if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
 #ifdef NEO_EXTENSION_AST_RENDERING
         size_t len = strlen((const char *)src->filename);
         if (!neo_utf8_is_ascii(src->filename, len)) {
-            neo_error("Failed to render AST, filename is not ASCII.");
+            print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
         } else {
             char *filename = alloca(len+sizeof("_ast.jpg"));
             memcpy(filename, src->filename, len);
@@ -232,17 +316,19 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
             ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
         }
 #else
-        neo_error("Failed to render AST, Graphviz extension is not enabled.");
+        print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
 #endif
     }
     if (neo_unlikely(self->errors.len)) {
-        neo_error("Compilation failed with %"PRIu32" errors.", self->errors.len);
-        errvec_print(&self->errors, stderr);
+        print_status_msg(self, NEO_CCRED, "Compilation failed with %"PRIu32" error%s.", self->errors.len, self->errors.len > 1 ? "s" : "");
+        if (!compiler_has_flags(self, COM_FLAG_NO_ERROR_DUMP)) {
+            errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
+        }
         return false;
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
-        printf("Compiled %s in %.03fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
+        print_status_msg(self, NULL, "Compiled '%s' in %.03fms\n", src->filename, time_spent*1000.0); /* TODO: UTF-8 aware printf. */
     }
     return true;
 }
