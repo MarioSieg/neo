@@ -11,12 +11,14 @@ project(NEO LANGUAGES C)
 
 message("Configuring NEO...")
 
-option(NEO_BUILD_TESTS "Build NEO tests" ON) # Requires googletest and C++ compiler.
+option(NEO_BUILD_TESTS "Build NEO tests" OFF) # Requires googletest and C++ compiler.
+option(NEO_BUILD_FUZZER "Build NEO fuzzer" OFF) # Requires libFuzzer and C++ compiler.
+
 option(NEO_ENABLE_SSE41 "Enable SSE 4.1 Penryn instructions" ON) # Requires CPU >= x86-64 Intel Core 2 2 (Penryn) CPU.
 
 # The following extensions are useful to debug and investigate the NEO compiler and runtime, but not to the end user.
-option(NEO_EXTENSION_AST_RENDERING "Enable AST rendering support" ON)
-option(NEO_EXTENSION_DISASSEMBLER "Enable disassembling of JIT code" ON)
+option(NEO_EXTENSION_AST_RENDERING "Enable AST rendering support" OFF)
+option(NEO_EXTENSION_DISASSEMBLER "Enable disassembling of JIT code" OFF)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     message("Detected release mode")
@@ -50,14 +52,14 @@ else()
     endif()
 endif(WIN32)
 
-if (${NEO_BUILD_TESTS}) # These targets require a C++ 20 compiler.
+if (${NEO_BUILD_TESTS} OR ${NEO_BUILD_FUZZER}) # These targets require a C++ 20 compiler.
     enable_language(CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-file(GLOB_RECURSE neo_sources src/*.h src/*.c)
-add_library(libneo STATIC ${neo_sources}) # NEO compiler.
+file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
+add_library(libneo STATIC ${NEO_CORE_SOURCES}) # NEO compiler.
 target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
 
 if (${NEO_EXTENSION_AST_RENDERING} OR ${NEO_BUILD_TESTS})
@@ -82,8 +84,8 @@ target_include_directories(neo PRIVATE src)
 if (${NEO_BUILD_TESTS}) # Requires C++ 20
     add_subdirectory(ext/googletest)
     enable_testing()
-    file(GLOB_RECURSE neo_test_sources test/*.hpp test/*.cpp test/*.c src/*.hpp)
-    add_executable(neo_test ${neo_test_sources})
+    file(GLOB_RECURSE NEO_TEST_SOURCES test/*.hpp test/*.cpp test/*.c src/*.hpp)
+    add_executable(neo_test ${NEO_TEST_SOURCES})
     target_include_directories(neo_test PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_compile_options(neo_test PUBLIC -fpermissive -Wno-address-of-temporary)
     target_link_libraries(neo_test GTest::gtest_main)
@@ -93,5 +95,17 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     gtest_discover_tests(neo_test)
     target_link_libraries(neo_test libneo)
 endif()
+
+if (${NEO_BUILD_FUZZER}) # Fuzzer requires clang
+    if (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+        message(FATAL_ERROR "NEO fuzzer must be compiled with LLVM Clang because of libFuzz!")
+    endif()
+    message("Building NEO fuzzer...")
+    file(GLOB_RECURSE NEO_FUZZ_SOURCES fuzz/*.hpp fuzz/*.cpp)
+    add_executable(neo_fuzzer ${NEO_FUZZ_SOURCES})
+    target_compile_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
+    target_link_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
+    target_link_libraries(neo_fuzzer libneo)
+endif ()
 
 message("neo configured successfully!")
