@@ -7,10 +7,12 @@
 
 // Recommended cmd flags:
 // corpus/ -jobs=12 -workers=12 -max_len=16384 -detect_leaks=0 -rss_limit_mb=16384 -max_total_time=10 -dict="fuzz/dict.txt" -exact_artifact_path="bin/fuzz"
+// For running with ASCII input to test the parser more instead of lexer (rejects invalid UTF-8): -only_ascii=1
+// For running 10 minutes: -max_total_time=600
 // For running an hour: -max_total_time=3600
 
 extern "C" auto LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size) -> int {
-    bool is_zero = std::all_of( data, data + size,[](std::uint8_t byte) noexcept ->bool { return byte == 0; } );
+    bool is_zero = std::all_of(data, data + size,[](std::uint8_t byte) noexcept -> bool { return byte == 0; } );
     if (is_zero) { /* Skip empty inputs. */
         return -1;
     }

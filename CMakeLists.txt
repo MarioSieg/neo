@@ -105,6 +105,7 @@ if (${NEO_BUILD_FUZZER}) # Fuzzer requires clang
     add_executable(neo_fuzzer ${NEO_FUZZ_SOURCES})
     target_include_directories(neo_fuzzer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_compile_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
+    target_compile_options(neo_fuzzer PRIVATE "-march=native")
     target_link_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
     target_link_libraries(neo_fuzzer libneo)
 endif ()
