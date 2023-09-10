@@ -167,7 +167,6 @@ astref_t astnode_new_error(astpool_t *pool, const node_error_t *node) {
     /* Verify AST data. */
     const node_error_t *data = node;
     astverify(data->message, "Error message is NULL");
-    astverify(data->token.lexeme.p && data->token.lexeme.len, "Error token lexeme is NULL");
 
     /* Create AST node. */
     astnode_t *nn = NULL;

@@ -7,7 +7,7 @@
 using namespace neo;
 
 TEST(compiler, compile_test_file) {
-    neo_source_code source {"test/files/simple.neo"};
+    neo_source_code source {reinterpret_cast<const std::uint8_t *>(u8"test/files/特羅洛洛.neo")};
 
     neo_compiler compiler {};
     ASSERT_TRUE(compiler(source));
