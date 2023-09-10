@@ -28,7 +28,7 @@ TEST(utils, comerror_from_token) {
     ASSERT_STREQ((const char *)error->lexeme, "01234567890_100111");
     ASSERT_STREQ((const char *)error->lexeme_line, "01234567890_100111");
     ASSERT_STREQ((const char *)error->file, "test.neo");
-    ASSERT_STREQ(error->msg, "Oh no!");
+    ASSERT_STREQ((const char *)error->msg, "Oh no!");
     comerror_free(error);
 
     lexer_free(&lexer);
@@ -68,8 +68,8 @@ TEST(utils, errvec_push) {
     ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 2);
 
-    ASSERT_STREQ(ev.p[0]->msg, "Oh no!");
-    ASSERT_STREQ(ev.p[1]->msg, "Helpy");
+    ASSERT_STREQ((const char *)ev.p[0]->msg, "Oh no!");
+    ASSERT_STREQ((const char *)ev.p[1]->msg, "Helpy");
 
     errvec_free(&ev);
 

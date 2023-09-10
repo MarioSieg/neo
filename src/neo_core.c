@@ -258,12 +258,12 @@ uint32_t neo_hash_fnv1a(const void *key, size_t len) {
     size_t rest = len & 255;
     switch (len % 8)
     {
-        case 7: rest |= (uint64_t)data[6] << 56; /* fallthrough */
-        case 6: rest |= (uint64_t)data[5] << 48; /* fallthrough */
-        case 5: rest |= (uint64_t)data[4] << 40; /* fallthrough */
-        case 4: rest |= (uint64_t)data[3] << 32; /* fallthrough */
-        case 3: rest |= (uint64_t)data[2] << 24; /* fallthrough */
-        case 2: rest |= (uint64_t)data[1] << 16; /* fallthrough */
+        case 7: rest |= (uint64_t)data[6] << 56; NEO_FALLTHROUGH; /* fallthrough */
+        case 6: rest |= (uint64_t)data[5] << 48; NEO_FALLTHROUGH; /* fallthrough */
+        case 5: rest |= (uint64_t)data[4] << 40; NEO_FALLTHROUGH; /* fallthrough */
+        case 4: rest |= (uint64_t)data[3] << 32; NEO_FALLTHROUGH; /* fallthrough */
+        case 3: rest |= (uint64_t)data[2] << 24; NEO_FALLTHROUGH; /* fallthrough */
+        case 2: rest |= (uint64_t)data[1] << 16; NEO_FALLTHROUGH; /* fallthrough */
         case 1:
             rest |= (uint64_t)data[0] << 8;
             r ^= rest;

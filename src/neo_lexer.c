@@ -4,8 +4,10 @@
 #include "neo_core.h"
 #include "neo_compiler.h"
 
+/* This file is included into C++ from the unit tests, that's why there are some redundant casts from void* to T*, which are nedded in C++ but not in C. */
+
 const uint8_t *srcspan_heap_clone(srcspan_t span) {
-    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';
     return p;
@@ -359,12 +361,12 @@ token_t lexer_scan_next(lexer_t *self) {
 size_t lexer_drain(lexer_t *self, token_t **tok) {
     neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
-    *tok = neo_memalloc(NULL, cap*sizeof(**tok));
+    *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {
         token_t t = lexer_scan_next(self);
         if (neo_unlikely(t.type == TOK_ME_EOF)) { break; }
         if (neo_unlikely(len >= cap)) {
-            *tok = neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
+            *tok = (token_t *)neo_memalloc(*tok, (cap<<=1)*sizeof(**tok));
         }
         (*tok)[len++] = t;
     }

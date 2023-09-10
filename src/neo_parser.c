@@ -366,63 +366,65 @@ static binary_op_type_t expr_unary_op(parser_t *self, astref_t *node) {
     return EXPR_OP_DONE;
 }
 
+#define map_prec(type, prec)  case TOK_OP_##type: expr_eval_precedence(self, node, (precedence_t)(1+(PREC_##prec))); return BINOP_##type
 static binary_op_type_t expr_binary_op(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     advance(self);
     switch (self->prev.type) {
-        case TOK_OP_ADD: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_ADD;
-        case TOK_OP_SUB: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_SUB;
-        case TOK_OP_MUL: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MUL;
-        case TOK_OP_POW: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_POW;
-        case TOK_OP_ADD_NO_OV: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_ADD_NO_OV;
-        case TOK_OP_SUB_NO_OV: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_SUB_NO_OV;
-        case TOK_OP_MUL_NO_OV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MUL_NO_OV;
-        case TOK_OP_POW_NO_OV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_POW_NO_OV;
-        case TOK_OP_DIV: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_DIV;
-        case TOK_OP_MOD: expr_eval_precedence(self, node, PREC_FACTOR + 1); return BINOP_MOD;
-        case TOK_OP_BIT_AND: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_AND;
-        case TOK_OP_BIT_OR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_OR;
-        case TOK_OP_BIT_XOR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_XOR;
-        case TOK_OP_BIT_ASHL: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ASHL;
-        case TOK_OP_BIT_ASHR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ASHR;
-        case TOK_OP_BIT_ROL: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ROL;
-        case TOK_OP_BIT_ROR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_ROR;
-        case TOK_OP_BIT_LSHR: expr_eval_precedence(self, node, PREC_TERM + 1); return BINOP_BIT_LSHR;
-        case TOK_OP_LOG_AND: expr_eval_precedence(self, node, PREC_AND + 1); return BINOP_LOG_AND;
-        case TOK_OP_LOG_OR: expr_eval_precedence(self, node, PREC_OR + 1); return BINOP_LOG_OR;
+        map_prec(ADD, TERM);
+        map_prec(SUB, TERM);
+        map_prec(MUL, FACTOR);
+        map_prec(POW, FACTOR);
+        map_prec(ADD_NO_OV, TERM);
+        map_prec(SUB_NO_OV, TERM);
+        map_prec(MUL_NO_OV, FACTOR);
+        map_prec(POW_NO_OV, FACTOR);
+        map_prec(DIV, FACTOR);
+        map_prec(MOD, FACTOR);
+        map_prec(BIT_AND, TERM);
+        map_prec(BIT_OR, TERM);
+        map_prec(BIT_XOR, TERM);
+        map_prec(BIT_ASHL, TERM);
+        map_prec(BIT_ASHR, TERM);
+        map_prec(BIT_ROL, TERM);
+        map_prec(BIT_ROR, TERM);
+        map_prec(BIT_LSHR, TERM);
+        map_prec(LOG_AND, AND);
+        map_prec(LOG_OR, OR);
 
-        case TOK_OP_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ASSIGN;
-        case TOK_OP_ADD_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ADD_ASSIGN;
-        case TOK_OP_SUB_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_SUB_ASSIGN;
-        case TOK_OP_MUL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MUL_ASSIGN;
-        case TOK_OP_POW_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_POW_ASSIGN;
-        case TOK_OP_ADD_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_ADD_ASSIGN_NO_OV;
-        case TOK_OP_SUB_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_SUB_ASSIGN_NO_OV;
-        case TOK_OP_MUL_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MUL_ASSIGN_NO_OV;
-        case TOK_OP_POW_ASSIGN_NO_OV: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_POW_ASSIGN_NO_OV;
-        case TOK_OP_DIV_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_DIV_ASSIGN;
-        case TOK_OP_MOD_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_MOD_ASSIGN;
-        case TOK_OP_BIT_AND_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_AND_ASSIGN;
-        case TOK_OP_BIT_OR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_OR_ASSIGN;
-        case TOK_OP_BIT_XOR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_XOR_ASSIGN;
-        case TOK_OP_BIT_ASHL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ASHL_ASSIGN;
-        case TOK_OP_BIT_ASHR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ASHR_ASSIGN;
-        case TOK_OP_BIT_ROL_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ROL_ASSIGN;
-        case TOK_OP_BIT_ROR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_ROR_ASSIGN;
-        case TOK_OP_BIT_LSHR_ASSIGN: expr_eval_precedence(self, node, PREC_ASSIGNMENT + 1); return BINOP_BIT_LSHR_ASSIGN;
+        map_prec(ASSIGN, ASSIGNMENT);
+        map_prec(ADD_ASSIGN, ASSIGNMENT);
+        map_prec(SUB_ASSIGN, ASSIGNMENT);
+        map_prec(MUL_ASSIGN, ASSIGNMENT);
+        map_prec(POW_ASSIGN, ASSIGNMENT);
+        map_prec(ADD_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(SUB_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(MUL_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(POW_ASSIGN_NO_OV, ASSIGNMENT);
+        map_prec(DIV_ASSIGN, ASSIGNMENT);
+        map_prec(MOD_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_AND_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_OR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_XOR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ASHL_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ASHR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ROL_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_ROR_ASSIGN, ASSIGNMENT);
+        map_prec(BIT_LSHR_ASSIGN, ASSIGNMENT);
 
-        case TOK_OP_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_EQUAL;
-        case TOK_OP_NOT_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_NOT_EQUAL;
-        case TOK_OP_LESS: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_LESS;
-        case TOK_OP_LESS_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_LESS_EQUAL;
-        case TOK_OP_GREATER: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_GREATER;
-        case TOK_OP_GREATER_EQUAL: expr_eval_precedence(self, node, PREC_COMPARISON + 1); return BINOP_GREATER_EQUAL;
+        map_prec(EQUAL, COMPARISON);
+        map_prec(NOT_EQUAL, COMPARISON);
+        map_prec(LESS, COMPARISON);
+        map_prec(LESS_EQUAL, COMPARISON);
+        map_prec(GREATER, COMPARISON);
+        map_prec(GREATER_EQUAL, COMPARISON);
 
         default:
             error(self, &self->prev, "Invalid binary operator");
             return EXPR_OP_DONE;
     }
 }
+#undef map_prec
 
 static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
@@ -883,7 +885,7 @@ bool parse_int(const char *str, size_t len, radix_t radix_hint, neo_int_t *o) {
 }
 
 bool parse_float(const char *str, size_t len, neo_float_t *o) {
-    char *buf = alloca(len+1);
+    char *buf = (char *)alloca(len+1);
     memcpy(buf, str, len);
     buf[len] = '\0';
     *o = strtod(buf, &buf);
