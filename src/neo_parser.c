@@ -559,6 +559,7 @@ static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
             init_expr = rule_expr(self);
         } else {
             error(self, &self->curr, "Variable must be initialized");
+            return ASTREF_NULL;
         }
         consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after variable definition");
     }
@@ -644,12 +645,14 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
                 node_block_push_child(&self->pool, &block, astnode_new_break(&self->pool));
             } else {
                 error(self, &self->prev, "'break'-statement can only be used within loops");
+                return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_KW_CONTINUE)) {
             if (neo_likely(within_loop)) {
                 node_block_push_child(&self->pool, &block, astnode_new_continue(&self->pool));
             } else {
                 error(self, &self->prev, "'continue'-statement can only be used within loops");
+                return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */

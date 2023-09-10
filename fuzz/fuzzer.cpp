@@ -2,6 +2,7 @@
 
 #include <neo_compiler.h>
 
+#include <cstring>
 #include <string>
 
 // Recommended cmd flags:
@@ -9,6 +10,11 @@
 // For running an hour: -max_total_time=3600
 
 extern "C" auto LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size) -> int {
+    bool is_zero = std::all_of( data, data + size,[](std::uint8_t byte) noexcept ->bool { return byte == 0; } );
+    if (is_zero) { /* Skip empty inputs. */
+        return -1;
+    }
+
     std::u8string src {data, data+size}; // convert to std::string, we require zero-termination
     source_load_error_info_t info {};
     const source_t *source = source_from_memory_ref(
