@@ -230,8 +230,9 @@ typedef struct node_block_t {
     bool _init_sentinel : 1;
 #endif
 } node_block_t;
-extern NEO_EXPORT void node_block_init(node_block_t *self, block_scope_t scope); /* Intialize block and symbol tables. node_block_free() must NOT be called, everything is freed within the ast pool.  */
+extern NEO_EXPORT void node_block_init(node_block_t *self, block_scope_t scope); /* Intialize block and symbol tables. node_block_free() must only be called when the block is never allocated by the AST pool using astnode_new_block and friends.  */
 extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *self, astref_decl(req) node);
+extern NEO_EXPORT void node_block_free(node_block_t *self); /* Free block and symbol tables. */
 
 /* Variable type */
 typedef enum variable_scope_t {
@@ -354,8 +355,8 @@ extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcs
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_method(astpool_t *pool, const node_method_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, const node_block_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, node_block_t *node); /* Returns ASTREF_NULL and frees the block if the block is empty. */
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! Returns ASTREF_NULL if the block is empty. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_return(astpool_t *pool, const node_return_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_break(astpool_t *pool);
@@ -377,6 +378,7 @@ struct astpool_t {
 };
 extern NEO_EXPORT void astpool_init(astpool_t *self);
 extern NEO_EXPORT void astpool_free(astpool_t *self);
+extern NEO_EXPORT void astpool_reset(astpool_t *self); /* Resets the astpool_t object to allow reusing the capacity. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type);
 extern NEO_EXPORT NEO_NODISCARD listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len);
 static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidref(const astpool_t *self, astref_t ref) {

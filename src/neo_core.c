@@ -76,8 +76,8 @@ void neo_mempool_init(neo_mempool_t *self, size_t cap) {
     memset(self, 0, sizeof(*self));
     cap = cap ? cap : 1<<9;
     self->cap = cap;
-    self->needle = neo_memalloc(NULL, cap);
-    memset(self->needle, 0, cap); /* Zero the memory. */
+    self->top = neo_memalloc(NULL, cap);
+    memset(self->top, 0, cap); /* Zero the memory. */
 }
 
 void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
@@ -89,11 +89,11 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
         do {
             self->cap<<=1;
         } while (self->cap <= total);
-        self->needle = neo_memalloc(self->needle, self->cap);
+        self->top = neo_memalloc(self->top, self->cap);
         size_t delta = self->cap-old;
-        memset((uint8_t *)self->needle+old, 0, delta); /* Zero the new memory. */
+        memset((uint8_t *)self->top + old, 0, delta); /* Zero the new memory. */
     }
-    void *p = (uint8_t *)self->needle+self->len;
+    void *p = (uint8_t *)self->top + self->len;
     self->len += len;
     ++self->num_allocs;
     return p;
@@ -127,9 +127,15 @@ void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t 
     return blk;
 }
 
+void neo_mempool_reset(neo_mempool_t *self) {
+    neo_dassert(self);
+    self->len = 0;
+    self->num_allocs = 0;
+}
+
 void neo_mempool_free(neo_mempool_t *self) {
     neo_dassert(self);
-    neo_memalloc(self->needle, 0);
+    neo_memalloc(self->top, 0);
 }
 
 #define get_fmodstr(_)\

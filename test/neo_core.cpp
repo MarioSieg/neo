@@ -27,11 +27,11 @@ TEST(core, neo_mempool_getelementptr) {
     neo_mempool_t pool;
     neo_mempool_init(&pool, 32);
     int *a = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
-    ASSERT_EQ(a, static_cast<int *>(pool.needle));
+    ASSERT_EQ(a, static_cast<int *>(pool.top));
     int *b = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
     int *c = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
     int *d = static_cast<int *>(neo_mempool_alloc(&pool, sizeof(int)));
-    int *p = static_cast<int *>(pool.needle);
+    int *p = static_cast<int *>(pool.top);
     ASSERT_EQ(pool.len, sizeof(int)*4);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 0, int), p+0);
     ASSERT_EQ(neo_mempool_getelementptr(pool, 1, int), p+1);
@@ -53,14 +53,14 @@ TEST(core, neo_mempool_alloc) {
     ASSERT_EQ(pool.cap, 8);
     *i = -22;
     ASSERT_EQ(*i, -22);
-    ASSERT_EQ(*(int32_t *)pool.needle, *i);
+    ASSERT_EQ(*(int32_t *)pool.top, *i);
 
     int64_t *j = (int64_t*)neo_mempool_alloc(&pool, sizeof(int64_t));
     ASSERT_EQ(pool.len, 12);
     ASSERT_EQ(pool.cap, 16);
     *j = 0x1234567890abcdef;
     ASSERT_EQ(*j, 0x1234567890abcdef);
-    ASSERT_EQ(*(int64_t *)((uint8_t *)pool.needle + 4), *j);
+    ASSERT_EQ(*(int64_t *)((uint8_t *)pool.top + 4), *j);
 
     neo_mempool_free(&pool);
 }

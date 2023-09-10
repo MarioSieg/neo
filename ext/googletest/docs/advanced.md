@@ -186,7 +186,7 @@ example,
 using ::testing::HasSubstr;
 using ::testing::MatchesRegex;
 ...
-  ASSERT_THAT(foo_string, HasSubstr("needle"));
+  ASSERT_THAT(foo_string, HasSubstr("top"));
   EXPECT_THAT(bar_string, MatchesRegex("\\w*\\d+"));
 ```
 

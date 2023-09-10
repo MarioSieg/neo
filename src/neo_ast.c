@@ -262,12 +262,15 @@ astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
     return ref;
 }
 
-astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
+astref_t astnode_new_block(astpool_t *pool, node_block_t *node) {
     neo_dassert(pool && node);
 
     /* Verify AST data. */
-    const node_block_t *data = node;
-    astverify(data->len > 0, "Block nodes array is empty");
+    node_block_t *data = node;
+    if (!data->len) { /* Block is empty -> return NULL. */
+        node_block_free(data);
+        return ASTREF_NULL;
+    }
 
     /* Create AST node. */
     astnode_t *nn = NULL;
@@ -465,7 +468,7 @@ void node_block_init(node_block_t *self, block_scope_t scope) {
 #endif
 }
 
-static void node_block_free(node_block_t *self) {
+void node_block_free(node_block_t *self) {
     neo_dassert(self);
     switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
         case BLOCKSCOPE_MODULE:
@@ -674,12 +677,20 @@ void astpool_free(astpool_t *self) {
     for (uint32_t i = 0; i < self->symtabsblk_len; ++i) {
         astnode_t *node = astpool_resolve(self, self->tracked_symtabsblk[i]);
         if (node) {
+            neo_dassert(node->type == ASTNODE_BLOCK);
             node_block_free(&node->dat.n_block);
         }
     }
     neo_mempool_free(&self->list_pool);
     neo_mempool_free(&self->node_pool);
     neo_memalloc(self->tracked_symtabsblk, 0);
+}
+
+void astpool_reset(astpool_t *self) {
+    neo_dassert(self);
+    neo_mempool_reset(&self->list_pool);
+    neo_mempool_reset(&self->node_pool);
+    self->symtabsblk_len = 0;
 }
 
 const char *unary_op_lexeme(unary_op_type_t op) {

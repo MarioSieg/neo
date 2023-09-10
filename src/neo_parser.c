@@ -436,6 +436,7 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
                 expr_eval_precedence(self, &arg, PREC_TERNARY);
                 if (neo_unlikely(astref_isnull(arg))) {
                     error(self, &self->prev, "Invalid argument in function call");
+                    node_block_free(&arguments); /* Free block because it is not added to the AST pool for automatic memory management. */
                     return EXPR_OP_DONE;
                 }
                 node_block_push_child(&self->pool, &arguments, arg);
@@ -578,7 +579,7 @@ static astref_t rule_method(parser_t *self, bool is_static) {
             ++depth;
         } while (isok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
-        parameters = neo_likely(param_list.len) ? astnode_new_block(&self->pool, &param_list) : ASTREF_NULL;
+        parameters = astnode_new_block(&self->pool, &param_list);
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
@@ -645,7 +646,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end");
-    return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
+    return astnode_new_block(&self->pool, &block);
 }
 
 /*
@@ -671,7 +672,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end");
-    return neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL;
+    return astnode_new_block(&self->pool, &block);
 }
 
 /*
@@ -723,7 +724,7 @@ static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
         node_block_push_child(&self->pool, &block, node);
     }
     return astnode_new_module(&self->pool, &(node_module_t) {
-        .body = neo_likely(block.len) ? astnode_new_block(&self->pool, &block) : ASTREF_NULL
+        .body = astnode_new_block(&self->pool, &block)
     });
 }
 
@@ -758,6 +759,7 @@ astref_t parser_drain(parser_t *self) {
 
 void parser_setup_source(parser_t *self, const source_t *src) {
     neo_dassert(self && src);
+    astpool_reset(&self->pool); /* Reset AST pool. */
     lexer_setup_source(&self->lex, src);
     self->error = self->panic = false;
     advance(self); /* Consume first token. */

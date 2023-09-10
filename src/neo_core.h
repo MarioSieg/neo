@@ -465,19 +465,20 @@ extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
 ** All memory is freed simultaneously when the pool is destroyed with neo_mempool_free.
 */
 typedef struct neo_mempool_t {
-    void *needle;
+    void *top;
     size_t len;
     size_t cap;
     size_t num_allocs;
 } neo_mempool_t;
 
-#define neo_mempool_getelementptr(self, idx, type) (((type *)((self).needle))+(idx))
+#define neo_mempool_getelementptr(self, idx, type) (((type *)((self).top))+(idx))
 #define neo_mempool_top(self, type) ((type *)(self).needle)
 extern NEO_EXPORT void neo_mempool_init(neo_mempool_t *self, size_t cap);
 extern NEO_EXPORT void *neo_mempool_alloc(neo_mempool_t *self, size_t len);
 extern NEO_EXPORT void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align);
 extern NEO_EXPORT size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp);
 extern NEO_EXPORT void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen);
+extern NEO_EXPORT void neo_mempool_reset(neo_mempool_t *self);
 extern NEO_EXPORT void neo_mempool_free(neo_mempool_t *self);
 
 /* ---- Types ---- */

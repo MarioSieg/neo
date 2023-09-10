@@ -282,6 +282,13 @@ static void print_status_msg(const neo_compiler_t *self, const char *color, cons
     putchar('\n');
 }
 
+/* Reset compiler state and prepare for new compilation. */
+static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src) {
+    errvec_clear(&self->errors);
+    self->ast = ASTREF_NULL;
+    parser_setup_source(&self->parser, src);
+}
+
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
@@ -290,9 +297,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     if (self->pre_compile_callback) {
         (*self->pre_compile_callback)(src, self->flags, user);
     }
-    errvec_clear(&self->errors);
-    self->ast = ASTREF_NULL;
-    parser_setup_source(&self->parser, src);
+    compiler_reset_and_prepare(self, src);
     self->ast = parser_drain(&self->parser);
     neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
     if (self->post_compile_callback) {
