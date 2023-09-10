@@ -316,7 +316,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
             ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
         }
 #else
-        print_status_msg("Failed to render AST, Graphviz extension is not enabled.");
+        print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
 #endif
     }
     if (neo_unlikely(self->errors.len)) {

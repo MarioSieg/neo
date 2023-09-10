@@ -6,3 +6,4 @@ out/
 build/
 test/files/test.neo_ast.jpg
 CMakeSettings.json
+bin/production/

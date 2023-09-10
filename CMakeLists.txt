@@ -59,25 +59,25 @@ if (${NEO_BUILD_TESTS} OR ${NEO_BUILD_FUZZER}) # These targets require a C++ 20 
 endif()
 
 file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
-add_library(libneo STATIC ${NEO_CORE_SOURCES}) # NEO compiler.
-target_compile_options(libneo PRIVATE "${COMPILE_OPTIONS}")
+add_library(neocore STATIC ${NEO_CORE_SOURCES}) # NEO compiler.
+target_compile_options(neocore PRIVATE "${COMPILE_OPTIONS}")
 
 if (${NEO_EXTENSION_AST_RENDERING} OR ${NEO_BUILD_TESTS})
     message("[EXTENSION] Enabled AST rendering support")
-    target_link_libraries(libneo PRIVATE cgraph gvc)
-    target_compile_definitions(libneo PUBLIC NEO_EXTENSION_AST_RENDERING)
+    target_link_libraries(neocore PRIVATE cgraph gvc)
+    target_compile_definitions(neocore PUBLIC NEO_EXTENSION_AST_RENDERING)
 endif()
 
 if (${NEO_EXTENSION_DISASSEMBLER} OR ${NEO_BUILD_TESTS})
     message("[EXTENSION] Enabled disassembling of JIT code")
     add_subdirectory(ext/zydis)
-    target_link_libraries(libneo PRIVATE Zydis)
-    target_include_directories(libneo PRIVATE ext/zydis/include)
-    target_compile_definitions(libneo PUBLIC NEO_EXTENSION_DISASSEMBLER)
+    target_link_libraries(neocore PRIVATE Zydis)
+    target_include_directories(neocore PRIVATE ext/zydis/include)
+    target_compile_definitions(neocore PUBLIC NEO_EXTENSION_DISASSEMBLER)
 endif()
 
 add_executable(neo driver/neo_driver.c)
-target_link_libraries(neo PRIVATE libneo)
+target_link_libraries(neo PRIVATE neocore)
 target_compile_options(neo PRIVATE "${COMPILE_OPTIONS}")
 target_include_directories(neo PRIVATE src)
 
@@ -93,7 +93,7 @@ if (${NEO_BUILD_TESTS}) # Requires C++ 20
     target_include_directories(neo_test PUBLIC ext/zydis/include)
     include(GoogleTest)
     gtest_discover_tests(neo_test)
-    target_link_libraries(neo_test libneo)
+    target_link_libraries(neo_test neocore)
 endif()
 
 if (${NEO_BUILD_FUZZER}) # Fuzzer requires clang
@@ -107,7 +107,7 @@ if (${NEO_BUILD_FUZZER}) # Fuzzer requires clang
     target_compile_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
     target_compile_options(neo_fuzzer PRIVATE "-march=native")
     target_link_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
-    target_link_libraries(neo_fuzzer libneo)
+    target_link_libraries(neo_fuzzer neocore)
 endif ()
 
 message("neo configured successfully!")
