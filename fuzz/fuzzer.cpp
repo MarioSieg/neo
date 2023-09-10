@@ -1,20 +1,27 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 
-#include "../compiler/neo_compiler.h"
+#include <neo_compiler.h>
 
 #include <string>
 
-// Recommended cmd flags for my workstation:
-// corpus/ -jobs=60 -workers=60 -max_len=16384 -only_ascii=1 -rss_limit_mb=16384 -max_total_time=10 -dict="fuzz/dict.txt" -exact_artifact_path="bin/fuzz"
+// Recommended cmd flags:
+// corpus/ -jobs=12 -workers=12 -max_len=16384 -detect_leaks=0 -rss_limit_mb=16384 -max_total_time=10 -dict="fuzz/dict.txt" -exact_artifact_path="bin/fuzz"
 // For running an hour: -max_total_time=3600
 
 extern "C" auto LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size) -> int {
-    std::string src {data, data+size}; // convert to std::string, we require zero-termination
-
-    Compiler *com;
-    compiler_init(&com, static_cast<ComFlags>(COM_FLAG_SILENT | COM_FLAG_NO_AUTODUMP));
-    bool result = 0 == compiler_compile_string(com, src.c_str(), "test.neo");
+    std::u8string src {data, data+size}; // convert to std::string, we require zero-termination
+    source_load_error_info_t info {};
+    const source_t *source = source_from_memory_ref(
+        reinterpret_cast<const std::uint8_t *>(u8"<fuzz.neo>"),
+        reinterpret_cast<const std::uint8_t *>(src.c_str()),
+        &info
+    );
+    if (info.unicode_error != NEO_UNIERR_OK) {
+        return -1;
+    }
+    neo_compiler_t *com;
+    compiler_init(&com, static_cast<neo_compiler_flag_t>(COM_FLAG_NO_STATUS | COM_FLAG_NO_ERROR_DUMP));
+    bool result = compiler_compile(com, source, nullptr);
     compiler_free(&com);
-
     return result ? 0 : -1;
 }

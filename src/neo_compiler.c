@@ -321,7 +321,9 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
     }
     if (neo_unlikely(self->errors.len)) {
         print_status_msg(self, NEO_CCRED, "Compilation failed with %"PRIu32" error%s.", self->errors.len, self->errors.len > 1 ? "s" : "");
-        errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
+        if (!compiler_has_flags(self, COM_FLAG_NO_ERROR_DUMP)) {
+            errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
+        }
         return false;
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;

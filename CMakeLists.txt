@@ -103,6 +103,7 @@ if (${NEO_BUILD_FUZZER}) # Fuzzer requires clang
     message("Building NEO fuzzer...")
     file(GLOB_RECURSE NEO_FUZZ_SOURCES fuzz/*.hpp fuzz/*.cpp)
     add_executable(neo_fuzzer ${NEO_FUZZ_SOURCES})
+    target_include_directories(neo_fuzzer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_compile_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
     target_link_options(neo_fuzzer PRIVATE "-fsanitize=fuzzer,address")
     target_link_libraries(neo_fuzzer libneo)

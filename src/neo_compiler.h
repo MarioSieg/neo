@@ -105,6 +105,7 @@ typedef enum neo_compiler_flag_t {
     COM_FLAG_RENDER_AST = 1 << 2,     /* Render AST graphviz code to image file. */
     COM_FLAG_NO_STATUS = 1 << 3,      /* Don't print status messages. */
     COM_FLAG_NO_COLOR = 1 << 4,       /* Don't print colored messages. */
+    COM_FLAG_NO_ERROR_DUMP = 1 << 5,  /* Don't print error dump. */
 } neo_compiler_flag_t;
 
 typedef void (neo_compile_callback_hook_t)(const source_t *src, neo_compiler_flag_t flags, void *user);
