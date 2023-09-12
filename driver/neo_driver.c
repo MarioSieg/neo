@@ -66,10 +66,13 @@ static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Re
         bool is_err = false;
         for (uint32_t i = 1; i < u8len; ++i) { /* Copy UTF-8 sequence. */
             tmp = fgetc(in);
-            if (is_done(tmp)) { is_err = true; }
+            if (is_done(tmp)) {
+                is_err = true;
+                break;
+            }
             utf8[i] = (uint8_t)tmp;
         }
-        if (is_err) { break; }
+        if (is_err) { continue; }
         size_t pos;
         neo_unicode_error_t err = neo_utf8_validate(utf8, u8len, &pos);
         if (neo_likely(err == NEO_UNIERR_OK)) { /* Valid UTF-8 -> append to buffer. */
