@@ -1,6 +1,9 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* Implementation of the VM (virtual machine) isolate, hot-routines used by the VM and helpers. */
 
 #include "neo_vm.h"
+
+#include <math.h>
 
 #define NEO_VM_COMPUTED_GOTO
 #ifdef NEO_VM_COMPUTED_GOTO
@@ -138,26 +141,141 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
     }
 }
 
+/* On AMD-64 these are implemented in ASM. */
+#if NEO_CPU_AMD64 && NEO_COM_GCC && NEO_ENABLE_ASM
+
+/* Referenced from ASM, applies to IEEE-754 binary-64. */
+const volatile uint64_t __KSSE_ABS_MASK = 0x7fffffffffffffffull;
+const volatile uint64_t __KSSE_SIGN_MASK = 0x8000000000000000ull;
+const volatile uint64_t __KSSE_1 = 0x3ff0000000000000ull;
+const volatile uint64_t __KSSE_2P52 = 0x4330000000000000ull;
+
+neo_float_t vmop_ceil(neo_float_t x) {
+    double result;
+    __asm__ __volatile__ (
+        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
+        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
+        "movapd %%xmm0, %%xmm1\t\n"
+        "andpd %%xmm2, %%xmm1\t\n"
+        "ucomisd %%xmm1, %%xmm3\t\n"
+        "jbe 1f\t\n"
+        "andnpd %%xmm0, %%xmm2\t\n"
+        "addsd %%xmm3, %%xmm1\t\n"
+        "subsd %%xmm3, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movq __KSSE_1(%%rip), %%xmm3\t\n"
+        "cmpnlesd %%xmm1, %%xmm0\t\n"
+        "andpd %%xmm3, %%xmm0\t\n"
+        "addsd %%xmm0, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movapd %%xmm1, %0\t\n"
+        "1:\n"
+        : "=x" (result)
+        : "0" (x)
+        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
+    );
+    return result;
+}
+
+neo_float_t vmop_floor(neo_float_t x) {
+    double result;
+    __asm__ __volatile__ (
+        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
+        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
+        "movapd %%xmm0, %%xmm1\t\n"
+        "andpd %%xmm2, %%xmm1\t\n"
+        "ucomisd %%xmm1, %%xmm3\t\n"
+        "jbe 1f\t\n"
+        "andnpd %%xmm0, %%xmm2\t\n"
+        "addsd %%xmm3, %%xmm1\t\n"
+        "subsd %%xmm3, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movq __KSSE_1(%%rip), %%xmm3\t\n"
+        "cmpltsd %%xmm1, %%xmm0\t\n"
+        "andpd %%xmm3, %%xmm0\t\n"
+        "subsd %%xmm0, %%xmm1\t\n"
+        "movapd %%xmm1, %%xmm0\t\n"
+        "1:\n"
+        : "=x" (result)
+        : "0" (x)
+        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
+    );
+    return result;
+}
+
+neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
+    double result;
+    __asm__ __volatile__ (
+        "movsd  %0, -16(%%rsp)\t\n"
+        "movsd  %1, -8(%%rsp)\t\n"
+        "fldl -8(%%rsp)\t\n"
+        "fldl -16(%%rsp)\t\n"
+        "1:\t\n"
+        "fprem\t\n"
+        "fnstsw  %%ax\t\n"
+        "testb $4, %%ah\t\n"
+        "jne 1b\t\n"
+        "fstp %%st(1)\t\n"
+        "fstpl -16(%%rsp)\t\n"
+        "movsd -16(%%rsp), %0\t\n"
+        : "=x" (result)
+        : "0" (x), "x" (y)
+        : "%rax", "%st", "%xmm0", "%xmm1"
+    );
+
+    return result;
+}
+
+#else
+
+neo_float_t vmop_ceil(neo_float_t x) {
+    return ceil(x);
+}
+
+neo_float_t vmop_floor(neo_float_t x) {
+    return floor(x);
+}
+
+neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
+    return fmod(x, y);
+}
+
+#endif
+
+/*
+** NEO uses a Linear Feedback Shift Register (LFSR) (also known aus Tausworthe) random number generator,
+** with a periodic length of 2^223. The generator provides a very good random distribution, but is not cryptographically secure.
+** NEO has two random generation functions:
+** -> int.random() and float.random(), which are not cryptographically secure and are powered by this generator
+** and
+** -> int.randomSecure() and float.randomSecure(), which are cryptographically secure, and are powered by the OS's CSPRNG.
+** Generator algorithm based on:
+** Tables of maximally-equidistributed combined LFSR generators, Pierre L'Ecuyer, 1991.
+** Generator seeded as:
+** L = 64
+** J = 4
+** k = 233
+** LGp = 230
+** N_1 = 59
+*/
+
 void prng_init_seed(prng_state_t *self, uint64_t noise) {
     neo_dassert(self != NULL);
-    self->s[0] = ((0xa0d27757ull<<32)|0x0a345b8cull)^noise;
-    self->s[1] = ((0x764a296cull<<32)|0x5d4aa64full)^noise;
-    self->s[2] = ((0x51220704ull<<32)|0x070adeaaull)^noise;
-    self->s[3] = ((0x2a2717b5ull<<32)|0xa7b7b927ull)^noise;
+    noise = noise ? noise : neo_tid(); /* Use the noise to add thread-local entropy. */
+    self->s[0] = ((0xa0d27757ull << 32) + 0x0a345b8cull) ^ noise; /* Precomputed constants from prng_from_seed(0.0). */
+    self->s[1] = ((0x764a296cull << 32) + 0x5d4aa64full) ^ noise;
+    self->s[2] = ((0x51220704ull << 32) + 0x070adeaaull) ^ noise;
+    self->s[3] = ((0x2a2717b5ull << 32) + 0xa7b7b927ull) ^ noise;
 }
 
 void prng_from_seed(prng_state_t *self, double seed) {
     uint32_t r = 0x11090601;  /* Four 8 bit-seeds merged into a scalar. */
     for (size_t i = 0; i < sizeof(self->s)/sizeof(*self->s); ++i) {
-        union {
-            double d;
-            uint64_t u64;
-        } u;
         uint32_t m = 1u<<(r&255); /* Mask. */
         r >>= 8;
-        u.d = seed = seed * 3.14159265358979323846 + 2.7182818284590452354;
-        if (u.u64 < m) { u.u64 += m; }
-        self->s[i] = u.u64;
+        double d = seed = seed * 3.14159265358979323846 + 2.7182818284590452354;
+        if (*(uint64_t *)&d < m) { *(uint64_t *)&d += m; }
+        self->s[i] = *(uint64_t *)&d;
     }
     for (int i = 0; i < 10; ++i) {
         (void)prng_next_i64(self);
@@ -166,7 +284,7 @@ void prng_from_seed(prng_state_t *self, double seed) {
 
 #define tausworthe223_gen(self, z, r, i, k, q, v) \
   z = (self)->s[i]; \
-  z = (((z << q) ^ z) >> (k-v)) ^ ((z & ((uint64_t)(int64_t)-1 << (64-k))) << v); \
+  z = (((z << q) ^ z) >> (k-v)) ^ ((z & ((uint64_t)0xffffffffffffffffull << (64-k))) << v); \
   r ^= z; \
   (self)->s[i] = z
 
@@ -180,23 +298,15 @@ neo_int_t prng_next_i64(prng_state_t *self) {
     neo_dassert(self != NULL);
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
-    union {
-        uint64_t u;
-        int64_t s;
-    } c = {.u = r};
-    return c.s;
+    return *(int64_t *)&r;
 }
 
 neo_float_t prng_next_f64(prng_state_t *self) {
     neo_dassert(self != NULL);
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
-    r = (r & ((0x000fffffull<<32)|0xffffffffull))|((0x3ff00000ull<<32)|0x00000000ull); /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
-    union {
-        uint64_t u;
-        double f;
-    } c = {.u = r};
-    return c.f - 1.0;
+    r = (r & 0xfffffffffffffull) | 0x3ff0000000000000ull; /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
+    return *(double *)&r - 1.0;
 }
 
 #undef imulov

@@ -1,4 +1,5 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* Implementation of the VM (virtual machine) isolate, hot-routines used by the VM and helpers. */
 
 #ifndef NEO_VM_H
 #define NEO_VM_H
@@ -12,25 +13,22 @@ extern "C" {
 
 /* ---- VM-Intrinsic routines. ---- */
 
-extern NEO_NODISCARD neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k); /* Unsigned r = x ^ k. o overflow checks. */
-extern NEO_NODISCARD neo_int_t vmop_ipow64_no_ov(neo_int_t x, neo_int_t k); /* Signed r = x ^ k. No overflow checks. */
-extern NEO_NODISCARD bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r); /* Signed r = x ^ k. Return true on overflow. */
-extern NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_HOTPROC neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k); /* Unsigned r = x ^ k. o overflow checks. */
+extern NEO_HOTPROC neo_int_t vmop_ipow64_no_ov(neo_int_t x, neo_int_t k); /* Signed r = x ^ k. No overflow checks. */
+extern NEO_HOTPROC bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_HOTPROC bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_HOTPROC neo_float_t vmop_ceil(neo_float_t x); /* Ceil(x). */
+extern NEO_HOTPROC neo_float_t vmop_floor(neo_float_t x); /* Floor(x). */
+extern NEO_HOTPROC neo_float_t vmop_mod(neo_float_t x, neo_float_t y); /* x % y. */
 
 /* ---- PRNG. ---- */
-/*
-** NEO uses a Linear Feedback Shift Register (LFSR) (also known aus Tausworthe) random number generator,
-** with a periodic length of 2^223. The generator provides a very good random distribution, but is not cryptographically secure.
-** Based on:
-** Tables of maximally-equidistributed combined LFSR generators, Pierre L'Ecuyer, 1991.
-*/
 
 typedef struct prng_state_t { uint64_t s[4]; } prng_state_t;
 
-extern void prng_init_seed(prng_state_t *self, uint64_t noise); /* Init PRNG with common seed, use noise vor variation (thread-local ID eg. ). */
+extern void prng_init_seed(prng_state_t *self, uint64_t noise); /* Init PRNG with common seed. */
 extern void prng_from_seed(prng_state_t *self, double seed); /* Init PRNG with custom seed. */
-extern neo_int_t prng_next_i64(prng_state_t *self); /* Get next random integer. */
-extern neo_float_t prng_next_f64(prng_state_t *self); /* Get next random float within [0, 1.0]. */
+extern NEO_HOTPROC neo_int_t prng_next_i64(prng_state_t *self); /* Get next random integer. */
+extern NEO_HOTPROC neo_float_t prng_next_f64(prng_state_t *self); /* Get next random float within [0, 1.0]. */
 
 typedef struct opstck_t {
     record_t *p;
