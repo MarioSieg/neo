@@ -18,8 +18,13 @@ static void show_help(const uint8_t *cmd) {
 
 static void show_version(const uint8_t *cmd) {
     (void)cmd;
+#if defined(NEO_DBG) && NEO_DBG == 1
+#define NEO_BUILDMODE_NAME "Debug"
+#else
+#define NEO_BUILDMODE_NAME "Release"
+#endif
     printf("(c) Copyright Mario \"Neo\" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com\n");
-    printf("Neo v." NEO_STRINGIZE(NEO_VER_MAJOR) "." NEO_STRINGIZE(NEO_VER_MINOR) " for " NEO_OS_NAME"\n");
+    printf("Neo " NEO_BUILDMODE_NAME " v." NEO_STRINGIZE(NEO_VER_MAJOR) "." NEO_STRINGIZE(NEO_VER_MINOR) " for " NEO_OS_NAME"\n");
     printf("Buildinfo: " NEO_COM_NAME " | " NEO_OS_NAME " | " NEO_CPU_NAME " | " NEO_CRT_NAME  " | " __DATE__ " " __TIME__ "\n");
 }
 
@@ -139,6 +144,27 @@ int main(int argc, const char **argv) {
     neo_osi_init(); /* Must be called before any other neo_* function. */
     if (argc <= 1) {
         interactive_shell();
+    } else if (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {
+        printf("Usages:\n");
+        printf("\tneo\n");
+        printf("\tneo [filename]\n");
+        printf("\tneo -h | --help\n");
+        printf("\tneo --version\n");
+        printf("\tneo --license\n");
+    } else if (neo_likely(argc == 2)) {
+        const uint8_t *filename = (const uint8_t *)argv[1];
+        source_load_error_info_t info = {0};
+        const source_t *src = source_from_file(filename, &info);
+        if (neo_unlikely(!src)) {
+            printf("Failed to load source: %s\n", argv[1]);
+            neo_osi_shutdown();
+            return EXIT_FAILURE;
+        }
+        neo_compiler_t *compiler = NULL;
+        compiler_init(&compiler, COM_FLAG_NONE);
+        compiler_compile(compiler, src, NULL);
+        compiler_free(&compiler);
+        source_free(src);
     }
     neo_osi_shutdown();
     return EXIT_SUCCESS;

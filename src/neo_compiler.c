@@ -52,6 +52,50 @@ NEO_COLDPROC const compile_error_t *comerror_new(
     return error;
 }
 
+void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
+    neo_dassert(self != NULL && f != NULL);
+    char error_message [0x1000];
+    bool src_hint = false; /* Print source hint? */
+    const char *color = colored ? NEO_CCRED : NULL;
+    const char *reset = colored ? NEO_CCRESET : NULL;
+    switch (self->type) {
+        case COMERR_OK: return;
+        case COMERR_INTERNAL_COMPILER_ERROR:
+            snprintf(error_message, sizeof(error_message), "Fatal internal compiler error: %s%s.%s", color, self->msg, reset);
+            break;
+        case COMERR_SYNTAX_ERROR:
+            snprintf(error_message, sizeof(error_message), "Syntax error: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
+        case COMERR_SYMBOL_REDEFINITION:
+            snprintf(error_message, sizeof(error_message), "Identifier is already used in this scope: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
+        case COMERR__LEN: neo_unreachable();
+    }
+    fprintf(
+        f,
+        "%s:%"PRIu32":%"PRIu32": %s\n",
+        self->file,
+        self->line,
+        self->col,
+        error_message
+    ); /* Print file, line and column. */
+    /* Print source hint message. */
+    if (src_hint) {
+        fprintf(f, "%s%s%s\n", color, self->lexeme_line, reset);
+        for (uint32_t i = 1; i < self->col; ++i) { /* Print spaces until column. */
+            fputc(' ', f);
+        }
+        fputs(color, f);
+        for (uint32_t i = 0; i < strlen((const char *)self->lexeme); ++i) { /* Print underline. */
+            fprintf(f, "^");
+        }
+        fputs(reset, f);
+        fputc('\n', f);
+    }
+}
+
 NEO_COLDPROC void comerror_free(const compile_error_t *self) {
     if (!self) { return; }
     neo_memalloc((void *)self->msg, 0);
@@ -90,11 +134,8 @@ NEO_COLDPROC void errvec_free(error_vector_t *self) {
 
 void errvec_print(const error_vector_t *self, FILE *f, bool colored) {
     neo_dassert(self && f);
-    const char *color = colored ? NEO_CCRED : NULL;
-    const char *reset = colored ? NEO_CCRESET : NULL;
     for (uint32_t i = 0; i < self->len; ++i) {
-        const compile_error_t *e = self->p[i];
-        fprintf(f, "%s:%"PRIu32":%"PRIu32": %s%s%s\n", e->file, e->line, e->col, color, e->msg, reset);
+        comerror_print(self->p[i], f, colored);
     }
 }
 

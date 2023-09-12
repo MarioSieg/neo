@@ -42,6 +42,7 @@ extern NEO_COLDPROC const compile_error_t *comerror_new(
     const uint8_t *msg
 );
 extern NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg);
+extern NEO_COLDPROC void comerror_print(const compile_error_t *self, FILE *f, bool colored);
 extern NEO_COLDPROC void comerror_free(const compile_error_t *self);
 
 /* Collection of all errors from all phases emitted during a single source file compilation. */
