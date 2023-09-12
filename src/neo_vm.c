@@ -169,18 +169,22 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
         bin_int_op(op);\
     }
 
-NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
-    neo_assert(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
+NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
+    neo_assert(self && bcode && bcode->p && bcode->len && self->stack.len);
     neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
     neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
 
+    if (self->pre_exec_hook) {
+        (*self->pre_exec_hook)(self, bcode);
+    }
+
     const uintptr_t ipb = (uintptr_t)bcode->p; /* Instruction pointer backup for delta computation. */
-    const uintptr_t spb = (uintptr_t)isolate->stack.p; /* Stack pointer backup for delta computation. */
+    const uintptr_t spb = (uintptr_t)self->stack.p; /* Stack pointer backup for delta computation. */
 
     register const bci_instr_t *restrict ip = bcode->p; /* Current instruction pointer. */
-    register const uintptr_t sps = (uintptr_t)isolate->stack.p+sizeof(*isolate->stack.p); /* Start of stack. +1 for padding. */
-    register const uintptr_t spe = (uintptr_t)(isolate->stack.p+isolate->stack.len)-sizeof(*isolate->stack.p); /* End of stack (last element). */
-    register record_t *restrict sp = isolate->stack.p; /* Current stack pointer. */
+    register const uintptr_t sps = (uintptr_t)self->stack.p + sizeof(*self->stack.p); /* Start of stack. +1 for padding. */
+    register const uintptr_t spe = (uintptr_t)(self->stack.p + self->stack.len) - sizeof(*self->stack.p); /* End of stack (last element). */
+    register record_t *restrict sp = self->stack.p; /* Current stack pointer. */
     register const record_t *restrict cp = bcode->pool.p; /* Constant pool pointer. */
     register vminterrupt_t vif = VMINT_OK; /* VM interrupt flag. */
 
@@ -364,11 +368,18 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
 
     zone_exit()
 
-    exit:
-    isolate->interrupt = vif;
-    isolate->ip = ip;
-    isolate->sp = sp;
-    isolate->ip_delta = ip-(const bci_instr_t *)ipb;
-    isolate->sp_delta = sp-(const record_t *)spb;
+exit:
+    self->interrupt = vif;
+    self->ip = ip;
+    self->sp = sp;
+    self->ip_delta = ip-(const bci_instr_t *)ipb;
+    self->sp_delta = sp-(const record_t *)spb;
+    ++self->invocs;
+    if (vif == VMINT_OK) { ++self->invocs_ok; }
+    else { ++self->invocs_err; }
+    if (self->post_exec_hook) {
+        (*self->post_exec_hook)(self, bcode, self->interrupt);
+    }
+
     return vif == VMINT_OK;
 }

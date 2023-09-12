@@ -33,19 +33,26 @@ typedef enum vminterrupt_t {
     VMINT__LEN
 } vminterrupt_t;
 
+#define STACKTRACE_BLOB_LEN 64
+
 typedef struct vmisolate_t vmisolate_t;
 struct vmisolate_t {
-    const char *name;
-    uint64_t id;
-    opstck_t stack;
-    vminterrupt_t interrupt;
-    const bci_instr_t *ip;
-    const record_t *sp;
-    ptrdiff_t ip_delta;
-    ptrdiff_t sp_delta;
+    char name[128]; /* Name of the isolate. */
+    uint64_t id; /* Unique ID of the isolate. */
+    opstck_t stack; /* Stack. */
+    vminterrupt_t interrupt; /* Interrupt code. */
+    const bci_instr_t *ip; /* Instruction pointer. */
+    const record_t *sp; /* Stack pointer. */
+    ptrdiff_t ip_delta; /* Instruction pointer delta. */
+    ptrdiff_t sp_delta; /* Stack pointer delta. */
+    uint32_t invocs; /* Invocation count. */
+    uint32_t invocs_ok; /* Invocation count. */
+    uint32_t invocs_err; /* Invocation count. */
+    void (*pre_exec_hook)(vmisolate_t *isolate, const bytecode_t *bcode); /* Pre-execution hook. */
+    void (*post_exec_hook)(vmisolate_t *isolate, const bytecode_t *bcode, vminterrupt_t result); /* Post-execution hook. */
 };
 
-extern NEO_HOTPROC NEO_NODISCARD bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode);
+extern NEO_HOTPROC NEO_NODISCARD bool vm_exec(vmisolate_t *self, const bytecode_t *bcode);
 
 #ifdef __cplusplus
 }
