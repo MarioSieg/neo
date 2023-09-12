@@ -701,6 +701,10 @@ extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-te
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT void neo_printutf8(FILE *f, const uint8_t *str); /* Print UTF-8 string to stdout. */
 
+/* ---- Frozen Embedded BLOBS (contains in neo_blobs.c) ---- */
+
+extern NEO_EXPORT const char neo_blobs_license[];
+
 #ifdef __cplusplus
 }
 #endif
