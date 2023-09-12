@@ -50,8 +50,6 @@ typedef enum vminterrupt_t {
     VMINT__LEN
 } vminterrupt_t;
 
-#define STACKTRACE_BLOB_LEN 64
-
 typedef struct vmisolate_t vmisolate_t;
 struct vmisolate_t {
     char name[128]; /* Name of the isolate. */
