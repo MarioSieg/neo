@@ -44,6 +44,8 @@ const command_t shell_commands[] = {
     {"license", &show_license}
 };
 
+#define is_done(c) (((c) == EOF) || (c) == 3 || (c) == 4)
+
 static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Reads UTF-8 source code from stdin until the user presses return twice. */
     neo_dassert(plen != NULL);
     bool prompt = true;
@@ -56,7 +58,7 @@ static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Re
     for (;;) {
         if (prompt) { fprintf(out, PROMPT " "); prompt = false; }
         int tmp = fgetc(in);
-        if (tmp == EOF) { break; }
+        if (is_done(tmp)) { break; }
         curr = (uint32_t)tmp;
         uint32_t u8len = utf8_seqlen(curr);
         if (neo_unlikely(!u8len)) { continue; } /* Invalid UTF-8 -> we're done here. */
@@ -64,7 +66,7 @@ static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Re
         bool is_err = false;
         for (uint32_t i = 1; i < u8len; ++i) { /* Copy UTF-8 sequence. */
             tmp = fgetc(in);
-            if (tmp == EOF) { is_err = true; }
+            if (is_done(tmp)) { is_err = true; }
             utf8[i] = (uint8_t)tmp;
         }
         if (is_err) { break; }
