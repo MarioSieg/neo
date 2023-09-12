@@ -146,6 +146,24 @@ void prng_init_seed(prng_state_t *self, uint64_t noise) {
     self->s[3] = ((0x2a2717b5ull<<32)|0xa7b7b927ull)^noise;
 }
 
+void prng_from_seed(prng_state_t *self, double seed) {
+    uint32_t r = 0x11090601;  /* Four 8 bit-seeds merged into a scalar. */
+    for (size_t i = 0; i < sizeof(self->s)/sizeof(*self->s); ++i) {
+        union {
+            double d;
+            uint64_t u64;
+        } u;
+        uint32_t m = 1u<<(r&255); /* Mask. */
+        r >>= 8;
+        u.d = seed = seed * 3.14159265358979323846 + 2.7182818284590452354;
+        if (u.u64 < m) { u.u64 += m; }
+        self->s[i] = u.u64;
+    }
+    for (int i = 0; i < 10; ++i) {
+        (void)prng_next_i64(self);
+    }
+}
+
 #define tausworthe223_gen(self, z, r, i, k, q, v) \
   z = (self)->s[i]; \
   z = (((z << q) ^ z) >> (k-v)) ^ ((z & ((uint64_t)(int64_t)-1 << (64-k))) << v); \

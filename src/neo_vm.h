@@ -28,6 +28,7 @@ extern NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /
 typedef struct prng_state_t { uint64_t s[4]; } prng_state_t;
 
 extern void prng_init_seed(prng_state_t *self, uint64_t noise); /* Init PRNG with common seed, use noise vor variation (thread-local ID eg. ). */
+extern void prng_from_seed(prng_state_t *self, double seed); /* Init PRNG with custom seed. */
 extern NEO_NODISCARD neo_int_t prng_next_i64(prng_state_t *self); /* Get next random integer. */
 extern NEO_NODISCARD neo_float_t prng_next_f64(prng_state_t *self); /* Get next random float within [0, 1.0]. */
 
