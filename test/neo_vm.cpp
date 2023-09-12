@@ -1,8 +1,61 @@
 // (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
 #include <array>
+#include <unordered_set>
 #include <gtest/gtest.h>
 #include <neo_vm.h>
+
+TEST(prng, diff_int) { // This test just checks that all randoms are different ouch
+    prng_state_t prng {};
+    prng_init_seed(&prng, 0);
+
+    std::unordered_set<neo_int_t> gen {};
+    constexpr std::size_t lim {5'000'000};
+    gen.reserve(lim);
+
+    for (std::size_t i {}; i < lim; ++i) {
+        neo_int_t r {prng_next_i64(&prng)};
+        ASSERT_NE(r, 0);
+        ASSERT_TRUE(gen.insert(r).second);
+    }
+
+    std::cout << "Here are 100 random integers:" << std::endl;
+    for (std::size_t i {}; i < 100; ++i) {
+        std::cout << std::dec << prng_next_i64(&prng) << std::endl;
+    }
+
+    std::cout << "PRNG SEED[4]" << std::endl;
+    for (std::size_t i {}; auto&& seed : prng.s) {
+        std::cout << "seed[" << i++ << "] = " << seed << std::endl;
+    }
+}
+
+TEST(prng, diff_float) { // This test just checks that all randoms are different ouch
+    prng_state_t prng {};
+    prng_init_seed(&prng, 0);
+
+    std::unordered_set<neo_float_t> gen {};
+    constexpr std::size_t lim {5'000'000};
+    gen.reserve(lim);
+
+    for (std::size_t i {}; i < lim; ++i) {
+        neo_float_t r {prng_next_f64(&prng)};
+        ASSERT_NE(r, 0.0);
+        ASSERT_TRUE(r > 0.0);
+        ASSERT_TRUE(r < 1.0);
+        ASSERT_TRUE(gen.insert(r).second);
+    }
+
+    std::cout << "Here are 100 random floats:" << std::endl;
+    for (std::size_t i {}; i < 100; ++i) {
+        std::cout << prng_next_f64(&prng) << std::endl;
+    }
+
+    std::cout << "PRNG SEED[4]" << std::endl;
+    for (std::size_t i {}; auto&& seed : prng.s) {
+        std::cout << "seed[" << i++ << "] = " << seed << std::endl;
+    }
+}
 
 #if 0
 TEST(vm_exec, iror) {

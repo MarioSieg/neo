@@ -10,10 +10,26 @@
 extern "C" {
 #endif
 
-extern NEO_EXPORT NEO_NODISCARD neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k); /* Unsigned r = x ^ k. o overflow checks. */
-extern NEO_EXPORT NEO_NODISCARD neo_int_t vmop_ipow64_no_ov(neo_int_t x, neo_int_t k); /* Signed r = x ^ k. No overflow checks. */
-extern NEO_EXPORT NEO_NODISCARD bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r); /* Signed r = x ^ k. Return true on overflow. */
-extern NEO_EXPORT NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
+/* ---- VM-Intrinsic routines. ---- */
+
+extern NEO_NODISCARD neo_uint_t vmop_upow64_no_ov(neo_uint_t x, neo_uint_t k); /* Unsigned r = x ^ k. o overflow checks. */
+extern NEO_NODISCARD neo_int_t vmop_ipow64_no_ov(neo_int_t x, neo_int_t k); /* Signed r = x ^ k. No overflow checks. */
+extern NEO_NODISCARD bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r); /* Signed r = x ^ k. Return true on overflow. */
+extern NEO_NODISCARD bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r); /* Signed r = x ^ k. Return true on overflow. */
+
+/* ---- PRNG. ---- */
+/*
+** NEO uses a Linear Feedback Shift Register (LFSR) (also known aus Tausworthe) random number generator,
+** with a periodic length of 2^223. The generator provides a very good random distribution, but is not cryptographically secure.
+** Based on:
+** Tables of maximally-equidistributed combined LFSR generators, Pierre L'Ecuyer, 1991.
+*/
+
+typedef struct prng_state_t { uint64_t s[4]; } prng_state_t;
+
+extern void prng_init_seed(prng_state_t *self, uint64_t noise); /* Init PRNG with common seed, use noise vor variation (thread-local ID eg. ). */
+extern NEO_NODISCARD neo_int_t prng_next_i64(prng_state_t *self); /* Get next random integer. */
+extern NEO_NODISCARD neo_float_t prng_next_f64(prng_state_t *self); /* Get next random float within [0, 1.0]. */
 
 typedef struct opstck_t {
     record_t *p;
@@ -52,7 +68,7 @@ struct vmisolate_t {
     void (*post_exec_hook)(vmisolate_t *isolate, const bytecode_t *bcode, vminterrupt_t result); /* Post-execution hook. */
 };
 
-extern NEO_HOTPROC NEO_NODISCARD bool vm_exec(vmisolate_t *self, const bytecode_t *bcode);
+extern NEO_HOTPROC NEO_NODISCARD NEO_EXPORT bool vm_exec(vmisolate_t *self, const bytecode_t *bcode);
 
 #ifdef __cplusplus
 }

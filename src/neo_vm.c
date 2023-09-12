@@ -137,6 +137,50 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
         return false;
     }
 }
+
+void prng_init_seed(prng_state_t *self, uint64_t noise) {
+    neo_dassert(self != NULL);
+    self->s[0] = ((0xa0d27757ull<<32)|0x0a345b8cull)^noise;
+    self->s[1] = ((0x764a296cull<<32)|0x5d4aa64full)^noise;
+    self->s[2] = ((0x51220704ull<<32)|0x070adeaaull)^noise;
+    self->s[3] = ((0x2a2717b5ull<<32)|0xa7b7b927ull)^noise;
+}
+
+#define tausworthe223_gen(self, z, r, i, k, q, v) \
+  z = (self)->s[i]; \
+  z = (((z << q) ^ z) >> (k-v)) ^ ((z & ((uint64_t)(int64_t)-1 << (64-k))) << v); \
+  r ^= z; \
+  (self)->s[i] = z
+
+#define tausworthe223_step(self, z, r) \
+  tausworthe223_gen(self, z, r, 0, 63, 31, 18); /* Index 0 */\
+  tausworthe223_gen(self, z, r, 1, 58, 19, 28); /* Index 1 */\
+  tausworthe223_gen(self, z, r, 2, 55, 24,  7); /* Index 2 */\
+  tausworthe223_gen(self, z, r, 3, 47, 21,  8)  /* Index 3 */
+
+neo_int_t prng_next_i64(prng_state_t *self) {
+    neo_dassert(self != NULL);
+    uint64_t z, r = 0;
+    tausworthe223_step(self, z, r);
+    union {
+        uint64_t u;
+        int64_t s;
+    } c = {.u = r};
+    return c.s;
+}
+
+neo_float_t prng_next_f64(prng_state_t *self) {
+    neo_dassert(self != NULL);
+    uint64_t z, r = 0;
+    tausworthe223_step(self, z, r);
+    r = (r & ((0x000fffffull<<32)|0xffffffffull))|((0x3ff00000ull<<32)|0x00000000ull); /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
+    union {
+        uint64_t u;
+        double f;
+    } c = {.u = r};
+    return c.f - 1.0;
+}
+
 #undef imulov
 #undef umulov
 #define i64_pow_overflow(...) vmop_ipow64(__VA_ARGS__)

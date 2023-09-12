@@ -1,0 +1,6 @@
+class Assessment
+    static method divide(x int, y int) int
+        if y == 0 then return 0 end
+        return x / y
+    end
+end
