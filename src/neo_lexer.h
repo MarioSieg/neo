@@ -16,6 +16,9 @@ extern "C" {
 
 struct source_t;
 
+extern NEO_EXPORT uint32_t utf8_seqlen(uint32_t x);
+extern NEO_EXPORT uint32_t utf8_decode(const uint8_t **p);
+
 #define tkdef(_, __)\
     /* Keywords */\
     _(TOK_KW_METHOD, "method")__\

@@ -39,15 +39,6 @@ const command_t shell_commands[] = {
     {"license", &show_license}
 };
 
-/* Copied from neo_lexer.c */
-static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
-    if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
-    else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
-    else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
-    else if ((x>>3) == 0x1e) { return 4; } /* 4 bytes */
-    else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
-}
-
 static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Reads UTF-8 source code from stdin until the user presses return twice. */
     neo_dassert(plen != NULL);
     bool prompt = true;

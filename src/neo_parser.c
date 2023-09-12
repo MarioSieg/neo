@@ -221,7 +221,7 @@ static NEO_AINLINE void consume_or_err(parser_t *self, toktype_t type, const cha
 static NEO_AINLINE astref_t consume_identifier(parser_t *self, const char *msg) {
     neo_dassert(self);
     consume_or_err(self, TOK_LI_IDENT, msg);
-    return astnode_new_ident(&self->pool, self->prev.lexeme);
+    return astnode_new_ident(&self->pool, self->prev.lexeme, &self->prev);
 }
 
 /* bibibubupeepeeeppeeeepeepoopoooooooooooooooooooooo */
@@ -249,7 +249,7 @@ static binary_op_type_t expr_paren_grouping(parser_t *self, astref_t *node) {
 static binary_op_type_t expr_literal_identifier(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     neo_dassert(self->prev.type == TOK_LI_IDENT);
-    *node = astnode_new_ident(&self->pool, self->prev.lexeme);
+    *node = astnode_new_ident(&self->pool, self->prev.lexeme, &self->prev);
     return EXPR_OP_DONE;
 }
 
@@ -432,7 +432,7 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
         if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
             node_block_t arguments;
-            node_block_init(&arguments, BLOCKSCOPE_ARGLIST);
+            node_block_init(&arguments, self->errors, BLOCKSCOPE_ARGLIST);
             do { /* Parse arguments. */
                 astref_t arg = ASTREF_NULL;
                 expr_eval_precedence(self, &arg, PREC_TERNARY);
@@ -579,7 +579,7 @@ static astref_t rule_method(parser_t *self, bool is_static) {
     astref_t parameters = ASTREF_NULL;
     if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
         node_block_t param_list;
-        node_block_init(&param_list, BLOCKSCOPE_PARAMLIST);
+        node_block_init(&param_list, self->errors, BLOCKSCOPE_PARAMLIST);
         int depth = 0;
         do { /* Eat all parameters. */
             check_depth_lim(depth);
@@ -629,7 +629,7 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
     neo_dassert(self);
     node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_LOCAL);
+    node_block_init(&block, self->errors, BLOCKSCOPE_LOCAL);
     for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         if (consume_match(self, TOK_KW_LET)) {
@@ -676,7 +676,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self);
     node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_CLASS);
+    node_block_init(&block, self->errors, BLOCKSCOPE_CLASS);
     for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
@@ -738,7 +738,7 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
 static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
     neo_dassert(self);
     node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_MODULE);
+    node_block_init(&block, self->errors, BLOCKSCOPE_MODULE);
     for (int depth = 0; isok(self); ++depth) {
         check_depth_lim(depth);
         bool skip = false;

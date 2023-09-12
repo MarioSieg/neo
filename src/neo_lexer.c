@@ -31,7 +31,7 @@ const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N] = {
     TOK_OP_LOG_NOT
 };
 
-static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
+uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
     if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
     else if ((x >> 5) == 6) { return 2; } /* 2 bytes */
     else if ((x >> 4) == 14) { return 3; } /* 3 bytes */
@@ -39,7 +39,7 @@ static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incom
     else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
 }
 
-static uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
+uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
     uint32_t cp = (uint32_t)**p;
     uint32_t len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 127; } /* ASCII and most common case. */
