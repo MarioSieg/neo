@@ -3,6 +3,8 @@
 #include <neo_core.h>
 #include <neo_compiler.h>
 
+#include "../tools/license_blob.h"
+
 static void show_help(const char *cmd);
 static void show_version(const char *cmd);
 static void show_license(const char *cmd);
@@ -43,6 +45,7 @@ static void show_version(const char *cmd) {
 
 static void show_license(const char *cmd) {
     (void)cmd;
+    puts(license_blob);
 }
 
 static void load_and_execute_neo_source(const char *file) {
