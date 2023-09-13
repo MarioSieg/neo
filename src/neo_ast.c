@@ -4,111 +4,76 @@
 #include "neo_lexer.h"
 #include "neo_compiler.h"
 
-static NEO_NODISCARD symbuck_t *symtab_resize_entry(symtab_t *self, symbuck_t *old) {
-    neo_dassert(self != NULL && old != NULL);
-    uint32_t i = (old->key.hash & ~0x80000000u) % self->cap;
-    for (;;) {
-        symbuck_t *bucket = self->buckets + i;
-        if ((bucket->key.hash & 0x80000000u) == 0) { /* Found empty bucket. */
-            *bucket = *old; /* Clone data. */
-            return bucket;
-        }
-        i = (i+1) % self->cap;
-    }
-}
-
-static void symtab_resize(symtab_t *self) {
-    neo_dassert(self != NULL);
-    symbuck_t *old = self->buckets;
-    size_t len = (self->cap<<=1)*sizeof(*self->buckets);
-    self->buckets = neo_memalloc(NULL, len);
-    memset(self->buckets, 0, len);
-    self->last = (symbuck_t *)&self->first; /* Trick to avoid branching: Treat first as a next ptr into an imaginary bucket. When an item is added, the correct address is resolved. */
-    do {
-        self->last->next = symtab_resize_entry(self, self->last->next);
-        self->last = self->last->next;
-    } while (self->last->next); /* Assumes that empty map is not resized. */
-    neo_memalloc(old, 0);
-}
-
-static NEO_NODISCARD symbuck_t *symtab_search(symtab_t *self, const node_ident_literal_t *ident_key) {
-    neo_dassert(self != NULL && ident_key != NULL && ident_key->hash != 0 && ident_key->span.len != 0);
-    uint32_t hash = ident_key->hash & ~0x80000000u; /* Truncate used flag. */
-    uint32_t i = hash % self->cap;
-    for (;;) {
-        symbuck_t *bucket = self->buckets + i;
-        bool match = (bucket->key.hash & 0x80000000u) == 0 /* Empty bucket. */
-                || ((bucket->key.hash & ~0x80000000u) == hash /* Hash equality OR deep equality. */
-                && srcspan_eq(bucket->key.span, ident_key->span));
-        if (match) {
-            return bucket; /* Match or empty bucket. */
-        }
-        i = (i+1) % self->cap;
-    }
-}
-
 void symtab_init(symtab_t *self, uint32_t cap) {
     neo_dassert(self != NULL);
     memset(self, 0, sizeof(*self));
-    cap = cap ? cap : SYMTAB_DEFAULT_CAPACITY;
+    cap = cap ? cap : 1<<6;
     self->cap = cap;
     self->buckets = neo_memalloc(NULL, self->cap*sizeof(*self->buckets));
     memset(self->buckets, 0, self->cap*sizeof(*self->buckets));
-    self->first = NULL;
-    self->last = (symbuck_t *)&self->first; /* Trick to avoid branching: Treat first as a next ptr into an imaginary bucket. When an item is added, the correct address is resolved. */
 }
 
-void symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val) {
-    neo_dassert(self != NULL && key != NULL && key->hash != 0 && (key->hash & 0x80000000u) == 0 && val != NULL);
-    if ((double)(self->len+1) > SYMTAB_MAX_LOAD*(double)self->cap) {
-        symtab_resize(self);
+bool symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val) {
+    neo_dassert(self != NULL && key != NULL && key->hash != 0 && val != NULL);
+    /* Search existing bucket. */
+    for (uint32_t i = 0; i < self->len; ++i) {
+        symbuck_t *bucket = &self->buckets[i];
+        if (bucket->key.hash == key->hash && bucket->key.span.len == key->span.len && memcmp(bucket->key.span.p, key->span.p, key->span.len) == 0) {
+            bucket->val = *val;
+            return false;
+        }
     }
-    symbuck_t *bucket = symtab_search(self, key);
-    if ((bucket->key.hash & 0x80000000u) == 0) { /* Empty bucket. */
-        ++self->len;
-        self->last->next = bucket;
-        self->last = bucket;
-        bucket->next = NULL;
-        bucket->key = *key;
-        bucket->key.hash ^= 0x80000000u; /* Mark as used. */
+    if (self->len >= self->cap) { /* Reallocate if necessary. */
+        self->buckets = neo_memalloc(self->buckets, (self->cap<<=1)*sizeof(*self->buckets));
     }
-    bucket->val = *val;
+    self->buckets[self->len++] = (symbuck_t) {
+        .key = *key,
+        .val = *val
+    };
+    return true;
 }
 
 bool symtab_get(symtab_t *self, const node_ident_literal_t *key, const symrecord_t **val) {
     neo_dassert(self  != NULL&& key != NULL && key->hash != 0 && val != NULL);
-    symbuck_t *bucket = symtab_search(self, key);
-    *val = &bucket->val;
-    return bucket->key.hash & 0x80000000u;
+    for (uint32_t i = 0; i < self->len; ++i) {
+        symbuck_t *bucket = &self->buckets[i];
+        if (bucket->key.hash == key->hash && bucket->key.span.len == key->span.len && memcmp(bucket->key.span.p, key->span.p, key->span.len) == 0) {
+            *val = &bucket->val;
+            return true;
+        }
+    }
+    return false;
 }
 
 uint32_t symtab_len(const symtab_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     return self->len;
 }
 
 void symtab_iter(const symtab_t *self, void (*callback)(const node_ident_literal_t *key, const symrecord_t *sym, void *usr), void *usr) {
     neo_dassert(self && callback);
-    for (symbuck_t *bucket = self->first; bucket; bucket = bucket->next) {
-        if (bucket->key.hash & 0x80000000u) {
-            (*callback)(&bucket->key, &bucket->val, usr);
-        }
+    for (uint32_t i = 0; i < self->len; ++i) {
+        const symbuck_t *bucket = &self->buckets[i];
+        (*callback)(&bucket->key, &bucket->val, usr);
     }
 }
 
 void symtab_free(symtab_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     neo_memalloc(self->buckets, 0);
+    memset(self, 0, sizeof(*self));
 }
 
 static NEO_COLDPROC void symtab_print_visitor(const node_ident_literal_t *key, const symrecord_t *sym, void *usr) {
     neo_dassert(key != NULL && sym != NULL && usr != NULL);
     FILE *f = (FILE *)usr;
-    fprintf(f, "%.*s\n", (int)key->span.len, key->span.p);
+    fprintf(f, "\t%.*s\n", (int)key->span.len, key->span.p);
 }
 
-void symtab_print(const symtab_t *self, FILE *f) {
+void symtab_print(const symtab_t *self, FILE *f, const char *name) {
     neo_dassert(self && f);
+    if (!self->len) { return; }
+    fprintf(f, "Symbol table: %s\n", name ? name : "(unnamed)");
     symtab_iter(self, &symtab_print_visitor, f);
 }
 
@@ -135,7 +100,7 @@ static const char *const block_names[BLOCKSCOPE__COUNT] = {
 
 #define impl_ast_node_hull_factory(name, ttype)\
   astref_t astnode_new_##name(astpool_t *pool) {\
-    neo_dassert(pool);\
+    neo_dassert(pool != NULL);\
     return astpool_alloc(pool, NULL,  ASTNODE_##ttype);\
   }
 
@@ -147,7 +112,7 @@ impl_ast_node_hull_factory(self, SELF_LIT)
 
 #define astverify(expr, msg) neo_assert((expr) && "AST verification failed: " msg)
 static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astverify(astpool_isvalidref(pool, target), "AST reference is invalid");
     astnode_t *node = astpool_resolve(pool, target);
     astverify(node != NULL, "AST reference resolve returned NULL");
@@ -162,7 +127,7 @@ static astnode_t *verify_resolve_node(astpool_t *pool, astref_t target) {
     astverify((node)->dat.n_block.scope == (expected), "AST Node block type is not of expected block type: " #expected)
 
 astref_t astnode_new_error(astpool_t *pool, const node_error_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_error_t *data = node;
@@ -176,7 +141,7 @@ astref_t astnode_new_error(astpool_t *pool, const node_error_t *node) {
 }
 
 astref_t astnode_new_group(astpool_t *pool, const node_group_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_group_t *data = node;
@@ -191,7 +156,7 @@ astref_t astnode_new_group(astpool_t *pool, const node_group_t *node) {
 }
 
 astref_t astnode_new_unary_op(astpool_t *pool, const node_unary_op_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_unary_op_t *data = node;
@@ -207,7 +172,7 @@ astref_t astnode_new_unary_op(astpool_t *pool, const node_unary_op_t *node) {
 }
 
 astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_binary_op_t *data = node;
@@ -236,7 +201,7 @@ astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node) {
 }
 
 astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_method_t *data = node;
@@ -263,7 +228,7 @@ astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
 }
 
 astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_block_t *data = node;
@@ -277,7 +242,7 @@ astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
 }
 
 astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_variable_t *data = node;
@@ -295,7 +260,7 @@ astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node) {
 }
 
 astref_t astnode_new_return(astpool_t *pool, const node_return_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_return_t *data = node;
@@ -311,7 +276,7 @@ astref_t astnode_new_return(astpool_t *pool, const node_return_t *node) {
 }
 
 astref_t astnode_new_branch(astpool_t *pool, const node_branch_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_branch_t *data = node;
@@ -329,7 +294,7 @@ astref_t astnode_new_branch(astpool_t *pool, const node_branch_t *node) {
 }
 
 astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_loop_t *data = node;
@@ -344,7 +309,7 @@ astref_t astnode_new_loop(astpool_t *pool, const node_loop_t *node) {
 }
 
 astref_t astnode_new_class(astpool_t *pool, const node_class_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_class_t *data = node;
@@ -361,7 +326,7 @@ astref_t astnode_new_class(astpool_t *pool, const node_class_t *node) {
 }
 
 astref_t astnode_new_module(astpool_t *pool, const node_module_t *node) {
-    neo_dassert(pool && node);
+    neo_dassert(pool != NULL && node != NULL);
 
     /* Verify AST data. */
     const node_module_t *data = node;
@@ -380,7 +345,7 @@ astref_t astnode_new_module(astpool_t *pool, const node_module_t *node) {
 }
 
 astref_t astnode_new_int(astpool_t *pool, neo_int_t value) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_INT_LIT);
     nn->dat.n_int_lit.value = value;
@@ -388,7 +353,7 @@ astref_t astnode_new_int(astpool_t *pool, neo_int_t value) {
 }
 
 astref_t astnode_new_float(astpool_t *pool, neo_float_t value) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_FLOAT_LIT);
     nn->dat.n_float_lit.value = value;
@@ -396,7 +361,7 @@ astref_t astnode_new_float(astpool_t *pool, neo_float_t value) {
 }
 
 astref_t astnode_new_char(astpool_t *pool, neo_char_t value) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_CHAR_LIT);
     nn->dat.n_char_lit.value = value;
@@ -404,7 +369,7 @@ astref_t astnode_new_char(astpool_t *pool, neo_char_t value) {
 }
 
 astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BOOL_LIT);
     nn->dat.n_bool_lit.value = value;
@@ -412,24 +377,31 @@ astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value) {
 }
 
 astref_t astnode_new_string(astpool_t *pool, srcspan_t value) {
-    neo_dassert(pool);
+    neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_STRING_LIT);
     nn->dat.n_string_lit.span = value;
-    nn->dat.n_string_lit.hash = srcspan_hash(value);
+    nn->dat.n_string_lit.hash = srcspan_hash(value); /* Strings are hashed. */
     return ref;
 }
 
-astref_t astnode_new_ident(astpool_t *pool, srcspan_t value) {
-    astref_t ref = astnode_new_string(pool, value);
-    astpool_resolve(pool, ref)->type = ASTNODE_IDENT_LIT;
+astref_t astnode_new_ident(astpool_t *pool, srcspan_t value, const token_t *tok) {
+    neo_dassert(pool != NULL);
+    astnode_t *nn = NULL;
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_IDENT_LIT);
+    nn->dat.n_ident_lit.span = value;
+    nn->dat.n_ident_lit.hash = srcspan_hash(value); /* Identifiers are hashed. */
+    if (neo_likely(tok)) {
+        nn->dat.n_ident_lit.tok = *tok;
+    }
     return ref;
 }
 
 astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes) {
-    neo_dassert(pool);
-    node_block_t block;
-    node_block_init(&block, type);
+    neo_dassert(pool != NULL && nodes != NULL);
+    node_block_t block = {
+        .scope = type,
+    };
     while (astpool_isvalidref(pool, *nodes)) {
         node_block_push_child(pool, &block, *nodes++);
     }
@@ -439,103 +411,24 @@ astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astre
     return ref;
 }
 
-void node_block_init(node_block_t *self, block_scope_t scope) {
-    neo_dassert(self);
-    memset(self, 0, sizeof(*self));
-    self->scope = scope;
-    switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
-        case BLOCKSCOPE_MODULE:
-            symtab_init(&self->symtabs.sc_module.class_table, 4);
-            break;
-        case BLOCKSCOPE_CLASS:
-            symtab_init(&self->symtabs.sc_class.method_table, 32);
-            symtab_init(&self->symtabs.sc_class.var_table, 32);
-            break;
-        case BLOCKSCOPE_LOCAL:
-            symtab_init(&self->symtabs.sc_local.var_table, 32);
-            break;
-        case BLOCKSCOPE_PARAMLIST:
-            symtab_init(&self->symtabs.sc_params.var_table, 8);
-            break;
-        case BLOCKSCOPE_ARGLIST: break;
-        case BLOCKSCOPE__COUNT: neo_unreachable();
-    }
-#if NEO_DBG
-    self->_init_sentinel = true;
-#endif
-}
-
-void node_block_free(node_block_t *self) {
-    neo_dassert(self);
-    switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
-        case BLOCKSCOPE_MODULE:
-            symtab_free(&self->symtabs.sc_module.class_table);
-            break;
-        case BLOCKSCOPE_CLASS:
-            symtab_free(&self->symtabs.sc_class.method_table);
-            symtab_free(&self->symtabs.sc_class.var_table);
-            break;
-        case BLOCKSCOPE_LOCAL:
-            symtab_free(&self->symtabs.sc_local.var_table);
-            break;
-        case BLOCKSCOPE_PARAMLIST:
-            symtab_free(&self->symtabs.sc_params.var_table);
-            break;
-        case BLOCKSCOPE_ARGLIST: break;
-        case BLOCKSCOPE__COUNT: neo_unreachable();
-    }
-#if NEO_DBG
-    self->_init_sentinel = false;
-#endif
-}
-
-#if 0
-static NEO_NODISCARD NEO_UNUSED bool symtab_try_register( /* Insert symbol into symbol table, if it doesn't exist yet. If it does exist, emit error. */
-    neo_hashmap_t *target,
-    const node_ident_literal_t *ident,
-    astref_t node,
-    const token_t *tok,
-    error_vector_t *errors
-) {
-    neo_dassert(target && ident && !astref_isnull(node) && tok);
-    uintptr_t existing = 0;
-    const uint8_t *key = ident->span.p;
-    uint32_t klen = ident->span.len;
-    if (neo_unlikely(neo_hashmap_get(target, key, klen, &existing))) { /* Symbol already exists. */
-        uint8_t *cloned;
-        srcspan_stack_clone(ident->span, cloned); /* Clone span into zero terminated string. */
-        errvec_push(errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, tok, cloned)); /* Emit error. */
-        return false;
-    }
-    block_symbol_t *sym = neo_memalloc(NULL, sizeof(*sym));
-    sym->ident = *ident;
-    sym->node = node;
-    sym->token = *tok;
-    neo_hashmap_put(target, key, klen, (uintptr_t)sym); /* Register symbol. */
-    return true;
-}
-#endif
-
 void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     neo_dassert(pool && self);
-#if NEO_DBG
-    neo_dassert(self->_init_sentinel && "node_block_init() was not called");
-#endif
-    if (neo_unlikely(astref_isnull(node))) {
+    if (neo_unlikely(astref_isnull(node))) { /* Skip NULL nodes. */
         return;
     } else if (!self->cap) { /* No nodes yet, so allocate. */
-        self->cap = 1<<5;
-        self->nodes = astpool_alloclist(pool, NULL, self->cap);
+        self->nodes = astpool_alloclist(pool, NULL, self->cap=1<<5);
     } else if (self->len >= self->cap) { /* Reallocate if necessary. */
         size_t oldlen = self->cap;
         const astref_t *old = astpool_resolvelist(pool, self->nodes);
         listref_t newref = astpool_alloclist(pool, NULL, self->cap<<=2);
         astref_t *new = astpool_resolvelist(pool, newref);
-        memcpy(new, old, oldlen*sizeof(*new));
+        memcpy(new, old, oldlen*sizeof(*new)); /* Copy old nodes. */
         self->nodes = newref;
     }
     astref_t *reflist = astpool_resolvelist(pool, self->nodes);
     reflist[self->len++] = node;
+
+    /* Check if node is allowed in this block. */
     const astnode_t *pnode = astpool_resolve(pool, node);
     uint64_t mask = block_valid_masks[self->scope];
     uint64_t node_mask = astmask(pnode->type);
@@ -544,7 +437,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     }
 }
 
-static void astnode_visit_root_impl(const astpool_t *pool, astref_t rootref, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
+static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user, size_t *c) {
     neo_dassert(pool && visitor && c);
     if (astref_isnull(rootref)) { return; } /* Skip NULL nodes. */
     astnode_t *root = astpool_resolve(pool, rootref);
@@ -625,14 +518,14 @@ static void astnode_visit_root_impl(const astpool_t *pool, astref_t rootref, voi
     (*visitor)(pool, rootref, user);
 }
 
-size_t astnode_visit(const astpool_t *pool, astref_t root, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user) {
+size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user) {
     size_t c = 0;
     astnode_visit_root_impl(pool, root, visitor, user, &c);
     return c;
 }
 
 astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) { /* TODO: Use mempool alloc. */
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     size_t plen = self->node_pool.len+sizeof(astnode_t);
     neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
     astnode_t *n = neo_mempool_alloc(&self->node_pool, sizeof(*n));
@@ -640,17 +533,11 @@ astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) { /*
     if (o) { *o = n; }
     plen /= sizeof(*n);
     astref_t ref = (astref_t)plen;
-    if (type == ASTNODE_BLOCK) { /* If the node is a block, add it to the tracked blocks. */
-        if (self->symtabsblk_len >= self->symtabsblk_cap) {
-            self->tracked_symtabsblk = neo_memalloc(self->tracked_symtabsblk, (self->symtabsblk_cap<<=1)*sizeof(self->tracked_symtabsblk));
-        }
-        self->tracked_symtabsblk[self->symtabsblk_len++] = ref;
-    }
     return ref;
 }
 
 listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len) { /* TODO: Use mempool alloc. */
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     size_t plen = self->list_pool.len;
     neo_assert(plen <= UINT32_MAX && "AST-pool out of nodes, max: UINT32_MAX");
     astref_t *n = neo_mempool_alloc(&self->list_pool, len*sizeof(*n));
@@ -660,34 +547,22 @@ listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len) { /* TO
 }
 
 void astpool_init(astpool_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     memset(self, 0, sizeof(*self));
     neo_mempool_init(&self->node_pool, sizeof(astnode_t)*(1<<10));
     neo_mempool_init(&self->list_pool, sizeof(astref_t)*(1<<10));
-    self->symtabsblk_cap = 1<<2;
-    self->tracked_symtabsblk = neo_memalloc(NULL, self->symtabsblk_cap*sizeof(self->tracked_symtabsblk));
 }
 
 void astpool_free(astpool_t *self) {
-    neo_dassert(self);
-    /* First, free all symbol tables. */
-    for (uint32_t i = 0; i < self->symtabsblk_len; ++i) {
-        astnode_t *node = astpool_resolve(self, self->tracked_symtabsblk[i]);
-        if (node) {
-            neo_dassert(node->type == ASTNODE_BLOCK);
-            node_block_free(&node->dat.n_block);
-        }
-    }
+    neo_dassert(self != NULL);
     neo_mempool_free(&self->list_pool);
     neo_mempool_free(&self->node_pool);
-    neo_memalloc(self->tracked_symtabsblk, 0);
 }
 
 void astpool_reset(astpool_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     neo_mempool_reset(&self->list_pool);
     neo_mempool_reset(&self->node_pool);
-    self->symtabsblk_len = 0;
 }
 
 const char *unary_op_lexeme(unary_op_type_t op) {
@@ -822,7 +697,7 @@ static Agnode_t *graph_append(
 }
 
 static void graphviz_ast_visitor(
-    const astpool_t *pool,
+    astpool_t *pool,
     Agraph_t *graph,
     Agnode_t *anode,
     astref_t noderef,
@@ -957,7 +832,7 @@ static void graphviz_ast_visitor(
     }
 }
 
-static void graph_submit(const astpool_t *pool, Agraph_t *g, astref_t node) {
+static void graph_submit(astpool_t *pool, Agraph_t *g, astref_t node) {
     neo_dassert(pool && g);
     char statsbuf[512];
     int off = snprintf(
@@ -991,7 +866,7 @@ static void graph_submit(const astpool_t *pool, Agraph_t *g, astref_t node) {
     graphviz_ast_visitor(pool, g, program, node, &id, NULL);
 }
 
-void ast_node_graphviz_dump(const astpool_t *pool, astref_t root, FILE *f) {
+void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f) {
     neo_dassert(pool && f);
     neo_info("dumping AST to graphviz representation...%s", "");
     time_t timer = time(NULL);
@@ -1016,7 +891,7 @@ void ast_node_graphviz_dump(const astpool_t *pool, astref_t root, FILE *f) {
     gvFreeContext(gvc);
 }
 
-void ast_node_graphviz_render(const astpool_t *pool, astref_t root, const char *filename) {
+void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename) {
     neo_dassert(pool && filename);
     neo_info("rendering AST to image: '%s'...", filename);
     GVC_t *gvc = gvContext();
@@ -1032,7 +907,7 @@ void ast_node_graphviz_render(const astpool_t *pool, astref_t root, const char *
 #endif
 
 #if 0 /* Copy and paste this skeleton to quickly create a new AST visitor. */
-static void my_ast_visitor(const astpool_t *pool, astref_t noderef, void *user) {
+static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
     astnode_t *node = astpool_resolve(pool, noderef); (void)user;
     switch (node->type) {
         case ASTNODE_ERROR: {

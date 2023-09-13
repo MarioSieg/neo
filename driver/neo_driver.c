@@ -1,154 +1,82 @@
-/* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* (c) Copyright Mario "Neo" Sieg <mario.sieg.64@gmail.com> 2023. All rights reserved. */
 
 #include <neo_core.h>
 #include <neo_compiler.h>
 
-#define PROMPT ">>>"
-
-static void show_exit(const uint8_t *cmd) {
-    (void)cmd;
-}
-
-static void show_help(const uint8_t *cmd) {
-    (void)cmd;
-    printf("Neo Interactive Shell\n");
-    printf("Type \"help\", \"version\", \"license\" for more information.\n");
-    printf("Press enter twice to execute code.\n\n");
-}
-
-static void show_version(const uint8_t *cmd) {
-    (void)cmd;
-    printf("(c) Copyright Mario \"Neo\" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com\n");
-    printf("Neo v." NEO_STRINGIZE(NEO_VER_MAJOR) "." NEO_STRINGIZE(NEO_VER_MINOR) " for " NEO_OS_NAME"\n");
-    printf("Buildinfo: " NEO_COM_NAME " | " NEO_OS_NAME " | " NEO_CPU_NAME " | " NEO_CRT_NAME  " | " __DATE__ " " __TIME__ "\n");
-}
-
-static void show_license(const uint8_t *cmd) {
-    (void)cmd;
-}
+static void show_help(const char *cmd);
+static void show_version(const char *cmd);
+static void show_license(const char *cmd);
 
 typedef struct command_t {
-    const char *kw;
-    void (*cmd)(const uint8_t *cmd);
+    const char *cmd_long;
+    const char *cmd_short;
+    void (*cmd)(const char *cmd);
+    const char *desc;
 } command_t;
 
 const command_t shell_commands[] = {
-    {"exit", &show_exit},
-    {"help", &show_help},
-    {"version", &show_version},
-    {"license", &show_license}
+    {"--help", "-h", &show_help, "Shows this help."},
+    {"--version", "-v", &show_version, "Shows the version of Neo."},
+    {"--license", "-l", &show_license, "Shows the license of Neo."},
 };
 
-/* Copied from neo_lexer.c */
-static inline uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequence in bytes. */
-    if (neo_likely(x > 0 && x < 0x80)) { return 1; } /* ASCII and most common case. */
-    else if ((x>>5) == 0x6) { return 2; } /* 2 bytes */
-    else if ((x>>4) == 0xe) { return 3; } /* 3 bytes */
-    else if ((x>>3) == 0x1e) { return 4; } /* 4 bytes */
-    else { return 0; } /* Terminated reached or invalid UTF-8 -> we're done here. */
-}
-
-static NEO_NODISCARD const uint8_t *read_source_from_shell(size_t *plen) { /* Reads UTF-8 source code from stdin until the user presses return twice. */
-    neo_dassert(plen != NULL);
-    bool prompt = true;
-    FILE *in = stdin;
-    FILE *out = stdout;
-    size_t len = 0, cap = 128;
-    uint8_t *buf = neo_memalloc(NULL, sizeof(*buf)*cap);
-    uint8_t utf8[5];
-    uint32_t curr, prev = 0;
-    for (;;) {
-        if (prompt) { fprintf(out, PROMPT " "); prompt = false; }
-        int tmp = fgetc(in);
-        if (tmp == EOF) { break; }
-        curr = (uint32_t)tmp;
-        uint32_t u8len = utf8_seqlen(curr);
-        if (neo_unlikely(!u8len)) { continue; } /* Invalid UTF-8 -> we're done here. */
-        *utf8 = (uint8_t)curr; /* Copy first byte. */
-        bool is_err = false;
-        for (uint32_t i = 1; i < u8len; ++i) { /* Copy UTF-8 sequence. */
-            tmp = fgetc(in);
-            if (tmp == EOF) { is_err = true; }
-            utf8[i] = (uint8_t)tmp;
-        }
-        if (is_err) { break; }
-        size_t pos;
-        neo_unicode_error_t err = neo_utf8_validate(utf8, u8len, &pos);
-        if (neo_likely(err == NEO_UNIERR_OK)) { /* Valid UTF-8 -> append to buffer. */
-            while (len+u8len >= cap) { /* Resize buffer if necessary. */
-                buf = neo_memalloc(buf, (cap<<=1)*sizeof(*buf));
-            }
-            memcpy(buf+len, utf8, u8len);
-            len += u8len;
-        } else {
-            fprintf(out, "Invalid UTF-8 sequence at position %zu: ", pos);
-            for (uint32_t i = 0; i < u8len; ++i) {
-                printf("%02x ", utf8[i]);
-            }
-            fprintf(out, "\n");
-            break;
-        }
-        if (curr == '\n') {
-            if (prev == '\n') { /* Double newline -> we're done here. */
-                --len;
-                break;
-            }
-            prompt = true;
-        }
-        prev = curr;
-    }
-    buf[len] = '\0';
-    *plen = len;
-    return buf;
-}
-
-static void interactive_shell_input_loop(neo_compiler_t *compiler) {
-    neo_dassert(compiler != NULL);
-    for (;;) {
-        size_t len = 0;
-        const uint8_t *input = read_source_from_shell(&len);
-        if (neo_unlikely(!len || !input)) {
-            neo_memalloc((void *)input, 0); /* Free input buffer. */
-            continue;
-        }
-        /* Search for command. */
-        for (size_t i = 0; i < sizeof(shell_commands)/sizeof(*shell_commands); ++i) {
-            size_t klen = strlen(shell_commands[i].kw);
-            if (len < klen) { continue; } /* Length mismatch -> skip. */
-            if (memcmp(input, shell_commands[i].kw, klen) == 0) { /* Match -> execute command. */
-                shell_commands[i].cmd(input);
-                neo_memalloc((void *)input, 0); /* Free input buffer. */
-                return;
-            }
-        }
-        source_load_error_info_t info = {0};
-        const source_t *src = source_from_memory_ref((const uint8_t *)"stdin", input, &info); /* Create source object. */
-        if (neo_unlikely(!src)) {
-            printf("Failed to load source"); /* This should never happen because we validate pointers and UTF-8 before anyway. */
-            neo_memalloc((void* )input, 0); /* Free input buffer. */
-            continue;
-        }
-        compiler_compile(compiler, src, NULL);
-        neo_memalloc((void *)input, 0); /* Free input buffer. */
-        source_free(src); /* Free source object. */
+static void show_help(const char *cmd) {
+    (void)cmd;
+    printf("(c) Copyright Mario \"Neo\" Sieg <mario.sieg.64@gmail.com> 2023\n");
+    printf("Available commands:\n");
+    for (size_t i = 0; i < sizeof(shell_commands) / sizeof(*shell_commands); ++i) {
+        printf("  %s, %s: %s\n", shell_commands[i].cmd_long, shell_commands[i].cmd_short, shell_commands[i].desc);
     }
 }
 
-static void interactive_shell(void) {
-    show_help(NULL);
+static void show_version(const char *cmd) {
+    (void)cmd;
+#if defined(NEO_DBG) && NEO_DBG == 1
+#define NEO_BUILDMODE_NAME "Debug"
+#else
+#define NEO_BUILDMODE_NAME "Release"
+#endif
+    printf("(c) Copyright Mario \"Neo\" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com\n");
+    printf("Neo " NEO_BUILDMODE_NAME " v." NEO_STRINGIZE(NEO_VER_MAJOR) "." NEO_STRINGIZE(NEO_VER_MINOR) " for " NEO_OS_NAME"\n");
+    printf("Buildinfo: " NEO_COM_NAME " | " NEO_OS_NAME " | " NEO_CPU_NAME " | " NEO_CRT_NAME  " | " __DATE__ " " __TIME__ "\n");
+}
 
+static void show_license(const char *cmd) {
+    (void)cmd;
+    puts(neo_blobs_license);
+}
+
+static void load_and_execute_neo_source(const char *file) {
+    neo_assert(file != NULL && "File must not be NULL.");
+    neo_osi_init(); /* Must be called before any other neo_* function. */
+    const uint8_t *filename = (const uint8_t *)file;
+    source_load_error_info_t info = {0};
+    const source_t *src = source_from_file(filename, &info);
+    if (neo_unlikely(!src)) {
+        printf("Failed to load source: %s\n", file);
+        neo_osi_shutdown();
+        return;
+    }
     neo_compiler_t *compiler = NULL;
     compiler_init(&compiler, COM_FLAG_NONE);
-    interactive_shell_input_loop(compiler);
+    compiler_compile(compiler, src, NULL);
     compiler_free(&compiler);
+    source_free(src);
+    neo_osi_shutdown();
 }
 
 int main(int argc, const char **argv) {
-    (void)argv;
-    neo_osi_init(); /* Must be called before any other neo_* function. */
-    if (argc <= 1) {
-        interactive_shell();
+    if (argc >= 2) { /* If arguments are given, check if it is a shell command. */
+        for (size_t i = 0; i < sizeof(shell_commands) / sizeof(*shell_commands); ++i) { /* Check if command is a shell command. */
+            if (strcmp(argv[1], shell_commands[i].cmd_long) == 0 || strcmp(argv[1], shell_commands[i].cmd_short) == 0) {
+                (*shell_commands[i].cmd)(argv[1]);
+                return EXIT_SUCCESS;
+            }
+        }
+        load_and_execute_neo_source(argv[1]); /* If not, try to load and execute it as a source file. */
+    } else { /* If no arguments are given, start the interactive shell. */
+        show_help(argv[0]);
     }
-    neo_osi_shutdown();
+
     return EXIT_SUCCESS;
 }

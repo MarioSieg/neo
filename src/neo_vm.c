@@ -1,6 +1,9 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* Implementation of the VM (virtual machine) isolate, hot-routines used by the VM and helpers. */
 
 #include "neo_vm.h"
+
+#include <math.h>
 
 #define NEO_VM_COMPUTED_GOTO
 #ifdef NEO_VM_COMPUTED_GOTO
@@ -137,6 +140,178 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
         return false;
     }
 }
+
+/* On AMD-64 these are implemented in ASM. */
+#if NEO_CPU_AMD64 && NEO_COM_GCC && 0
+
+/* Referenced from ASM, applies to IEEE-754 binary-64. */
+const volatile uint64_t __KSSE_ABS_MASK = 0x7fffffffffffffffull;
+const volatile uint64_t __KSSE_SIGN_MASK = 0x8000000000000000ull;
+const volatile uint64_t __KSSE_1 = 0x3ff0000000000000ull;
+const volatile uint64_t __KSSE_2P52 = 0x4330000000000000ull;
+
+neo_float_t vmop_ceil(neo_float_t x) {
+    double result;
+    __asm__ __volatile__ (
+        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
+        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
+        "movapd %%xmm0, %%xmm1\t\n"
+        "andpd %%xmm2, %%xmm1\t\n"
+        "ucomisd %%xmm1, %%xmm3\t\n"
+        "jbe 1f\t\n"
+        "andnpd %%xmm0, %%xmm2\t\n"
+        "addsd %%xmm3, %%xmm1\t\n"
+        "subsd %%xmm3, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movq __KSSE_1(%%rip), %%xmm3\t\n"
+        "cmpnlesd %%xmm1, %%xmm0\t\n"
+        "andpd %%xmm3, %%xmm0\t\n"
+        "addsd %%xmm0, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movapd %%xmm1, %0\t\n"
+        "1:\n"
+        : "=x" (result)
+        : "0" (x)
+        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
+    );
+    return result;
+}
+
+neo_float_t vmop_floor(neo_float_t x) {
+    double result;
+    __asm__ __volatile__ (
+        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
+        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
+        "movapd %%xmm0, %%xmm1\t\n"
+        "andpd %%xmm2, %%xmm1\t\n"
+        "ucomisd %%xmm1, %%xmm3\t\n"
+        "jbe 1f\t\n"
+        "andnpd %%xmm0, %%xmm2\t\n"
+        "addsd %%xmm3, %%xmm1\t\n"
+        "subsd %%xmm3, %%xmm1\t\n"
+        "orpd %%xmm2, %%xmm1\t\n"
+        "movq __KSSE_1(%%rip), %%xmm3\t\n"
+        "cmpltsd %%xmm1, %%xmm0\t\n"
+        "andpd %%xmm3, %%xmm0\t\n"
+        "subsd %%xmm0, %%xmm1\t\n"
+        "movapd %%xmm1, %%xmm0\t\n"
+        "1:\n"
+        : "=x" (result)
+        : "0" (x)
+        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
+    );
+    return result;
+}
+
+neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
+    double result;
+    __asm__ __volatile__ (
+        "movsd  %0, -16(%%rsp)\t\n"
+        "movsd  %1, -8(%%rsp)\t\n"
+        "fldl -8(%%rsp)\t\n"
+        "fldl -16(%%rsp)\t\n"
+        "1:\t\n"
+        "fprem\t\n"
+        "fnstsw  %%ax\t\n"
+        "testb $4, %%ah\t\n"
+        "jne 1b\t\n"
+        "fstp %%st(1)\t\n"
+        "fstpl -16(%%rsp)\t\n"
+        "movsd -16(%%rsp), %0\t\n"
+        : "=x" (result)
+        : "0" (x), "x" (y)
+        : "%rax", "%st", "%xmm0", "%xmm1"
+    );
+
+    return result;
+}
+
+#else
+
+neo_float_t vmop_ceil(neo_float_t x) {
+    return ceil(x);
+}
+
+neo_float_t vmop_floor(neo_float_t x) {
+    return floor(x);
+}
+
+neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
+    return fmod(x, y);
+}
+
+#endif
+
+/*
+** NEO uses a Linear Feedback Shift Register (LFSR) (also known aus Tausworthe) random number generator,
+** with a periodic length of 2^223. The generator provides a very good random distribution, but is not cryptographically secure.
+** NEO has two random generation functions:
+** -> int.random() and float.random(), which are not cryptographically secure and are powered by this generator
+** and
+** -> int.randomSecure() and float.randomSecure(), which are cryptographically secure, and are powered by the OS's CSPRNG.
+** Generator algorithm based on:
+** Tables of maximally-equidistributed combined LFSR generators, Pierre L'Ecuyer, 1991.
+** Generator seeded as:
+** L = 64
+** J = 4
+** k = 233
+** LGp = 230
+** N_1 = 59
+*/
+
+void prng_init_seed(prng_state_t *self, uint64_t noise) {
+    neo_dassert(self != NULL);
+    noise = noise ? noise : neo_tid(); /* Use the noise to add thread-local entropy. */
+    self->s[0] = ((0xa0d27757ull << 32) + 0x0a345b8cull) ^ noise; /* Precomputed constants from prng_from_seed(0.0). */
+    self->s[1] = ((0x764a296cull << 32) + 0x5d4aa64full) ^ noise;
+    self->s[2] = ((0x51220704ull << 32) + 0x070adeaaull) ^ noise;
+    self->s[3] = ((0x2a2717b5ull << 32) + 0xa7b7b927ull) ^ noise;
+}
+
+void prng_from_seed(prng_state_t *self, double seed) {
+    uint32_t r = 0x11090601;  /* Four 8 bit-seeds merged into a scalar. */
+    for (size_t i = 0; i < sizeof(self->s)/sizeof(*self->s); ++i) {
+        uint32_t m = 1u<<(r&255); /* Mask. */
+        r >>= 8;
+        double d = seed = seed * 3.14159265358979323846 + 2.7182818284590452354;
+        union { double d; uint64_t u; } u = { .d = d };
+        if (u.u < m) { u.u += m; }
+        self->s[i] = u.u;
+    }
+    for (int i = 0; i < 10; ++i) {
+        (void)prng_next_i64(self);
+    }
+}
+
+#define tausworthe223_gen(self, z, r, i, k, q, v) \
+  z = (self)->s[i]; \
+  z = (((z << q) ^ z) >> (k-v)) ^ ((z & (0xffffffffffffffffull << (64-k))) << v); \
+  r ^= z; \
+  (self)->s[i] = z
+
+#define tausworthe223_step(self, z, r) \
+  tausworthe223_gen(self, z, r, 0, 63, 31, 18); /* Index 0 */\
+  tausworthe223_gen(self, z, r, 1, 58, 19, 28); /* Index 1 */\
+  tausworthe223_gen(self, z, r, 2, 55, 24,  7); /* Index 2 */\
+  tausworthe223_gen(self, z, r, 3, 47, 21,  8)  /* Index 3 */
+
+neo_int_t prng_next_i64(prng_state_t *self) {
+    neo_dassert(self != NULL);
+    uint64_t z, r = 0;
+    tausworthe223_step(self, z, r);
+    union { uint64_t u; int64_t i; } u = { .u = r };
+    return u.i;
+}
+
+neo_float_t prng_next_f64(prng_state_t *self) {
+    neo_dassert(self != NULL);
+    uint64_t z, r = 0;
+    tausworthe223_step(self, z, r);
+    r = (r & 0xfffffffffffffull) | 0x3ff0000000000000ull; /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
+    union { uint64_t u; double d; } u = { .u = r };
+    return u.d - 1.0;
+}
+
 #undef imulov
 #undef umulov
 #define i64_pow_overflow(...) vmop_ipow64(__VA_ARGS__)
@@ -169,18 +344,22 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
         bin_int_op(op);\
     }
 
-NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
-    neo_assert(isolate && bcode && bcode->p && bcode->len && isolate->stack.len);
+NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
+    neo_assert(self && bcode && bcode->p && bcode->len && self->stack.len);
     neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
     neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
 
+    if (self->pre_exec_hook) {
+        (*self->pre_exec_hook)(self, bcode);
+    }
+
     const uintptr_t ipb = (uintptr_t)bcode->p; /* Instruction pointer backup for delta computation. */
-    const uintptr_t spb = (uintptr_t)isolate->stack.p; /* Stack pointer backup for delta computation. */
+    const uintptr_t spb = (uintptr_t)self->stack.p; /* Stack pointer backup for delta computation. */
 
     register const bci_instr_t *restrict ip = bcode->p; /* Current instruction pointer. */
-    register const uintptr_t sps = (uintptr_t)isolate->stack.p+sizeof(*isolate->stack.p); /* Start of stack. +1 for padding. */
-    register const uintptr_t spe = (uintptr_t)(isolate->stack.p+isolate->stack.len)-sizeof(*isolate->stack.p); /* End of stack (last element). */
-    register record_t *restrict sp = isolate->stack.p; /* Current stack pointer. */
+    register const uintptr_t sps = (uintptr_t)self->stack.p + sizeof(*self->stack.p); /* Start of stack. +1 for padding. */
+    register const uintptr_t spe = (uintptr_t)(self->stack.p + self->stack.len) - sizeof(*self->stack.p); /* End of stack (last element). */
+    register record_t *restrict sp = self->stack.p; /* Current stack pointer. */
     register const record_t *restrict cp = bcode->pool.p; /* Constant pool pointer. */
     register vminterrupt_t vif = VMINT_OK; /* VM interrupt flag. */
 
@@ -364,11 +543,18 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *isolate, const bytecode_t *bcode) {
 
     zone_exit()
 
-    exit:
-    isolate->interrupt = vif;
-    isolate->ip = ip;
-    isolate->sp = sp;
-    isolate->ip_delta = ip-(const bci_instr_t *)ipb;
-    isolate->sp_delta = sp-(const record_t *)spb;
+exit:
+    self->interrupt = vif;
+    self->ip = ip;
+    self->sp = sp;
+    self->ip_delta = ip-(const bci_instr_t *)ipb;
+    self->sp_delta = sp-(const record_t *)spb;
+    ++self->invocs;
+    if (vif == VMINT_OK) { ++self->invocs_ok; }
+    else { ++self->invocs_err; }
+    if (self->post_exec_hook) {
+        (*self->post_exec_hook)(self, bcode, self->interrupt);
+    }
+
     return vif == VMINT_OK;
 }

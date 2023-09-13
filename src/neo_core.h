@@ -694,12 +694,18 @@ extern NEO_EXPORT bool neo_utf8_is_ascii(const uint8_t *buf, size_t len);
 
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 extern NEO_EXPORT uint32_t neo_hash_fnv1a(const void *key, size_t len);
+extern NEO_EXPORT uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed);
+extern NEO_EXPORT uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t seed1);
 
 /* ---- Utilities ---- */
 
 extern NEO_EXPORT uint8_t *neo_strdup2(const uint8_t *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT char *neo_strdup(const char *str); /* Duplicate zero-terminated string to new dynamically allocated memory. */
 extern NEO_EXPORT void neo_printutf8(FILE *f, const uint8_t *str); /* Print UTF-8 string to stdout. */
+
+/* ---- Frozen Embedded BLOBS (contains in neo_blobs.c) ---- */
+
+extern NEO_EXPORT const char neo_blobs_license[];
 
 #ifdef __cplusplus
 }

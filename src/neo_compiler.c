@@ -5,7 +5,9 @@
 #include "neo_ast.h"
 #include "neo_lexer.h"
 #include "neo_parser.h"
-#include "neo_bc.h"
+
+/* Forward declarations. */
+static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors);
 
 static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
     uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
@@ -52,6 +54,50 @@ NEO_COLDPROC const compile_error_t *comerror_new(
     return error;
 }
 
+void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
+    neo_dassert(self != NULL && f != NULL);
+    char error_message [0x1000];
+    bool src_hint = false; /* Print source hint? */
+    const char *color = colored ? NEO_CCRED : NULL;
+    const char *reset = colored ? NEO_CCRESET : NULL;
+    switch (self->type) {
+        case COMERR_OK: return;
+        case COMERR_INTERNAL_COMPILER_ERROR:
+            snprintf(error_message, sizeof(error_message), "Fatal internal compiler error: %s%s.%s", color, self->msg, reset);
+            break;
+        case COMERR_SYNTAX_ERROR:
+            snprintf(error_message, sizeof(error_message), "Syntax error: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
+        case COMERR_SYMBOL_REDEFINITION:
+            snprintf(error_message, sizeof(error_message), "Identifier is already used in this scope: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
+        case COMERR__LEN: neo_unreachable();
+    }
+    fprintf(
+        f,
+        "%s:%"PRIu32":%"PRIu32": %s\n",
+        self->file,
+        self->line,
+        self->col,
+        error_message
+    ); /* Print file, line and column. */
+    /* Print source hint message. */
+    if (src_hint) {
+        fprintf(f, "%s%s%s\n", color, self->lexeme_line, reset);
+        for (uint32_t i = 1; i < self->col; ++i) { /* Print spaces until column. */
+            fputc(' ', f);
+        }
+        fputs(color, f);
+        for (uint32_t i = 0; i < strlen((const char *)self->lexeme); ++i) { /* Print underline. */
+            fputc('^', f);
+        }
+        fputs(reset, f);
+        fputc('\n', f);
+    }
+}
+
 NEO_COLDPROC void comerror_free(const compile_error_t *self) {
     if (!self) { return; }
     neo_memalloc((void *)self->msg, 0);
@@ -90,11 +136,8 @@ NEO_COLDPROC void errvec_free(error_vector_t *self) {
 
 void errvec_print(const error_vector_t *self, FILE *f, bool colored) {
     neo_dassert(self && f);
-    const char *color = colored ? NEO_CCRED : NULL;
-    const char *reset = colored ? NEO_CCRESET : NULL;
     for (uint32_t i = 0; i < self->len; ++i) {
-        const compile_error_t *e = self->p[i];
-        fprintf(f, "%s:%"PRIu32":%"PRIu32": %s%s%s\n", e->file, e->line, e->col, color, e->msg, reset);
+        comerror_print(self->p[i], f, colored);
     }
 }
 
@@ -104,6 +147,7 @@ void errvec_clear(error_vector_t *self) {
         comerror_free(self->p[i]);
         self->p[i] = NULL;
     }
+    memset(self->p, 0, self->cap*sizeof(*self->p)); /* Reset error list. */
     self->len = 0;
 }
 
@@ -287,44 +331,69 @@ static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src
     errvec_clear(&self->errors);
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
+    neo_dassert(self->errors.len == 0);
+    neo_dassert(self->parser.lex.src == src->src);
 }
 
-bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
+static void render_ast(neo_compiler_t *self, const source_t *src) {
+#ifdef NEO_EXTENSION_AST_RENDERING
+    size_t len = strlen((const char *)src->filename);
+    if (!neo_utf8_is_ascii(src->filename, len)) {
+        print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
+    } else {
+        char *filename = alloca(len+sizeof("_ast.jpg"));
+        memcpy(filename, src->filename, len);
+        memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
+        filename[len+sizeof("_ast.jpg")-1] = '\0';
+        ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
+    }
+#else
+    print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
+#endif
+}
+
+static NEO_NODISCARD bool compile_module(neo_compiler_t *self, const source_t *src) {
+    neo_dassert(self != NULL && src != NULL);
+    compiler_reset_and_prepare(self, src); /* 1. Reset compiler state and prepare for new compilation. */
+    self->ast = parser_drain(&self->parser); /* 2. Parse source code into AST. */
+    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
+    if (neo_unlikely(!perform_semantic_analysis(&self->parser.pool, self->ast, &self->errors))) { /* 3. Perform semantic analysis. */
+        return false;
+    }
+    /* 4. Generate bytecode. */
+    return self->errors.len == 0;
+}
+
+#define invoke_opt_hook(hook, ...) \
+    if ((hook) != NULL) { \
+        (*(hook))(__VA_ARGS__); \
+    }
+
+bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
     if (source_is_empty(src)) { return true; } /* Empty source -> we're done here. */
     clock_t begin = clock();
-    if (self->pre_compile_callback) {
-        (*self->pre_compile_callback)(src, self->flags, user);
-    }
-    compiler_reset_and_prepare(self, src);
-    self->ast = parser_drain(&self->parser);
-    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
-    if (self->post_compile_callback) {
-        (*self->post_compile_callback)(src, self->flags, user);
-    }
-    if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
-#ifdef NEO_EXTENSION_AST_RENDERING
-        size_t len = strlen((const char *)src->filename);
-        if (!neo_utf8_is_ascii(src->filename, len)) {
-            print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
-        } else {
-            char *filename = alloca(len+sizeof("_ast.jpg"));
-            memcpy(filename, src->filename, len);
-            memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
-            filename[len+sizeof("_ast.jpg")-1] = '\0';
-            ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
-        }
-#else
-        print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
-#endif
-    }
-    if (neo_unlikely(self->errors.len)) {
-        print_status_msg(self, NEO_CCRED, "Compilation failed with %"PRIu32" error%s.", self->errors.len, self->errors.len > 1 ? "s" : "");
+    invoke_opt_hook(self->pre_compile_callback, src, self->flags, usr);
+    bool success = compile_module(self, src);
+    invoke_opt_hook(self->post_compile_callback, src, self->flags, usr);
+    if (neo_unlikely(!success)) { /* Compilation failed. */
+        print_status_msg(
+            self,
+            NEO_CCRED,
+            "Compilation failed with %"PRIu32" error%s.",
+            self->errors.len,
+            self->errors.len > 1 ? "s" : ""
+        );
         if (!compiler_has_flags(self, COM_FLAG_NO_ERROR_DUMP)) {
             errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
         }
+        invoke_opt_hook(self->on_error_callback, src, self->flags, usr);
+        invoke_opt_hook(self->on_warning_callback, src, self->flags, usr);
         return false;
+    }
+    if (neo_unlikely(compiler_has_flags(self, COM_FLAG_RENDER_AST))) {
+        render_ast(self, src);
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
@@ -415,4 +484,350 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
     neo_assert(self && "Compiler pointer is NULL");
     neo_assert(new_hook && "Callback hook is NULL");
     self->on_error_callback = new_hook;
+}
+
+/*
+** The semantic analysis needs to check for the following things:
+**  Variable Declaration and Scope:
+**      Ensure that variables are declared before they are used.
+**      Check that variables are not redeclared within the same scope.
+**      Implement a scoping mechanism and ensure that variables are accessible within their respective scopes.
+**  Type Checking:
+**      Verify that expressions and operands have compatible types. For example, you should not be able to add a string to an integer.
+**      Enforce type compatibility rules for assignments, function parameters, and return values.
+**      Detect type mismatches and report appropriate error messages.
+**  Function and Method Calls:
+**      Check that functions and methods are called with the correct number and types of arguments.
+**      Verify that functions and methods return values of the expected types.
+**  Control Structures:
+**      Ensure that conditional statements (if, else) have boolean expressions as conditions.
+**      Verify that loop control expressions (for, while) are boolean.
+**      Check for proper nesting and scope handling within control structures.
+**  Array and Indexing Operations:
+**      Ensure that array or list indices are of integer type.
+**      Check that array or list indices are within bounds.
+**  Type Declarations:
+**      Validate custom type declarations and ensure they adhere to language rules.
+**      Check for cyclic type dependencies.
+**  Function Signatures and Overloading:
+**      Handle function and method overloading if your language supports it.
+**      Check that functions with the same name have different parameter lists.
+**  Error Handling:
+**      Report meaningful error messages with location information for easier debugging.
+**      Detect and handle exceptions or runtime errors if your language supports them.
+**  Constant Values:
+**      Ensure that constant values (e.g., literals) have valid types and values.
+**  Type Inference:
+**      Implement type inference algorithms to infer types when not explicitly provided by the programmer.
+**  Built-in Functions and Libraries:
+**      Ensure that built-in functions and libraries are available and correctly used.
+**  Annotations and Attributes:
+**      Support annotations or attributes to provide additional information for the compiler or runtime.
+**
+** ALREADY DONE:
+** -> Check for redefinition of symbols.
+** The parser already checks this because the symbol tables are built in the same step.
+*/
+
+static NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
+
+/* Context for semantic analysis. */
+typedef struct sema_context_t {
+    error_vector_t *errors;
+    const astpool_t *pool;
+    astref_t *blocks; /* Tracked blocks, to free symtab from. */
+    uint32_t len;
+    uint32_t cap;
+} sema_context_t;
+
+static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const astpool_t *pool) {
+    neo_dassert(self != NULL && errors != NULL);
+    memset(self, 0, sizeof(*self));
+    self->errors = errors;
+    self->pool = pool;
+    self->blocks = neo_memalloc(NULL, (self->cap=1<<6)*sizeof(*self->blocks));
+}
+
+static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
+    neo_dassert(self != NULL);
+    if (neo_unlikely(astref_isnull(symtab))) { return; }
+    const astnode_t *node = astpool_resolve(self->pool, symtab);
+    neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+    if (self->len >= self->cap) {
+        self->blocks = neo_memalloc(self->blocks, (self->cap<<=1)*sizeof(*self->blocks));
+    }
+    self->blocks[self->len++] = symtab;
+}
+
+static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables in a block. */
+    neo_dassert(self != NULL);
+    switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
+        case BLOCKSCOPE_MODULE:
+            symtab_free(&self->symtabs.sc_module.class_table);
+            break;
+        case BLOCKSCOPE_CLASS:
+            symtab_free(&self->symtabs.sc_class.method_table);
+            symtab_free(&self->symtabs.sc_class.variable_table);
+            break;
+        case BLOCKSCOPE_LOCAL:
+            symtab_free(&self->symtabs.sc_local.variable_table);
+            break;
+        case BLOCKSCOPE_PARAMLIST:
+            symtab_free(&self->symtabs.sc_params.variable_table);
+            break;
+        case BLOCKSCOPE_ARGLIST: break; /* No symbol table. */
+        case BLOCKSCOPE__COUNT: neo_unreachable();
+    }
+    memset(self, 0, sizeof(*self));
+}
+
+static void sema_ctx_free(sema_context_t *self) {
+    neo_dassert(self != NULL);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        astnode_t *node = astpool_resolve(self->pool, self->blocks[i]);
+        neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+        block_free_symtabs(&node->dat.n_block);
+    }
+    neo_memalloc(self->blocks, 0);
+    memset(self, 0, sizeof(*self));
+}
+
+static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
+    symtab_t *target,
+    const astpool_t *pool,
+    astref_t noderef,
+    astnode_type_t target_type,
+    astref_t (*extractor)(const astnode_t *target),
+    sema_context_t *ctx
+) {
+    neo_dassert(target != NULL && pool != NULL && extractor != NULL && ctx != NULL);
+    if (neo_unlikely(astref_isnull(noderef))) { return; }
+    const astnode_t *node = astpool_resolve(pool, noderef);
+    if (node->type != target_type) { return; } /* Skip non-target nodes. */
+    const astnode_t *ident = astpool_resolve(pool, (*extractor)(node));
+    neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT && "AST node is not an identifier");
+    const node_ident_literal_t key = ident->dat.n_ident_lit;
+    if (!target->cap || !target->buckets) { /* Init symbol table if not already done. */
+        symtab_init(target, 1<<4); /* Init symbol table. */
+    }
+    /* Now that we have the key, check if the identifier is already defined in the current symbol table. */
+    const symrecord_t *existing = NULL;
+    if (neo_unlikely(symtab_get(target, &key, &existing))) { /* Key already exists -> ERROR. Note that this only checks if an identifier exists within the SAME symbol table. */
+        neo_dassert(existing != NULL);
+        uint8_t *cloned;
+        srcspan_stack_clone(key.span, cloned); /* Clone span into zero terminated stack-string. */
+        errvec_push(ctx->errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
+        return; /* We're done. */
+    }
+    /* Key does not exist yet, so register it. */
+    const symrecord_t val = {
+        .tok = key.tok,
+        .node = noderef
+    };
+    symtab_put(target, &key, &val); /* Insert symbol. */
+}
+
+static astref_t sym_extract_class(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_CLASS);
+    return target->dat.n_class.ident;
+}
+
+static astref_t sym_extract_method(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_METHOD);
+    return target->dat.n_method.ident;
+}
+
+static astref_t sym_extract_variable(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_VARIABLE);
+    return target->dat.n_variable.ident;
+}
+
+static void populate_symbol_tables(
+    node_block_t *self,
+    astref_t selfref,
+    astpool_t *pool,
+    sema_context_t *ctx
+) {
+    neo_dassert(self != NULL && pool != NULL && ctx != NULL);
+    if (self->len == 0) { return; }
+    sema_ctx_push_block(ctx, selfref); /* Track block for later cleanup. */
+    astref_t *children = astpool_resolvelist(pool, self->nodes);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        astref_t target = children[i];
+        if (astref_isnull(target)) { continue; } /* Skip NULL nodes. */
+        /* Last but not least, inject symbols into the symbol table. */
+        switch (self->scope) { /* Inject into all symbol tables. */
+            case BLOCKSCOPE_MODULE:
+                inject_symtab_symbol( /* Inject into module class table. */
+                    &self->symtabs.sc_module.class_table,
+                    pool,
+                    target,
+                    ASTNODE_CLASS,
+                    &sym_extract_class,
+                    ctx
+                );
+            break;
+            case BLOCKSCOPE_CLASS:
+                inject_symtab_symbol( /* Inject into class method table. */
+                    &self->symtabs.sc_class.method_table,
+                    pool,
+                    target,
+                    ASTNODE_METHOD,
+                    &sym_extract_method,
+                    ctx
+                );
+                inject_symtab_symbol( /* Inject into class variable table. */
+                    &self->symtabs.sc_class.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    ctx
+                );
+            break;
+            case BLOCKSCOPE_LOCAL:
+                inject_symtab_symbol( /* Inject into local variable table. */
+                    &self->symtabs.sc_local.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    ctx
+                );
+            break;
+            case BLOCKSCOPE_PARAMLIST:
+                inject_symtab_symbol( /* Inject into parameter variable table. */
+                    &self->symtabs.sc_params.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    ctx
+                );
+            break;
+            case BLOCKSCOPE_ARGLIST: break; /* No symbols to inject. */
+            case BLOCKSCOPE__COUNT: neo_unreachable();
+        }
+    }
+}
+
+static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
+    sema_context_t *ctx = (sema_context_t *)usr;
+    astnode_t *node = astpool_resolve(pool, ref);
+    switch (node->type) {
+        case ASTNODE_ERROR: {
+            const node_error_t *data = &node->dat.n_error;
+            (void)data;
+        } return;
+        case ASTNODE_BREAK: {
+
+        } return;
+        case ASTNODE_CONTINUE: {
+
+        } return;
+        case ASTNODE_INT_LIT: {
+            const node_int_literal_t *data = &node->dat.n_int_lit;
+            (void)data;
+        } return;
+        case ASTNODE_FLOAT_LIT: {
+            const node_float_literal_t *data = &node->dat.n_float_lit;
+            (void)data;
+        } return;
+        case ASTNODE_CHAR_LIT: {
+            const node_char_literal_t *data = &node->dat.n_char_lit;
+            (void)data;
+        } return;
+        case ASTNODE_BOOL_LIT: {
+            const node_bool_literal_t *data = &node->dat.n_bool_lit;
+            (void)data;
+        } return;
+        case ASTNODE_STRING_LIT: {
+            const node_string_literal_t *data = &node->dat.n_string_lit;
+            (void)data;
+        } return;
+        case ASTNODE_IDENT_LIT: {
+            const node_ident_literal_t *data = &node->dat.n_ident_lit;
+            (void)data;
+        } return;
+        case ASTNODE_SELF_LIT: {
+
+        } return;
+        case ASTNODE_GROUP: {
+            const node_group_t *data = &node->dat.n_group;
+            (void)data;
+        } return;
+        case ASTNODE_UNARY_OP: {
+            const node_unary_op_t *data = &node->dat.n_unary_op;
+            (void)data;
+        } return;
+        case ASTNODE_BINARY_OP: {
+            const node_binary_op_t *data = &node->dat.n_binary_op;
+            (void)data;
+        } return;
+        case ASTNODE_METHOD: {
+            const node_method_t *data = &node->dat.n_method;
+            (void)data;
+        } return;
+        case ASTNODE_BLOCK: {
+            node_block_t *data = &node->dat.n_block;
+            populate_symbol_tables(data, ref, pool, ctx);
+            node_block_dump_symbols(data, stdout);
+        } return;
+        case ASTNODE_VARIABLE: {
+            const node_variable_t *data = &node->dat.n_variable;
+            (void)data;
+        } return;
+        case ASTNODE_RETURN: {
+            const node_return_t *data = &node->dat.n_return;
+            (void)data;
+        } return;
+        case ASTNODE_BRANCH: {
+            const node_branch_t *data = &node->dat.n_branch;
+            (void)data;
+        } return;
+        case ASTNODE_LOOP: {
+            const node_loop_t *data = &node->dat.n_loop;
+            (void)data;
+        } return;
+        case ASTNODE_CLASS: {
+            const node_class_t *data = &node->dat.n_class;
+            (void)data;
+        } return;
+        case ASTNODE_MODULE: {
+            const node_module_t *data = &node->dat.n_module;
+            (void)data;
+        } return;
+        case ASTNODE__COUNT: neo_unreachable();
+    }
+}
+
+static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors) {
+    neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL);
+    uint32_t error_count = errors->len;
+    sema_context_t ctx;
+    sema_ctx_init(&ctx, errors, pool);
+    astnode_visit(pool, root, &semantic_visitor, &ctx);
+    sema_ctx_free(&ctx);
+    return errors->len == error_count;
+}
+
+static NEO_COLDPROC NEO_UNUSED void node_block_dump_symbols(const node_block_t *self, FILE *f) {
+    neo_dassert(self != NULL && f != NULL);
+    switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
+        case BLOCKSCOPE_MODULE:
+            symtab_print(&self->symtabs.sc_module.class_table, f, "Classes");
+            break;
+        case BLOCKSCOPE_CLASS:
+            symtab_print(&self->symtabs.sc_class.method_table, f, "Methods");
+            symtab_print(&self->symtabs.sc_class.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_LOCAL:
+            symtab_print(&self->symtabs.sc_local.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_PARAMLIST:
+            symtab_print(&self->symtabs.sc_params.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_ARGLIST: break; /* No symbol table. */
+        case BLOCKSCOPE__COUNT: neo_unreachable();
+    }
 }

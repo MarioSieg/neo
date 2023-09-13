@@ -181,7 +181,7 @@ static const parse_rule_t parse_rules_lut[] = {
 neo_static_assert(sizeof(parse_rules_lut)/sizeof(*parse_rules_lut) == TOK__COUNT && "Missing rules for tokens in rule table");
 
 /* Implementation */
-#define isok(self) neo_likely((!(self)->panic && !(self)->error))
+#define is_status_ok(self) neo_likely((!(self)->panic && !(self)->error))
 
 static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *msg) {
     const compile_error_t *error = comerror_from_token(COMERR_SYNTAX_ERROR, tok, (const uint8_t *)msg);
@@ -191,7 +191,7 @@ static NEO_COLDPROC void error(parser_t *self, const token_t *tok, const char *m
 }
 
 static NEO_AINLINE void advance(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     self->prev = self->curr;
     self->curr = lexer_scan_next(&self->lex);
     if (neo_unlikely(self->curr.type == TOK_ME_ERR)) {
@@ -200,7 +200,7 @@ static NEO_AINLINE void advance(parser_t *self) {
 }
 
 static NEO_AINLINE bool consume_match(parser_t *self, toktype_t type) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     if (self->curr.type == type) {
         advance(self);
         return true;
@@ -210,7 +210,7 @@ static NEO_AINLINE bool consume_match(parser_t *self, toktype_t type) {
 }
 
 static NEO_AINLINE void consume_or_err(parser_t *self, toktype_t type, const char *msg) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     if (neo_unlikely(self->curr.type != type)) {
         error(self, &self->curr, msg);
     } else {
@@ -219,14 +219,14 @@ static NEO_AINLINE void consume_or_err(parser_t *self, toktype_t type, const cha
 }
 
 static NEO_AINLINE astref_t consume_identifier(parser_t *self, const char *msg) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     consume_or_err(self, TOK_LI_IDENT, msg);
-    return astnode_new_ident(&self->pool, self->prev.lexeme);
+    return astnode_new_ident(&self->pool, self->prev.lexeme, &self->prev);
 }
 
 /* bibibubupeepeeeppeeeepeepoopoooooooooooooooooooooo */
 static NEO_AINLINE bool is_line_or_block_done(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     return self->curr.type == TOK_KW_END || self->curr.type == TOK_PU_NEWLINE;
 }
 
@@ -249,7 +249,7 @@ static binary_op_type_t expr_paren_grouping(parser_t *self, astref_t *node) {
 static binary_op_type_t expr_literal_identifier(parser_t *self, astref_t *node) {
     neo_dassert(self && node);
     neo_dassert(self->prev.type == TOK_LI_IDENT);
-    *node = astnode_new_ident(&self->pool, self->prev.lexeme);
+    *node = astnode_new_ident(&self->pool, self->prev.lexeme, &self->prev);
     return EXPR_OP_DONE;
 }
 
@@ -431,14 +431,14 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     advance(self); /* Eat LPAREN. */
     if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
         if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
-            node_block_t arguments;
-            node_block_init(&arguments, BLOCKSCOPE_ARGLIST);
+            node_block_t arguments = {
+                .scope = BLOCKSCOPE_ARGLIST
+            };
             do { /* Parse arguments. */
                 astref_t arg = ASTREF_NULL;
                 expr_eval_precedence(self, &arg, PREC_TERNARY);
                 if (neo_unlikely(astref_isnull(arg))) {
                     error(self, &self->prev, "Invalid argument in function call");
-                    node_block_free(&arguments); /* Free block because it is not added to the AST pool for automatic memory management. */
                     return EXPR_OP_DONE;
                 }
                 node_block_push_child(&self->pool, &arguments, arg);
@@ -448,7 +448,6 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
                 *node = astnode_new_block(&self->pool, &arguments);
             } else {
                 *node = ASTREF_NULL;
-                node_block_free(&arguments);
             }
         }
         return BINOP_CALL;
@@ -496,21 +495,21 @@ static void expr_eval_precedence(parser_t *self, astref_t *node, precedence_t ru
 /* Core rules. */
 
 static astref_t rule_expr(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t node = ASTREF_NULL;
     expr_eval_precedence(self, &node, PREC_ASSIGNMENT);
     return node;
 }
 
 static astref_t rule_free_expr_statement(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t node = rule_expr(self);
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after freestanding expression");
     return node;
 }
 
 static astref_t rule_branch(parser_t *self, bool within_loop) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
     consume_or_err(self, TOK_KW_THEN, "Expected 'then' after if-statement condition");
@@ -523,7 +522,7 @@ static astref_t rule_branch(parser_t *self, bool within_loop) {
 }
 
 static astref_t rule_loop(parser_t *self, bool within_loop) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
     consume_or_err(self, TOK_KW_DO, "Expected 'do' after while-loop condition");
@@ -535,7 +534,7 @@ static astref_t rule_loop(parser_t *self, bool within_loop) {
 }
 
 static astref_t rule_return(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t expr = ASTREF_NULL;
     if (!is_line_or_block_done(self)) { /* If the block is not done and no newline appears, we have an expression to return. */
         expr_eval_precedence(self, &expr, PREC_TERNARY);
@@ -546,7 +545,7 @@ static astref_t rule_return(parser_t *self) {
 }
 
 static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t identifier = consume_identifier(self,
          var_scope == VARSCOPE_PARAM
          ? "Expected parameter identifier"
@@ -573,25 +572,25 @@ static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
 
 static astref_t rule_method(parser_t *self, bool is_static) {
     (void)is_static;
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t identifier = consume_identifier(self, "Expected method identifier");
     consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after method identifier");
     astref_t parameters = ASTREF_NULL;
     if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
-        node_block_t param_list;
-        node_block_init(&param_list, BLOCKSCOPE_PARAMLIST);
+        node_block_t param_list = {
+            .scope = BLOCKSCOPE_PARAMLIST
+        };
         int depth = 0;
         do { /* Eat all parameters. */
             check_depth_lim(depth);
             node_block_push_child(&self->pool, &param_list, rule_variable(self, VARSCOPE_PARAM));
             ++depth;
-        } while (isok(self) && consume_match(self, TOK_PU_COMMA));
+        } while (is_status_ok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
         if (param_list.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
             parameters = astnode_new_block(&self->pool, &param_list);
         } else {
             parameters = ASTREF_NULL;
-            node_block_free(&param_list);
         }
     }
     astref_t ret_type = ASTREF_NULL;
@@ -610,7 +609,7 @@ static astref_t rule_method(parser_t *self, bool is_static) {
 
 static astref_t rule_class(parser_t *self, bool is_static) {
     (void)is_static;
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astref_t identifier = consume_identifier(self, "Expected class identifier");
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class identifier");
     astref_t body = parser_root_stmt_class(self);
@@ -627,10 +626,11 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 ** Local statements are method bodies, if-bodies, while-bodies etc. but not class or module bodies.
 */
 static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
-    neo_dassert(self);
-    node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_LOCAL);
-    for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
+    neo_dassert(self != NULL);
+    node_block_t block = {
+        .scope = BLOCKSCOPE_LOCAL
+    };
+    for (int depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         if (consume_match(self, TOK_KW_LET)) {
             node_block_push_child(&self->pool, &block, rule_variable(self, VARSCOPE_LOCAL));
@@ -664,7 +664,6 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
     if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
         return astnode_new_block(&self->pool, &block);
     } else {
-        node_block_free(&block);
         return ASTREF_NULL;
     }
 }
@@ -674,10 +673,11 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
 ** Class body statements are methods, class variables, constructors etc..
 */
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
-    neo_dassert(self);
-    node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_CLASS);
-    for (int depth = 0; isok(self) && !consume_match(self, TOK_KW_END); ++depth) {
+    neo_dassert(self != NULL);
+    node_block_t block = {
+        .scope = BLOCKSCOPE_CLASS
+    };
+    for (int depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
         if (consume_match(self, TOK_KW_METHOD)) {
@@ -695,7 +695,6 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
         return astnode_new_block(&self->pool, &block);
     } else {
-        node_block_free(&block);
         return ASTREF_NULL;
     }
 }
@@ -736,10 +735,11 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
 }
 
 static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
-    neo_dassert(self);
-    node_block_t block;
-    node_block_init(&block, BLOCKSCOPE_MODULE);
-    for (int depth = 0; isok(self); ++depth) {
+    neo_dassert(self != NULL);
+    node_block_t block = {
+        .scope = BLOCKSCOPE_MODULE
+    };
+    for (int depth = 0; is_status_ok(self); ++depth) {
         check_depth_lim(depth);
         bool skip = false;
         astref_t node = parser_root_stmt_module_error_handling_wrapper(self, &skip);
@@ -753,7 +753,6 @@ static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
         body = astnode_new_block(&self->pool, &block);
     } else {
         body = ASTREF_NULL;
-        node_block_free(&block);
     }
     return astnode_new_module(&self->pool, &(node_module_t) {
         .body = body
@@ -772,25 +771,25 @@ void parser_init(parser_t *self, error_vector_t *errors) {
 }
 
 void parser_free(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     astpool_free(&self->pool);
     lexer_free(&self->lex);
     self->prev.type = self->curr.type = TOK_ME_EOF;
 }
 
 astref_t parser_parse(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     bool skip;
     return parser_root_stmt_module_error_handling_wrapper(self, &skip);
 }
 
 astref_t parser_drain(parser_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     return parser_drain_whole_module(self);
 }
 
 void parser_setup_source(parser_t *self, const source_t *src) {
-    neo_dassert(self && src);
+    neo_dassert(self != NULL && src != NULL);
     astpool_reset(&self->pool); /* Reset AST pool. */
     lexer_setup_source(&self->lex, src);
     self->error = self->panic = false;

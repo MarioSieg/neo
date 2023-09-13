@@ -3,6 +3,77 @@
 #include <gtest/gtest.h>
 #include <neo_core.h>
 
+TEST(core, x17) {
+    const char* input1 = "Hello, World!";
+    const char* input2 = "Hello, Universe!";
+    size_t len = strlen(input1);
+
+    uint32_t hash1 = neo_hash_x17(input1, len);
+    uint32_t hash2 = neo_hash_x17(input2, len);
+
+    EXPECT_NE(hash1, 0);
+    EXPECT_NE(hash2, 0);
+
+    EXPECT_EQ(hash1, neo_hash_x17(input1, len));
+    EXPECT_EQ(hash2, neo_hash_x17(input2, len));
+
+    EXPECT_NE(hash1, hash2);
+}
+
+TEST(core, fnv1a) {
+    const char* input1 = "Hello, World!";
+    const char* input2 = "Hello, Universe!";
+    size_t len = strlen(input1);
+
+    uint32_t hash1 = neo_hash_fnv1a(input1, len);
+    uint32_t hash2 = neo_hash_fnv1a(input2, len);
+
+    EXPECT_NE(hash1, 0);
+    EXPECT_NE(hash2, 0);
+
+    EXPECT_EQ(hash1, neo_hash_fnv1a(input1, len));
+    EXPECT_EQ(hash2, neo_hash_fnv1a(input2, len));
+
+    EXPECT_NE(hash1, hash2);
+}
+
+TEST(core, murmur) {
+    const char* input1 = "Hello, World!";
+    const char* input2 = "Hello, Universe!";
+    size_t len = strlen(input1);
+    uint32_t seed = 0xffff;
+
+    uint64_t hash1 = neo_hash_mumrmur3_86_128(input1, len, seed);
+    uint64_t hash2 = neo_hash_mumrmur3_86_128(input2, len, seed);
+
+    EXPECT_NE(hash1, 0);
+    EXPECT_NE(hash2, 0);
+
+    EXPECT_EQ(hash1, neo_hash_mumrmur3_86_128(input1, len, seed));
+    EXPECT_EQ(hash2, neo_hash_mumrmur3_86_128(input2, len, seed));
+
+    EXPECT_NE(hash1, hash2);
+}
+
+TEST(core, sip64) {
+    const char* input1 = "Hello, World!";
+    const char* input2 = "Hello, Universe!";
+    size_t len = strlen(input1);
+    uint64_t seed0 = 0xffff;
+    uint64_t seed1 = 0xaaaa;
+
+    uint64_t hash1 = neo_hash_sip64(input1, len, seed0, seed1);
+    uint64_t hash2 = neo_hash_sip64(input2, len, seed0, seed1);
+
+    EXPECT_NE(hash1, 0);
+    EXPECT_NE(hash2, 0);
+
+    EXPECT_EQ(hash1, neo_hash_sip64(input1, len, seed0, seed1));
+    EXPECT_EQ(hash2, neo_hash_sip64(input2, len, seed0, seed1));
+
+    EXPECT_NE(hash1, hash2);
+}
+
 TEST(core, tls_id) {
     std::set<std::size_t> ids {};
     std::mutex mtx {};

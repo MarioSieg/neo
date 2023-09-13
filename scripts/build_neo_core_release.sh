@@ -9,7 +9,7 @@ cd ..
 root="./bin/production"
 rm -rf $root
 mkdir $root
-cmake -S ./ -B ./$root # configure
+cmake -DNDEBUG=1 -DCMAKE_BUILD_TYPE=Release -S ./ -B ./$root # configure
 cmake --build ./$root --config=Release --target neo --target=neo -j $cores # build neo
 rm -rf tmp
 mkdir tmp
