@@ -531,28 +531,92 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
 
 static NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
 
+/* Context for semantic analysis. */
+typedef struct sema_context_t {
+    error_vector_t *errors;
+    const astpool_t *pool;
+    astref_t *blocks; /* Tracked blocks, to free symtab from. */
+    uint32_t len;
+    uint32_t cap;
+} sema_context_t;
+
+static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const astpool_t *pool) {
+    neo_dassert(self != NULL && errors != NULL);
+    memset(self, 0, sizeof(*self));
+    self->errors = errors;
+    self->pool = pool;
+    self->blocks = neo_memalloc(NULL, (self->cap=1<<6)*sizeof(*self->blocks));
+}
+
+static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
+    neo_dassert(self != NULL);
+    if (neo_unlikely(astref_isnull(symtab))) { return; }
+    const astnode_t *node = astpool_resolve(self->pool, symtab);
+    neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+    if (self->len >= self->cap) {
+        self->blocks = neo_memalloc(self->blocks, (self->cap<<=1)*sizeof(*self->blocks));
+    }
+    self->blocks[self->len++] = symtab;
+}
+
+static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables in a block. */
+    neo_dassert(self != NULL);
+    switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
+        case BLOCKSCOPE_MODULE:
+            symtab_free(&self->symtabs.sc_module.class_table);
+            break;
+        case BLOCKSCOPE_CLASS:
+            symtab_free(&self->symtabs.sc_class.method_table);
+            symtab_free(&self->symtabs.sc_class.variable_table);
+            break;
+        case BLOCKSCOPE_LOCAL:
+            symtab_free(&self->symtabs.sc_local.variable_table);
+            break;
+        case BLOCKSCOPE_PARAMLIST:
+            symtab_free(&self->symtabs.sc_params.variable_table);
+            break;
+        case BLOCKSCOPE_ARGLIST: break; /* No symbol table. */
+        case BLOCKSCOPE__COUNT: neo_unreachable();
+    }
+    memset(self, 0, sizeof(*self));
+}
+
+static void sema_ctx_free(sema_context_t *self) {
+    neo_dassert(self != NULL);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        astnode_t *node = astpool_resolve(self->pool, self->blocks[i]);
+        neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+        block_free_symtabs(&node->dat.n_block);
+    }
+    neo_memalloc(self->blocks, 0);
+    memset(self, 0, sizeof(*self));
+}
+
 static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
     symtab_t *target,
     const astpool_t *pool,
     astref_t noderef,
     astnode_type_t target_type,
     astref_t (*extractor)(const astnode_t *target),
-    error_vector_t *errors
+    sema_context_t *ctx
 ) {
-    neo_dassert(target != NULL && target->cap > 0 && pool != NULL && extractor != NULL);
+    neo_dassert(target != NULL && pool != NULL && extractor != NULL && ctx != NULL);
     if (neo_unlikely(astref_isnull(noderef))) { return; }
     const astnode_t *node = astpool_resolve(pool, noderef);
     if (node->type != target_type) { return; } /* Skip non-target nodes. */
     const astnode_t *ident = astpool_resolve(pool, (*extractor)(node));
     neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT && "AST node is not an identifier");
     const node_ident_literal_t key = ident->dat.n_ident_lit;
+    if (!target->cap || !target->buckets) { /* Init symbol table if not already done. */
+        symtab_init(target, 1<<4); /* Init symbol table. */
+    }
     /* Now that we have the key, check if the identifier is already defined in the current symbol table. */
     const symrecord_t *existing = NULL;
     if (neo_unlikely(symtab_get(target, &key, &existing))) { /* Key already exists -> ERROR. Note that this only checks if an identifier exists within the SAME symbol table. */
         neo_dassert(existing != NULL);
         uint8_t *cloned;
         srcspan_stack_clone(key.span, cloned); /* Clone span into zero terminated stack-string. */
-        errvec_push(errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
+        errvec_push(ctx->errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
         return; /* We're done. */
     }
     /* Key does not exist yet, so register it. */
@@ -580,19 +644,19 @@ static astref_t sym_extract_variable(const astnode_t *target) {
 
 static void populate_symbol_tables(
     node_block_t *self,
+    astref_t selfref,
     astpool_t *pool,
-    error_vector_t *errors
+    sema_context_t *ctx
 ) {
-#if NEO_DBG
-    neo_dassert(self->_init_sentinel && "Block node is not initialized");
-#endif
+    neo_dassert(self != NULL && pool != NULL && ctx != NULL);
     if (self->len == 0) { return; }
+    sema_ctx_push_block(ctx, selfref); /* Track block for later cleanup. */
     astref_t *children = astpool_resolvelist(pool, self->nodes);
     for (uint32_t i = 0; i < self->len; ++i) {
         astref_t target = children[i];
         if (astref_isnull(target)) { continue; } /* Skip NULL nodes. */
         /* Last but not least, inject symbols into the symbol table. */
-        switch ((block_scope_t)self->scope) { /* Inject into all symbol tables. */
+        switch (self->scope) { /* Inject into all symbol tables. */
             case BLOCKSCOPE_MODULE:
                 inject_symtab_symbol( /* Inject into module class table. */
                     &self->symtabs.sc_module.class_table,
@@ -600,7 +664,7 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_CLASS,
                     &sym_extract_class,
-                    errors
+                    ctx
                 );
             break;
             case BLOCKSCOPE_CLASS:
@@ -610,7 +674,7 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_METHOD,
                     &sym_extract_method,
-                    errors
+                    ctx
                 );
                 inject_symtab_symbol( /* Inject into class variable table. */
                     &self->symtabs.sc_class.variable_table,
@@ -618,7 +682,7 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    errors
+                    ctx
                 );
             break;
             case BLOCKSCOPE_LOCAL:
@@ -628,7 +692,7 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    errors
+                    ctx
                 );
             break;
             case BLOCKSCOPE_PARAMLIST:
@@ -638,7 +702,7 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    errors
+                    ctx
                 );
             break;
             case BLOCKSCOPE_ARGLIST: break; /* No symbols to inject. */
@@ -648,7 +712,7 @@ static void populate_symbol_tables(
 }
 
 static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
-    error_vector_t *errors = (error_vector_t *)usr;
+    sema_context_t *ctx = (sema_context_t *)usr;
     astnode_t *node = astpool_resolve(pool, ref);
     switch (node->type) {
         case ASTNODE_ERROR: {
@@ -706,7 +770,7 @@ static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
         } return;
         case ASTNODE_BLOCK: {
             node_block_t *data = &node->dat.n_block;
-            populate_symbol_tables(data, pool, errors);
+            populate_symbol_tables(data, ref, pool, ctx);
             node_block_dump_symbols(data, stdout);
         } return;
         case ASTNODE_VARIABLE: {
@@ -740,7 +804,10 @@ static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
 static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors) {
     neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL);
     uint32_t error_count = errors->len;
-    astnode_visit(pool, root, &semantic_visitor, errors);
+    sema_context_t ctx;
+    sema_ctx_init(&ctx, errors, pool);
+    astnode_visit(pool, root, &semantic_visitor, &ctx);
+    sema_ctx_free(&ctx);
     return errors->len == error_count;
 }
 

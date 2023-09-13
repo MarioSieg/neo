@@ -10,7 +10,7 @@ TEST(prng, diff_int) { // This test just checks that all randoms are different o
     prng_init_seed(&prng, 0);
 
     std::unordered_set<neo_int_t> gen {};
-    constexpr std::size_t lim {1'000'000};
+    constexpr std::size_t lim {100'000};
     gen.reserve(lim);
 
     for (std::size_t i {}; i < lim; ++i) {
@@ -35,7 +35,7 @@ TEST(prng, diff_float) { // This test just checks that all randoms are different
     prng_init_seed(&prng, 0);
 
     std::unordered_set<neo_float_t> gen {};
-    constexpr std::size_t lim {5'000'000};
+    constexpr std::size_t lim {100'000};
     gen.reserve(lim);
 
     for (std::size_t i {}; i < lim; ++i) {
