@@ -56,9 +56,6 @@ typedef struct node_ident_literal_t {
     token_t tok; /* Contains the token for better error handling in the semantic analysis stage. */
 } node_ident_literal_t;
 
-#define SYMTAB_DEFAULT_CAPACITY 32
-#define SYMTAB_MAX_LOAD 0.75
-
 /* Symbol table entry data structure. */
 typedef struct symrecord_t {
     token_t tok;
@@ -68,10 +65,7 @@ typedef struct symrecord_t {
 /* Symbol table bucket data structure. */
 typedef struct symbuck_t symbuck_t;
 struct symbuck_t {
-    symbuck_t *next;
-    union {
-        node_ident_literal_t key;
-    };
+    node_ident_literal_t key;
     symrecord_t val;
 };
 
@@ -80,12 +74,10 @@ typedef struct symtab_t {
     symbuck_t *buckets;
     uint32_t len;
     uint32_t cap;
-    symbuck_t *first; /* Ordered linked list of all buckets. */
-    symbuck_t *last;
 } symtab_t;
 
 extern NEO_EXPORT void symtab_init(symtab_t *self, uint32_t cap);
-extern NEO_EXPORT void symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val);
+extern NEO_EXPORT bool symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val);
 extern NEO_EXPORT bool symtab_get(symtab_t *self, const node_ident_literal_t *key, const symrecord_t **val);
 extern NEO_EXPORT uint32_t symtab_len(const symtab_t *self);
 extern NEO_EXPORT void symtab_iter(const symtab_t *self, void (*callback)(const node_ident_literal_t *key, const symrecord_t *val, void *usr), void *usr);
@@ -229,20 +221,18 @@ typedef struct node_block_t {
         struct {
             symtab_t variable_table; /* Local parameter variables. */
         } sc_params; /* Scope of: BLOCKSCOPE_PARAMLIST */
-    } symtabs;
+    } symtabs; /* The symbol tables are initialized when the block is created, but populated in the semantic analysis stage. */
     listref_t nodes; /* Child nodes. */
     uint32_t len;
     uint32_t cap;
-    struct error_vector_t *errors;
 #if NEO_DBG
     bool _init_sentinel : 1;
 #endif
 } node_block_t;
 
-extern NEO_EXPORT void node_block_init(node_block_t *self, struct error_vector_t *errors, block_scope_t scope); /* Intialize block and symbol tables. node_block_free() must only be called when the block is never allocated by the AST pool using astnode_new_block and friends.  */
+extern NEO_EXPORT void node_block_init(node_block_t *self, block_scope_t scope);
 extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *self, astref_decl(req) node);
-extern NEO_EXPORT NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
-extern NEO_EXPORT void node_block_free(node_block_t *self); /* Free block and symbol tables. */
+extern NEO_EXPORT void node_block_free(node_block_t *self);
 
 /* Variable type */
 typedef enum variable_scope_t {
@@ -319,7 +309,7 @@ neo_static_assert(ASTNODE__COUNT <= 63);
 #define ASTNODE_HULL_MASK (astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE)|astmask(ASTNODE_SELF_LIT))  /* Hulls are nodes which have no data associated with them. E.g. break has no children or data. */
 #define ASTNODE_LITERAL_MASK (astmask(ASTNODE_INT_LIT)|astmask(ASTNODE_FLOAT_LIT)|astmask(ASTNODE_CHAR_LIT)|astmask(ASTNODE_BOOL_LIT)|astmask(ASTNODE_STRING_LIT)|astmask(ASTNODE_IDENT_LIT)|astmask(ASTNODE_SELF_LIT)) /* All literal types. */
 #define ASTNODE_EXPR_MASK (ASTNODE_LITERAL_MASK|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP)) /* All expression types. */
-#define ASTNODE_LEAF_MASK (ASTNODE_HULL_MASK|ASTNODE_LITERAL_MASK) /* Leafs are nodes which have no further children. Logically, all hulls are also leafs. */
+#define ASTNODE_LEAF_MASK (ASTNODE_HULL_MASK|ASTNODE_LITERAL_MASK|astmask(ASTNODE_ERROR)) /* Leafs are nodes which have no further children. Logically, all hulls are also leafs. */
 #define ASTNODE_CONTROL_FLOW (astmask(ASTNODE_BRANCH)|astmask(ASTNODE_RETURN)|astmask(ASTNODE_LOOP)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE)) /* And also the CALL binary expression. */
 neo_static_assert(ASTNODE_HULL_MASK <= UINT64_MAX);
 neo_static_assert(ASTNODE_LITERAL_MASK <= UINT64_MAX);
@@ -366,7 +356,7 @@ extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, c
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_method(astpool_t *pool, const node_method_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block(astpool_t *pool, const node_block_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, struct error_vector_t *errors, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_block_with_nodes(astpool_t *pool, block_scope_t type, astref_t *nodes); /* Note: Assign ASTREF_NULL as last element (terminator) in the nodes array! */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_variable(astpool_t *pool, const node_variable_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_return(astpool_t *pool, const node_return_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_break(astpool_t *pool);
@@ -377,7 +367,7 @@ extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_class(astpool_t *pool, cons
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_module(astpool_t *pool, const node_module_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_self(astpool_t *pool);
 
-extern NEO_EXPORT size_t astnode_visit(const astpool_t *pool, astref_t root, void (*visitor)(const astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
+extern NEO_EXPORT size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *pool, astref_t node, void *user), void *user); /* Visits AST tree in depth-first order. Returns the amount of nodes visited. */
 
 struct astpool_t {
     neo_mempool_t node_pool; /* Stores the astnode_t objects. */
@@ -403,7 +393,8 @@ static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidlistref(const astpool_t *se
 ** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
 */
 static NEO_AINLINE NEO_NODISCARD astnode_t *astpool_resolve(const astpool_t *self, astref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
+    neo_dassert(self->node_pool.cap > self->node_pool.len);
 #if NEO_DBG
     if (!astref_isnull(ref)) {
         neo_dassert(astpool_isvalidref(self, ref));
@@ -412,14 +403,15 @@ static NEO_AINLINE NEO_NODISCARD astnode_t *astpool_resolve(const astpool_t *sel
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
 static NEO_AINLINE NEO_NODISCARD astref_t *astpool_resolvelist(const astpool_t *self, listref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL);
+    neo_dassert(self->list_pool.cap > self->list_pool.len);
     neo_assert(astpool_isvalidlistref(self, ref));
     return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 
 #ifdef NEO_EXTENSION_AST_RENDERING
-extern NEO_EXPORT void ast_node_graphviz_dump(const astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
-extern NEO_EXPORT void ast_node_graphviz_render(const astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
+    extern NEO_EXPORT void ast_node_graphviz_dump(astpool_t *pool, astref_t root, FILE *f); /* Dumps AST tree as Graphviz code which can be then visualized.  */
+    extern NEO_EXPORT void ast_node_graphviz_render(astpool_t *pool, astref_t root, const char *filename); /* Renders AST tree as jpg image using Graphviz. */
 #endif
 
 #ifdef __cplusplus

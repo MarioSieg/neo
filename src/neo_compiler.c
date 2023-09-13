@@ -7,7 +7,7 @@
 #include "neo_parser.h"
 
 /* Forward declarations. */
-static bool perform_semantic_analysis(const astpool_t *pool, astref_t root, error_vector_t *errors);
+static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors);
 
 static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
     uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
@@ -147,6 +147,7 @@ void errvec_clear(error_vector_t *self) {
         comerror_free(self->p[i]);
         self->p[i] = NULL;
     }
+    memset(self->p, 0, self->cap*sizeof(*self->p)); /* Reset error list. */
     self->len = 0;
 }
 
@@ -330,44 +331,69 @@ static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src
     errvec_clear(&self->errors);
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
+    neo_dassert(self->errors.len == 0);
+    neo_dassert(self->parser.lex.src == src->src);
 }
 
-bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user) {
+static void render_ast(neo_compiler_t *self, const source_t *src) {
+#ifdef NEO_EXTENSION_AST_RENDERING
+    size_t len = strlen((const char *)src->filename);
+    if (!neo_utf8_is_ascii(src->filename, len)) {
+        print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
+    } else {
+        char *filename = alloca(len+sizeof("_ast.jpg"));
+        memcpy(filename, src->filename, len);
+        memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
+        filename[len+sizeof("_ast.jpg")-1] = '\0';
+        ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
+    }
+#else
+    print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
+#endif
+}
+
+static NEO_NODISCARD bool compile_module(neo_compiler_t *self, const source_t *src) {
+    neo_dassert(self != NULL && src != NULL);
+    compiler_reset_and_prepare(self, src); /* 1. Reset compiler state and prepare for new compilation. */
+    self->ast = parser_drain(&self->parser); /* 2. Parse source code into AST. */
+    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
+    if (neo_unlikely(!perform_semantic_analysis(&self->parser.pool, self->ast, &self->errors))) { /* 3. Perform semantic analysis. */
+        return false;
+    }
+    /* 4. Generate bytecode. */
+    return self->errors.len == 0;
+}
+
+#define invoke_opt_hook(hook, ...) \
+    if ((hook) != NULL) { \
+        (*(hook))(__VA_ARGS__); \
+    }
+
+bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr) {
     neo_assert(self && "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
     if (source_is_empty(src)) { return true; } /* Empty source -> we're done here. */
     clock_t begin = clock();
-    if (self->pre_compile_callback) {
-        (*self->pre_compile_callback)(src, self->flags, user);
-    }
-    compiler_reset_and_prepare(self, src);
-    self->ast = parser_drain(&self->parser);
-    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
-    if (self->post_compile_callback) {
-        (*self->post_compile_callback)(src, self->flags, user);
-    }
-    if (compiler_has_flags(self, COM_FLAG_RENDER_AST)) {
-#ifdef NEO_EXTENSION_AST_RENDERING
-        size_t len = strlen((const char *)src->filename);
-        if (!neo_utf8_is_ascii(src->filename, len)) {
-            print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
-        } else {
-            char *filename = alloca(len+sizeof("_ast.jpg"));
-            memcpy(filename, src->filename, len);
-            memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
-            filename[len+sizeof("_ast.jpg")-1] = '\0';
-            ast_node_graphviz_render(&self->parser.pool, self->ast, filename);
-        }
-#else
-        print_status_msg(self, NEO_CCRED, "Failed to render AST, Graphviz extension is not enabled.");
-#endif
-    }
-    if (neo_unlikely(self->errors.len)) {
-        print_status_msg(self, NEO_CCRED, "Compilation failed with %"PRIu32" error%s.", self->errors.len, self->errors.len > 1 ? "s" : "");
+    invoke_opt_hook(self->pre_compile_callback, src, self->flags, usr);
+    bool success = compile_module(self, src);
+    invoke_opt_hook(self->post_compile_callback, src, self->flags, usr);
+    if (neo_unlikely(!success)) { /* Compilation failed. */
+        print_status_msg(
+            self,
+            NEO_CCRED,
+            "Compilation failed with %"PRIu32" error%s.",
+            self->errors.len,
+            self->errors.len > 1 ? "s" : ""
+        );
         if (!compiler_has_flags(self, COM_FLAG_NO_ERROR_DUMP)) {
             errvec_print(&self->errors, stdout, !compiler_has_flags(self, COM_FLAG_NO_COLOR));
         }
+        invoke_opt_hook(self->on_error_callback, src, self->flags, usr);
+        invoke_opt_hook(self->on_warning_callback, src, self->flags, usr);
         return false;
+    }
+    if (neo_unlikely(compiler_has_flags(self, COM_FLAG_RENDER_AST))) {
+        render_ast(self, src);
     }
     double time_spent = (double)(clock()-begin)/CLOCKS_PER_SEC;
     if (!compiler_has_flags(self, COM_FLAG_NO_STATUS)) {
@@ -503,20 +529,238 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
 ** The parser already checks this because the symbol tables are built in the same step.
 */
 
-typedef struct semantic_context_t {
-    error_vector_t *errors;
-} semantic_context_t;
+static NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
 
-static void semantic_visitor(const astpool_t *pool, astref_t node, void *usr) {
-    semantic_context_t *context = usr;
+static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
+    symtab_t *target,
+    const astpool_t *pool,
+    astref_t noderef,
+    astnode_type_t target_type,
+    astref_t (*extractor)(const astnode_t *target),
+    error_vector_t *errors
+) {
+    neo_dassert(target != NULL && target->cap > 0 && pool != NULL && extractor != NULL);
+    if (neo_unlikely(astref_isnull(noderef))) { return; }
+    const astnode_t *node = astpool_resolve(pool, noderef);
+    if (node->type != target_type) { return; } /* Skip non-target nodes. */
+    const astnode_t *ident = astpool_resolve(pool, (*extractor)(node));
+    neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT && "AST node is not an identifier");
+    const node_ident_literal_t key = ident->dat.n_ident_lit;
+    /* Now that we have the key, check if the identifier is already defined in the current symbol table. */
+    const symrecord_t *existing = NULL;
+    if (neo_unlikely(symtab_get(target, &key, &existing))) { /* Key already exists -> ERROR. Note that this only checks if an identifier exists within the SAME symbol table. */
+        neo_dassert(existing != NULL);
+        uint8_t *cloned;
+        srcspan_stack_clone(key.span, cloned); /* Clone span into zero terminated stack-string. */
+        errvec_push(errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
+        return; /* We're done. */
+    }
+    /* Key does not exist yet, so register it. */
+    const symrecord_t val = {
+        .tok = key.tok,
+        .node = noderef
+    };
+    symtab_put(target, &key, &val); /* Insert symbol. */
 }
 
-static bool perform_semantic_analysis(const astpool_t *pool, astref_t root, error_vector_t *errors) {
+static astref_t sym_extract_class(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_CLASS);
+    return target->dat.n_class.ident;
+}
+
+static astref_t sym_extract_method(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_METHOD);
+    return target->dat.n_method.ident;
+}
+
+static astref_t sym_extract_variable(const astnode_t *target) {
+    neo_dassert(target != NULL && target->type == ASTNODE_VARIABLE);
+    return target->dat.n_variable.ident;
+}
+
+static void populate_symbol_tables(
+    node_block_t *self,
+    astpool_t *pool,
+    error_vector_t *errors
+) {
+#if NEO_DBG
+    neo_dassert(self->_init_sentinel && "Block node is not initialized");
+#endif
+    if (self->len == 0) { return; }
+    astref_t *children = astpool_resolvelist(pool, self->nodes);
+    for (uint32_t i = 0; i < self->len; ++i) {
+        astref_t target = children[i];
+        if (astref_isnull(target)) { continue; } /* Skip NULL nodes. */
+        /* Last but not least, inject symbols into the symbol table. */
+        switch ((block_scope_t)self->scope) { /* Inject into all symbol tables. */
+            case BLOCKSCOPE_MODULE:
+                inject_symtab_symbol( /* Inject into module class table. */
+                    &self->symtabs.sc_module.class_table,
+                    pool,
+                    target,
+                    ASTNODE_CLASS,
+                    &sym_extract_class,
+                    errors
+                );
+            break;
+            case BLOCKSCOPE_CLASS:
+                inject_symtab_symbol( /* Inject into class method table. */
+                    &self->symtabs.sc_class.method_table,
+                    pool,
+                    target,
+                    ASTNODE_METHOD,
+                    &sym_extract_method,
+                    errors
+                );
+                inject_symtab_symbol( /* Inject into class variable table. */
+                    &self->symtabs.sc_class.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    errors
+                );
+            break;
+            case BLOCKSCOPE_LOCAL:
+                inject_symtab_symbol( /* Inject into local variable table. */
+                    &self->symtabs.sc_local.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    errors
+                );
+            break;
+            case BLOCKSCOPE_PARAMLIST:
+                inject_symtab_symbol( /* Inject into parameter variable table. */
+                    &self->symtabs.sc_params.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    errors
+                );
+            break;
+            case BLOCKSCOPE_ARGLIST: break; /* No symbols to inject. */
+            case BLOCKSCOPE__COUNT: neo_unreachable();
+        }
+    }
+}
+
+static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
+    error_vector_t *errors = (error_vector_t *)usr;
+    astnode_t *node = astpool_resolve(pool, ref);
+    switch (node->type) {
+        case ASTNODE_ERROR: {
+            const node_error_t *data = &node->dat.n_error;
+            (void)data;
+        } return;
+        case ASTNODE_BREAK: {
+
+        } return;
+        case ASTNODE_CONTINUE: {
+
+        } return;
+        case ASTNODE_INT_LIT: {
+            const node_int_literal_t *data = &node->dat.n_int_lit;
+            (void)data;
+        } return;
+        case ASTNODE_FLOAT_LIT: {
+            const node_float_literal_t *data = &node->dat.n_float_lit;
+            (void)data;
+        } return;
+        case ASTNODE_CHAR_LIT: {
+            const node_char_literal_t *data = &node->dat.n_char_lit;
+            (void)data;
+        } return;
+        case ASTNODE_BOOL_LIT: {
+            const node_bool_literal_t *data = &node->dat.n_bool_lit;
+            (void)data;
+        } return;
+        case ASTNODE_STRING_LIT: {
+            const node_string_literal_t *data = &node->dat.n_string_lit;
+            (void)data;
+        } return;
+        case ASTNODE_IDENT_LIT: {
+            const node_ident_literal_t *data = &node->dat.n_ident_lit;
+            (void)data;
+        } return;
+        case ASTNODE_SELF_LIT: {
+
+        } return;
+        case ASTNODE_GROUP: {
+            const node_group_t *data = &node->dat.n_group;
+            (void)data;
+        } return;
+        case ASTNODE_UNARY_OP: {
+            const node_unary_op_t *data = &node->dat.n_unary_op;
+            (void)data;
+        } return;
+        case ASTNODE_BINARY_OP: {
+            const node_binary_op_t *data = &node->dat.n_binary_op;
+            (void)data;
+        } return;
+        case ASTNODE_METHOD: {
+            const node_method_t *data = &node->dat.n_method;
+            (void)data;
+        } return;
+        case ASTNODE_BLOCK: {
+            node_block_t *data = &node->dat.n_block;
+            populate_symbol_tables(data, pool, errors);
+            node_block_dump_symbols(data, stdout);
+        } return;
+        case ASTNODE_VARIABLE: {
+            const node_variable_t *data = &node->dat.n_variable;
+            (void)data;
+        } return;
+        case ASTNODE_RETURN: {
+            const node_return_t *data = &node->dat.n_return;
+            (void)data;
+        } return;
+        case ASTNODE_BRANCH: {
+            const node_branch_t *data = &node->dat.n_branch;
+            (void)data;
+        } return;
+        case ASTNODE_LOOP: {
+            const node_loop_t *data = &node->dat.n_loop;
+            (void)data;
+        } return;
+        case ASTNODE_CLASS: {
+            const node_class_t *data = &node->dat.n_class;
+            (void)data;
+        } return;
+        case ASTNODE_MODULE: {
+            const node_module_t *data = &node->dat.n_module;
+            (void)data;
+        } return;
+        case ASTNODE__COUNT: neo_unreachable();
+    }
+}
+
+static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors) {
     neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL);
     uint32_t error_count = errors->len;
-    semantic_context_t context = {
-        .errors = errors
-    };
-    astnode_visit(pool, root, &semantic_visitor, &context);
+    astnode_visit(pool, root, &semantic_visitor, errors);
     return errors->len == error_count;
+}
+
+static NEO_COLDPROC NEO_UNUSED void node_block_dump_symbols(const node_block_t *self, FILE *f) {
+    neo_dassert(self != NULL && f != NULL);
+    switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
+        case BLOCKSCOPE_MODULE:
+            symtab_print(&self->symtabs.sc_module.class_table, f, "Classes");
+            break;
+        case BLOCKSCOPE_CLASS:
+            symtab_print(&self->symtabs.sc_class.method_table, f, "Methods");
+            symtab_print(&self->symtabs.sc_class.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_LOCAL:
+            symtab_print(&self->symtabs.sc_local.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_PARAMLIST:
+            symtab_print(&self->symtabs.sc_params.variable_table, f, "Variables");
+            break;
+        case BLOCKSCOPE_ARGLIST: break; /* No symbol table. */
+        case BLOCKSCOPE__COUNT: neo_unreachable();
+    }
 }

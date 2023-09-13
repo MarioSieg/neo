@@ -272,6 +272,191 @@ uint32_t neo_hash_fnv1a(const void *key, size_t len) {
     return (uint32_t )(r ^ (r >> 32));
 }
 
+#define	ROTL32(x, r) ((x << r) | (x >> (32 - r)))
+#define FMIX32(h) h^=h>>16; h*=0x85ebca6b; h^=h>>13; h*=0xc2b2ae35; h^=h>>16;
+
+uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed) {
+    const uint8_t * data = (const uint8_t*)key;
+    int64_t nblocks = (int64_t)len / 16;
+    uint32_t h1 = seed;
+    uint32_t h2 = seed;
+    uint32_t h3 = seed;
+    uint32_t h4 = seed;
+    uint32_t c1 = 0x239b961b;
+    uint32_t c2 = 0xab0e9789;
+    uint32_t c3 = 0x38b34ae5;
+    uint32_t c4 = 0xa1e38b93;
+    const uint32_t * blocks = (const uint32_t *)(data + nblocks*16);
+    for (int64_t i = -nblocks; i; ++i) {
+        uint32_t k1 = blocks[i*4+0];
+        uint32_t k2 = blocks[i*4+1];
+        uint32_t k3 = blocks[i*4+2];
+        uint32_t k4 = blocks[i*4+3];
+        k1 *= c1;
+        k1 = ROTL32(k1, 15);
+        k1 *= c2;
+        h1 ^= k1;
+        h1 = ROTL32(h1, 19);
+        h1 += h2;
+        h1 = h1 * 5 + 0x561ccd1b;
+        k2 *= c2;
+        k2 = ROTL32(k2, 16);
+        k2 *= c3;
+        h2 ^= k2;
+        h2 = ROTL32(h2, 17);
+        h2 += h3;
+        h2 = h2 * 5 + 0x0bcaa747;
+        k3 *= c3;
+        k3 = ROTL32(k3, 17);
+        k3 *= c4;
+        h3 ^= k3;
+        h3 = ROTL32(h3, 15);
+        h3 += h4;
+        h3 = h3 * 5 + 0x96cd1c35;
+        k4 *= c4;
+        k4 = ROTL32(k4, 18);
+        k4 *= c1;
+        h4 ^= k4;
+        h4 = ROTL32(h4, 13);
+        h4 += h1;
+        h4 = h4 * 5 + 0x32ac3b17;
+    }
+    const uint8_t * tail = (const uint8_t*)(data + nblocks*16);
+    uint32_t k1 = 0;
+    uint32_t k2 = 0;
+    uint32_t k3 = 0;
+    uint32_t k4 = 0;
+    switch(len & 15) {
+        case 15: k4 ^= (uint32_t)tail[14] << 16; NEO_FALLTHROUGH;
+        case 14: k4 ^= (uint32_t)tail[13] << 8; NEO_FALLTHROUGH;
+        case 13: k4 ^= (uint32_t)tail[12] << 0;
+            k4 *= c4;
+            k4 = ROTL32(k4, 18);
+            k4 *= c1;
+            h4 ^= k4;
+            NEO_FALLTHROUGH;
+        case 12: k3 ^= (uint32_t)tail[11] << 24; NEO_FALLTHROUGH;
+        case 11: k3 ^= (uint32_t)tail[10] << 16; NEO_FALLTHROUGH;
+        case 10: k3 ^= (uint32_t)tail[9] << 8; NEO_FALLTHROUGH;
+        case  9: k3 ^= (uint32_t)tail[8] << 0;
+            k3 *= c3;
+            k3 = ROTL32(k3, 17);
+            k3 *= c4;
+            h3 ^= k3;
+            NEO_FALLTHROUGH;
+        case  8: k2 ^= (uint32_t)tail[7] << 24; NEO_FALLTHROUGH;
+        case  7: k2 ^= (uint32_t)tail[6] << 16;  NEO_FALLTHROUGH;
+        case  6: k2 ^= (uint32_t)tail[5] << 8;  NEO_FALLTHROUGH;
+        case  5: k2 ^= (uint32_t)tail[4] << 0;
+            k2 *= c2;
+            k2 = ROTL32(k2, 16);
+            k2 *= c3;
+            h2 ^= k2;
+            NEO_FALLTHROUGH;
+        case  4: k1 ^= (uint32_t)tail[3] << 24;  NEO_FALLTHROUGH;
+        case  3: k1 ^= (uint32_t)tail[2] << 16; NEO_FALLTHROUGH;
+        case  2: k1 ^= (uint32_t)tail[1] << 8;  NEO_FALLTHROUGH;
+        case  1: k1 ^= (uint32_t)tail[0] << 0;
+            k1 *= c1;
+            k1 = ROTL32(k1, 15);
+            k1 *= c2;
+            h1 ^= k1;
+    };
+    h1 ^= (uint32_t)len;
+    h2 ^= (uint32_t)len;
+    h3 ^= (uint32_t)len;
+    h4 ^= (uint32_t)len;
+    h1 += h2;
+    h1 += h3;
+    h1 += h4;
+    h2 += h1;
+    h3 += h1;
+    h4 += h1;
+    FMIX32(h1);
+    FMIX32(h2);
+    FMIX32(h3);
+    FMIX32(h4);
+    h1 += h2;
+    h1 += h3;
+    h1 += h4;
+    h2 += h1;
+    h3 += h1;
+    h4 += h1;
+    return (((uint64_t)h2) << 32) | h1;
+}
+
+#define u8load64_le(p) \
+    {  (((uint64_t)((p)[0])) | ((uint64_t)((p)[1]) << 8) | \
+        ((uint64_t)((p)[2]) << 16) | ((uint64_t)((p)[3]) << 24) | \
+        ((uint64_t)((p)[4]) << 32) | ((uint64_t)((p)[5]) << 40) | \
+        ((uint64_t)((p)[6]) << 48) | ((uint64_t)((p)[7]) << 56)) }
+#define u64split8_le(p, v) \
+    { u8load32_le((p), (uint32_t)((v))); \
+      u8load32_le((p) + 4, (uint32_t)((v) >> 32)); }
+#define u8load32_le(p, v) \
+    { (p)[0] = (uint8_t)((v)); \
+      (p)[1] = (uint8_t)((v) >> 8); \
+      (p)[2] = (uint8_t)((v) >> 16); \
+      (p)[3] = (uint8_t)((v) >> 24); }
+#define rol64(x, b) (uint64_t)(((x) << (b)) | ((x) >> (64 - (b))))
+#define stipround() \
+    { v0 += v1; v1 = rol64(v1, 13); \
+      v1 ^= v0; v0 = rol64(v0, 32); \
+      v2 += v3; v3 = rol64(v3, 16); \
+      v3 ^= v2; \
+      v0 += v3; v3 = rol64(v3, 21); \
+      v3 ^= v0; \
+      v2 += v1; v1 = rol64(v1, 17); \
+      v1 ^= v2; v2 = rol64(v2, 32); }
+
+uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t seed1) {
+    const uint8_t *in = (const uint8_t *)key;
+    uint64_t k0 = u8load64_le((uint8_t *)&seed0);
+    uint64_t k1 = u8load64_le((uint8_t *)&seed1);
+    uint64_t v3 = UINT64_C(0x7465646279746573) ^ k1;
+    uint64_t v2 = UINT64_C(0x6c7967656e657261) ^ k0;
+    uint64_t v1 = UINT64_C(0x646f72616e646f6d) ^ k1;
+    uint64_t v0 = UINT64_C(0x736f6d6570736575) ^ k0;
+    const uint8_t *end = in + len - (len % sizeof(uint64_t));
+    for (; in != end; in += 8) {
+        uint64_t m = u8load64_le(in);
+        v3 ^= m;
+        stipround();
+        stipround();
+        v0 ^= m;
+    }
+    uint64_t b = ((uint64_t)len) << 56;
+    switch (len & 7) {
+        case 7: b |= ((uint64_t)in[6]) << 48; NEO_FALLTHROUGH;
+        case 6: b |= ((uint64_t)in[5]) << 40; NEO_FALLTHROUGH;
+        case 5: b |= ((uint64_t)in[4]) << 32; NEO_FALLTHROUGH;
+        case 4: b |= ((uint64_t)in[3]) << 24; NEO_FALLTHROUGH;
+        case 3: b |= ((uint64_t)in[2]) << 16; NEO_FALLTHROUGH;
+        case 2: b |= ((uint64_t)in[1]) << 8;  NEO_FALLTHROUGH;
+        case 1: b |= ((uint64_t)in[0]); break;
+        case 0: break;
+    }
+    v3 ^= b;
+    stipround();
+    stipround();
+    v0 ^= b;
+    v2 ^= 0xff;
+    stipround();
+    stipround();
+    stipround();
+    stipround();
+    b = v0 ^ v1 ^ v2 ^ v3;
+    uint64_t out = 0;
+    u64split8_le((uint8_t*)&out, b);
+    return out;
+}
+
+#undef stipround
+#undef rol64
+#undef u8load32_le
+#undef u64split8_le
+#undef u8load64_le
+
 neo_static_assert(sizeof(char) == sizeof(uint8_t));
 uint8_t *neo_strdup2(const uint8_t *str) {
    return (uint8_t *)neo_strdup((const char *)str);

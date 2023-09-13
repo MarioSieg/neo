@@ -131,7 +131,7 @@ typedef struct srcspan_t {
 } srcspan_t;
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
 #define srcspan_eq(a, b) ((a).len == (b).len && ((a).p == (b).p || memcmp((a).p, (b).p, (a).len) == 0))
-#define srcspan_hash(span) (neo_hash_x17((span).p, (span).len))
+#define srcspan_hash(span) (neo_hash_fnv1a((span).p, (span).len))
 #define srcspan_stack_clone(span, var) /* Create null-terminated stack copy of source span using alloca. */\
     (var) = alloca((1+span.len)*sizeof(*(var))); /* +1 for \0. */\
     memcpy((var), span.p, span.len*sizeof(*(var)));\

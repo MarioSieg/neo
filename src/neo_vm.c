@@ -274,8 +274,9 @@ void prng_from_seed(prng_state_t *self, double seed) {
         uint32_t m = 1u<<(r&255); /* Mask. */
         r >>= 8;
         double d = seed = seed * 3.14159265358979323846 + 2.7182818284590452354;
-        if (*(uint64_t *)&d < m) { *(uint64_t *)&d += m; }
-        self->s[i] = *(uint64_t *)&d;
+        union { double d; uint64_t u; } u = { .d = d };
+        if (u.u < m) { u.u += m; }
+        self->s[i] = u.u;
     }
     for (int i = 0; i < 10; ++i) {
         (void)prng_next_i64(self);
@@ -284,7 +285,7 @@ void prng_from_seed(prng_state_t *self, double seed) {
 
 #define tausworthe223_gen(self, z, r, i, k, q, v) \
   z = (self)->s[i]; \
-  z = (((z << q) ^ z) >> (k-v)) ^ ((z & ((uint64_t)0xffffffffffffffffull << (64-k))) << v); \
+  z = (((z << q) ^ z) >> (k-v)) ^ ((z & (0xffffffffffffffffull << (64-k))) << v); \
   r ^= z; \
   (self)->s[i] = z
 
@@ -298,7 +299,8 @@ neo_int_t prng_next_i64(prng_state_t *self) {
     neo_dassert(self != NULL);
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
-    return *(int64_t *)&r;
+    union { uint64_t u; int64_t i; } u = { .u = r };
+    return u.i;
 }
 
 neo_float_t prng_next_f64(prng_state_t *self) {
@@ -306,7 +308,8 @@ neo_float_t prng_next_f64(prng_state_t *self) {
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
     r = (r & 0xfffffffffffffull) | 0x3ff0000000000000ull; /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
-    return *(double *)&r - 1.0;
+    union { uint64_t u; double d; } u = { .u = r };
+    return u.d - 1.0;
 }
 
 #undef imulov

@@ -694,6 +694,8 @@ extern NEO_EXPORT bool neo_utf8_is_ascii(const uint8_t *buf, size_t len);
 
 extern NEO_EXPORT uint32_t neo_hash_x17(const void *key, size_t len);
 extern NEO_EXPORT uint32_t neo_hash_fnv1a(const void *key, size_t len);
+extern NEO_EXPORT uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed);
+extern NEO_EXPORT uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t seed1);
 
 /* ---- Utilities ---- */
 

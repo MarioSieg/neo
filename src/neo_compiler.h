@@ -127,7 +127,7 @@ extern NEO_EXPORT void compiler_free(neo_compiler_t **self);
 ** @param filename Filename of the source code.
 ** @return True if compilation was successful, false otherwise. See compiler_get_errors() for more information.
 */
-extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const source_t *src, void *user);
+extern NEO_EXPORT NEO_HOTPROC bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr);
 
 extern NEO_EXPORT const error_vector_t *compiler_get_errors(const neo_compiler_t *self);
 extern NEO_EXPORT astref_t compiler_get_ast_root(const neo_compiler_t *self, const astpool_t **pool);

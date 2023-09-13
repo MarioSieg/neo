@@ -22,6 +22,7 @@ TEST(ast, symtab) {
         };
 
         symrecord_t value {
+            .tok = {},
             .node =  static_cast<astref_t>(i)
         };
 
@@ -186,7 +187,7 @@ TEST(ast, visit) {
     static astref_t *mmock;
     mmock = &mock;
     static int count {};
-    auto visitor = [](const astpool_t *pool, astref_t node, void *data) -> void {
+    auto visitor = [](astpool_t *pool, astref_t node, void *data) -> void {
         ASSERT_TRUE(astpool_isvalidref(pool, node));
         astnode_t *pnode = astpool_resolve(pool, node);
         ++node_type_counts[pnode->type];
