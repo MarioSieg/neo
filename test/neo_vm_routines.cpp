@@ -43,7 +43,7 @@ TEST(vm_ops, floor_zero) {
 
 TEST(vm_ops, mod_zero) {
     EXPECT_DOUBLE_EQ(vmop_mod(0.0, 3.0), std::fmod(0.0, 3.0));
-    EXPECT_DOUBLE_EQ(vmop_mod(7.0, 0.0), std::fmod(7.0, 0.0)); // Division by zero, expect NaN.
+    EXPECT_TRUE(isnan(vmop_mod(7.0, 0.0))); // Division by zero, expect NaN.
 }
 
 TEST(vm_ops, ceil_large_numbers) {

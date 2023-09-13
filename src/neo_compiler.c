@@ -5,7 +5,9 @@
 #include "neo_ast.h"
 #include "neo_lexer.h"
 #include "neo_parser.h"
-#include "neo_bc.h"
+
+/* Forward declarations. */
+static bool perform_semantic_analysis(const astpool_t *pool, astref_t root, error_vector_t *errors);
 
 static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
     uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
@@ -89,7 +91,7 @@ void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
         }
         fputs(color, f);
         for (uint32_t i = 0; i < strlen((const char *)self->lexeme); ++i) { /* Print underline. */
-            fprintf(f, "^");
+            fputc('^', f);
         }
         fputs(reset, f);
         fputc('\n', f);
@@ -456,4 +458,65 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
     neo_assert(self && "Compiler pointer is NULL");
     neo_assert(new_hook && "Callback hook is NULL");
     self->on_error_callback = new_hook;
+}
+
+/*
+** The semantic analysis needs to check for the following things:
+**  Variable Declaration and Scope:
+**      Ensure that variables are declared before they are used.
+**      Check that variables are not redeclared within the same scope.
+**      Implement a scoping mechanism and ensure that variables are accessible within their respective scopes.
+**  Type Checking:
+**      Verify that expressions and operands have compatible types. For example, you should not be able to add a string to an integer.
+**      Enforce type compatibility rules for assignments, function parameters, and return values.
+**      Detect type mismatches and report appropriate error messages.
+**  Function and Method Calls:
+**      Check that functions and methods are called with the correct number and types of arguments.
+**      Verify that functions and methods return values of the expected types.
+**  Control Structures:
+**      Ensure that conditional statements (if, else) have boolean expressions as conditions.
+**      Verify that loop control expressions (for, while) are boolean.
+**      Check for proper nesting and scope handling within control structures.
+**  Array and Indexing Operations:
+**      Ensure that array or list indices are of integer type.
+**      Check that array or list indices are within bounds.
+**  Type Declarations:
+**      Validate custom type declarations and ensure they adhere to language rules.
+**      Check for cyclic type dependencies.
+**  Function Signatures and Overloading:
+**      Handle function and method overloading if your language supports it.
+**      Check that functions with the same name have different parameter lists.
+**  Error Handling:
+**      Report meaningful error messages with location information for easier debugging.
+**      Detect and handle exceptions or runtime errors if your language supports them.
+**  Constant Values:
+**      Ensure that constant values (e.g., literals) have valid types and values.
+**  Type Inference:
+**      Implement type inference algorithms to infer types when not explicitly provided by the programmer.
+**  Built-in Functions and Libraries:
+**      Ensure that built-in functions and libraries are available and correctly used.
+**  Annotations and Attributes:
+**      Support annotations or attributes to provide additional information for the compiler or runtime.
+**
+** ALREADY DONE:
+** -> Check for redefinition of symbols.
+** The parser already checks this because the symbol tables are built in the same step.
+*/
+
+typedef struct semantic_context_t {
+    error_vector_t *errors;
+} semantic_context_t;
+
+static void semantic_visitor(const astpool_t *pool, astref_t node, void *usr) {
+    semantic_context_t *context = usr;
+}
+
+static bool perform_semantic_analysis(const astpool_t *pool, astref_t root, error_vector_t *errors) {
+    neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL);
+    uint32_t error_count = errors->len;
+    semantic_context_t context = {
+        .errors = errors
+    };
+    astnode_visit(pool, root, &semantic_visitor, &context);
+    return errors->len == error_count;
 }

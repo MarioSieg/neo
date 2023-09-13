@@ -142,7 +142,7 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
 }
 
 /* On AMD-64 these are implemented in ASM. */
-#if NEO_CPU_AMD64 && NEO_COM_GCC && NEO_ENABLE_ASM
+#if NEO_CPU_AMD64 && NEO_COM_GCC && 0
 
 /* Referenced from ASM, applies to IEEE-754 binary-64. */
 const volatile uint64_t __KSSE_ABS_MASK = 0x7fffffffffffffffull;

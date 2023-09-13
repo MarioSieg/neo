@@ -59,10 +59,6 @@ if (${NEO_BUILD_TESTS} OR ${NEO_BUILD_FUZZER}) # These targets require a C++ 20 
 endif()
 
 if (NOT WIN32)
-    enable_language(ASM)
-endif()
-
-if (NOT WIN32)
     file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c src/*.s)
 else()
     file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
