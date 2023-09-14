@@ -73,6 +73,14 @@ void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
             snprintf(error_message, sizeof(error_message), "Identifier is already used in this scope: %s%s.%s", color, self->msg, reset);
             src_hint = true;
             break;
+        case COMERR_INVALID_EXPRESSION:
+            snprintf(error_message, sizeof(error_message), "Invalid expression: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
+        case COMERR_TYPE_MISMATCH:
+            snprintf(error_message, sizeof(error_message), "Type mismatch: %s%s.%s", color, self->msg, reset);
+            src_hint = true;
+            break;
         case COMERR__LEN: neo_unreachable();
     }
     fprintf(
@@ -531,6 +539,91 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
 
 static NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
 
+typedef enum typeid_t {
+    TYPEID_VOID,
+    TYPEID_INT,
+    TYPEID_FLOAT,
+    TYPEID_CHAR,
+    TYPEID_BOOL,
+    TYPEID_STRING,
+    TYPEID_IDENT,
+    TYPEID__LEN
+} typeid_t;
+
+typedef struct type_t {
+    typeid_t tid : 8;
+    union {
+        node_int_literal_t as_int;
+        node_float_literal_t as_float;
+        node_char_literal_t as_char;
+        node_bool_literal_t as_bool;
+        node_string_literal_t as_string;
+        node_ident_literal_t as_ident;
+    };
+} type_t;
+
+static NEO_NODISCARD NEO_UNUSED typeid_t deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr) {
+    neo_dassert(pool != NULL && errors != NULL);
+    if (astref_isnull(expr)) { return TYPEID_VOID; }
+    const astnode_t *node = astpool_resolve(pool, expr);
+    switch (node->type) {
+        case ASTNODE_INT_LIT: {
+            const node_int_literal_t *data = &node->dat.n_int_lit;
+            (void)data;
+            return TYPEID_INT;
+        }
+        case ASTNODE_FLOAT_LIT: {
+            const node_float_literal_t *data = &node->dat.n_float_lit;
+            (void)data;
+            return TYPEID_FLOAT;
+        }
+        case ASTNODE_CHAR_LIT: {
+            const node_char_literal_t *data = &node->dat.n_char_lit;
+            (void)data;
+            return TYPEID_CHAR;
+        }
+        case ASTNODE_BOOL_LIT: {
+            const node_bool_literal_t *data = &node->dat.n_bool_lit;
+            (void)data;
+            return TYPEID_BOOL;
+        }
+        case ASTNODE_STRING_LIT: {
+            const node_string_literal_t *data = &node->dat.n_string_lit;
+            (void)data;
+            return TYPEID_STRING;
+        }
+        case ASTNODE_IDENT_LIT: {
+            const node_ident_literal_t *data = &node->dat.n_ident_lit;
+            (void)data;
+            return TYPEID_IDENT;
+        }
+        case ASTNODE_SELF_LIT: {
+            return TYPEID_IDENT;
+        }
+        case ASTNODE_GROUP: {
+            const node_group_t *data = &node->dat.n_group;
+            return deduce_typeof_expr(pool, errors, data->child_expr);
+        }
+        case ASTNODE_UNARY_OP: {
+            const node_group_t *data = &node->dat.n_group;
+            return deduce_typeof_expr(pool, errors, data->child_expr);
+        }
+        case ASTNODE_BINARY_OP: {
+            const node_binary_op_t *data = &node->dat.n_binary_op;
+            typeid_t left = deduce_typeof_expr(pool, errors, data->left_expr);
+            typeid_t right = deduce_typeof_expr(pool, errors, data->right_expr);
+            if (neo_likely(left == right)) { return left; } /* Both sides are the same type. */
+            errvec_push(errors, comerror_new(COMERR_TYPE_MISMATCH, 0, 0, NULL, NULL, NULL, NULL));
+            return TYPEID_VOID;
+        } break;
+        default: {
+            neo_assert((ASTNODE_EXPR_MASK & astmask(node->type)) == 0 && "AST node is expression, but not handled");
+            errvec_push(errors, comerror_new(COMERR_INVALID_EXPRESSION, 0, 0, NULL, NULL, NULL, NULL));
+            return TYPEID_VOID;
+        }
+    }
+}
+
 /* Context for semantic analysis. */
 typedef struct sema_context_t {
     error_vector_t *errors;
@@ -578,7 +671,6 @@ static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables i
         case BLOCKSCOPE_ARGLIST: break; /* No symbol table. */
         case BLOCKSCOPE__COUNT: neo_unreachable();
     }
-    memset(self, 0, sizeof(*self));
 }
 
 static void sema_ctx_free(sema_context_t *self) {

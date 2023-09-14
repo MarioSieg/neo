@@ -230,9 +230,9 @@ astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
 astref_t astnode_new_block(astpool_t *pool, const node_block_t *node) {
     neo_dassert(pool != NULL && node != NULL);
 
-    /* Verify AST data. */
-    const node_block_t *data = node;
-    astverify(data->len > 0, "Block nodes array is empty");
+    if (node->len == 0) {
+        return ASTREF_NULL;
+    }
 
     /* Create AST node. */
     astnode_t *nn = NULL;
@@ -344,44 +344,49 @@ astref_t astnode_new_module(astpool_t *pool, const node_module_t *node) {
     return ref;
 }
 
-astref_t astnode_new_int(astpool_t *pool, neo_int_t value) {
+astref_t astnode_new_int(astpool_t *pool, neo_int_t value, const token_t *tok) {
     neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_INT_LIT);
     nn->dat.n_int_lit.value = value;
+    nn->dat.n_int_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 
-astref_t astnode_new_float(astpool_t *pool, neo_float_t value) {
+astref_t astnode_new_float(astpool_t *pool, neo_float_t value, const token_t *tok) {
     neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_FLOAT_LIT);
     nn->dat.n_float_lit.value = value;
+    nn->dat.n_float_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 
-astref_t astnode_new_char(astpool_t *pool, neo_char_t value) {
+astref_t astnode_new_char(astpool_t *pool, neo_char_t value, const token_t *tok) {
     neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_CHAR_LIT);
     nn->dat.n_char_lit.value = value;
+    nn->dat.n_char_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 
-astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value) {
+astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value, const token_t *tok) {
     neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_BOOL_LIT);
     nn->dat.n_bool_lit.value = value;
+    nn->dat.n_bool_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 
-astref_t astnode_new_string(astpool_t *pool, srcspan_t value) {
+astref_t astnode_new_string(astpool_t *pool, srcspan_t value, const token_t *tok) {
     neo_dassert(pool != NULL);
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_STRING_LIT);
     nn->dat.n_string_lit.span = value;
     nn->dat.n_string_lit.hash = srcspan_hash(value); /* Strings are hashed. */
+    nn->dat.n_string_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 
@@ -391,9 +396,7 @@ astref_t astnode_new_ident(astpool_t *pool, srcspan_t value, const token_t *tok)
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_IDENT_LIT);
     nn->dat.n_ident_lit.span = value;
     nn->dat.n_ident_lit.hash = srcspan_hash(value); /* Identifiers are hashed. */
-    if (neo_likely(tok)) {
-        nn->dat.n_ident_lit.tok = *tok;
-    }
+    nn->dat.n_ident_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
 

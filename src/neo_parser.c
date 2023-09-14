@@ -274,7 +274,7 @@ static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
                 error(self, &self->prev, "Invalid int literal");
                 return EXPR_OP_DONE;
             }
-            *node = astnode_new_int(&self->pool, x);
+            *node = astnode_new_int(&self->pool, x, &self->prev);
         } break;
         case TOK_LI_FLOAT: {
             srcspan_t lexeme = self->prev.lexeme;
@@ -283,13 +283,13 @@ static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
                 error(self, &self->prev, "Invalid float literal");
                 return EXPR_OP_DONE;
             }
-            *node = astnode_new_float(&self->pool, x);
+            *node = astnode_new_float(&self->pool, x, &self->prev);
         } break;
         case TOK_LI_TRUE: {
-            *node = astnode_new_bool(&self->pool, NEO_TRUE);
+            *node = astnode_new_bool(&self->pool, NEO_TRUE, &self->prev);
         } break;
         case TOK_LI_FALSE: {
-            *node = astnode_new_bool(&self->pool, NEO_FALSE);
+            *node = astnode_new_bool(&self->pool, NEO_FALSE, &self->prev);
         } break;
         case TOK_LI_SELF: {
             *node = astnode_new_self(&self->pool);
@@ -444,11 +444,7 @@ static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
                 node_block_push_child(&self->pool, &arguments, arg);
             } while (consume_match(self, TOK_PU_COMMA));
             consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
-            if (arguments.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
-                *node = astnode_new_block(&self->pool, &arguments);
-            } else {
-                *node = ASTREF_NULL;
-            }
+            *node = astnode_new_block(&self->pool, &arguments);
         }
         return BINOP_CALL;
     } else {
@@ -587,11 +583,7 @@ static astref_t rule_method(parser_t *self, bool is_static) {
             ++depth;
         } while (is_status_ok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list");
-        if (param_list.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
-            parameters = astnode_new_block(&self->pool, &param_list);
-        } else {
-            parameters = ASTREF_NULL;
-        }
+        parameters = astnode_new_block(&self->pool, &param_list);
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
@@ -661,11 +653,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end");
-    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
-        return astnode_new_block(&self->pool, &block);
-    } else {
-        return ASTREF_NULL;
-    }
+    return astnode_new_block(&self->pool, &block);
 }
 
 /*
@@ -692,11 +680,7 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end");
-    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
-        return astnode_new_block(&self->pool, &block);
-    } else {
-        return ASTREF_NULL;
-    }
+    return astnode_new_block(&self->pool, &block);
 }
 
 /*
@@ -748,14 +732,8 @@ static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
         neo_assert(astpool_isvalidref(&self->pool, node) && "Invalid AST-Reference emitted");
         node_block_push_child(&self->pool, &block, node);
     }
-    astref_t body = ASTREF_NULL;
-    if (block.len) { /*If block is not empty, create block node. If block is empty, create ASTREF_NULL */
-        body = astnode_new_block(&self->pool, &block);
-    } else {
-        body = ASTREF_NULL;
-    }
     return astnode_new_module(&self->pool, &(node_module_t) {
-        .body = body
+        .body = astnode_new_block(&self->pool, &block)
     });
 }
 

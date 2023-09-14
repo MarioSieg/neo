@@ -31,29 +31,34 @@ typedef struct node_group_t {
 
 typedef struct node_int_literal_t {
     neo_int_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_int_literal_t;
 
 typedef struct node_float_literal_t {
     neo_float_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_float_literal_t;
 
 typedef struct node_char_literal_t {
     neo_char_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_char_literal_t;
 
 typedef struct node_bool_literal_t {
     neo_bool_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_bool_literal_t;
 
 typedef struct node_string_literal_t {
     srcspan_t span;
     uint32_t hash;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_string_literal_t;
 
 typedef struct node_ident_literal_t {
     srcspan_t span;
     uint32_t hash; /* Auto-generated hash from span. */
-    token_t tok; /* Contains the token for better error handling in the semantic analysis stage. */
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_ident_literal_t;
 
 /* Symbol table entry data structure. */
@@ -341,11 +346,11 @@ struct astnode_t {
 /* AST allocation routines. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_error(astpool_t *pool, const node_error_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_group(astpool_t *pool, const node_group_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_int_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_int_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value, const token_t *tok);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcspan_t value, const token_t *tok); /* Contains the token for better error handling in the semantic analysis stage. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
