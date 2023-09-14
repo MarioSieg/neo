@@ -4,9 +4,13 @@
 #include "neo_core.h"
 #include "neo_compiler.h"
 
-/* This file is included into C++ from the unit tests, that's why there are some redundant casts from void* to T*, which are nedded in C++ but not in C. */
+/*
+** This file is included into C++ from the unit tests, using raw #include <file.c>, to test all internals without exposing them.
+** That's why there are some redundant casts from void* to T* e.g: ... = (uint8_t *)neo_memalloc(...),
+** which are needed in C++ but not in C.
+*/
 
-const uint8_t *srcspan_heap_clone(srcspan_t span) {
+const uint8_t *srcspan_heap_clone(srcspan_t span) { /* Clones a srcspan_t into heap memory. */
     uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';
@@ -63,6 +67,7 @@ uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 
     return cp;
 }
 
+/* Macro functions for checking a UTF-32 codepoint. */
 #define c32_is_within(c, min, max) ((c) >= (min) && (c) <= (max))
 #define c32_is_ascii(c) ((c) < 0x80)
 #define c32_is_ascii_whitespace(c) ((c) == ' ' || (c) == '\t' || (c) == '\v' || (c) == '\r') /* \n is no whitespace - it's a punctuation token. */
@@ -90,17 +95,19 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
         || c == 0x2029u; /* PARAGRAPH-SEPARATOR */
 }
 
-static NEO_AINLINE void decode_cached_tmp(lexer_t *self) {
+/* Decode one cycle of cached codepoints. */
+static NEO_AINLINE void decode_cache_cycle(lexer_t *self) {
     neo_dassert(self && self->src && self->needle);
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
 }
 
-#define peek(l) ((l)->cp_curr)
-#define peek_next(l) ((l)->cp_next)
-#define is_done(l) (peek(l) == 0)
-static void consume(lexer_t *self) {
+#define peek(l) ((l)->cp_curr) /* Peek at current codepoint. */
+#define peek_next(l) ((l)->cp_next) /* Peek at next codepoint. */
+#define is_done(l) (peek(l) == 0) /* Are we done? */
+
+static void consume(lexer_t *self) { /* Consume one codepoint, update states and advance lexer. */
     neo_dassert(self && self->src && self->needle);
     if (neo_unlikely(is_done(self))) { /* We're done here. */
         self->line_end = self->src+self->src_data->len;
@@ -118,10 +125,10 @@ static void consume(lexer_t *self) {
     }
     neo_dassert(neo_bnd_check(self->needle, self->src, self->src_data->len));
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
-    decode_cached_tmp(self); /* Decode cached codepoints. */
+    decode_cache_cycle(self); /* Decode cached codepoints. */
 }
 
-static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) {
+static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) { /* Check if current codepoint matches c. */
     neo_dassert(self);
     if (peek(self) == c) {
         consume(self);
@@ -133,7 +140,7 @@ static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) {
 #define COMMENT_START '#'
 #define COMMENT_BLOCK '*'
 
-static void consume_whitespace(lexer_t *self) {
+static void consume_whitespace(lexer_t *self) { /* Consume whitespace and comments. */
     if (c32_is_whitespace(peek(self))) {
         consume(self);
     } else if (peek(self) == COMMENT_START) { /* We've reached a comment. */
@@ -154,7 +161,7 @@ static void consume_whitespace(lexer_t *self) {
     consume_whitespace(self); /* Recurse. TODO: Replace with iteration. (Prefer iteration over recursion). */
 }
 
-static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) {
+static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) { /* Create token from current state. */
     neo_dassert(self);
     token_t tok;
     memset(&tok, 0, sizeof(tok));
@@ -217,7 +224,7 @@ static bool kw_found(const lexer_t *self, toktype_t i) {
         && memcmp(tok_lexemes[i], self->tok_start, tok_lens[i]) == 0;
 }
 
-static token_t consume_keyword_or_identifier(lexer_t *self) {
+static token_t consume_keyword_or_identifier(lexer_t *self) { /* Consumes either keyword or identifier. */
     neo_dassert(self);
     while (c32_is_ident_cont(peek(self))) {
         consume(self);
@@ -235,7 +242,7 @@ static token_t consume_keyword_or_identifier(lexer_t *self) {
     return mktok(self, TOK_LI_IDENT, 0); /* No builtin keyword found, return identifier. */
 }
 
-static token_t consume_string(lexer_t *self) {
+static token_t consume_string(lexer_t *self) { /* Consumes string literal. */
     neo_dassert(self);
     while (!is_done(self) && peek(self) != '"') {
         consume(self);
@@ -247,24 +254,24 @@ static token_t consume_string(lexer_t *self) {
     return mktok(self, TOK_LI_STRING, 1);
 }
 
-void lexer_init(lexer_t *self) {
+void lexer_init(lexer_t *self) { /* Initialize lexer. */
     neo_dassert(self);
     memset(self, 0, sizeof(*self));
 }
 
-void lexer_setup_source(lexer_t *self, const source_t *src) {
+void lexer_setup_source(lexer_t *self, const source_t *src) { /* Setup lexer for source file. */
     neo_dassert(self && src);
     self->src_data = src;
     self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_data->src;
     self->line = self->col = 1;
-    decode_cached_tmp(self); /* Decode cached codepoints. */
+    decode_cache_cycle(self); /* Decode cached codepoints. */
     /* Find the first line ending. */
     while (*self->line_end && *self->line_end != '\n') {
         ++self->line_end;
     }
 }
 
-token_t lexer_scan_next(lexer_t *self) {
+token_t lexer_scan_next(lexer_t *self) { /* Scan next token. */
     neo_dassert(self && self->src);
     consume_whitespace(self); /* Consume space and comments. */
     if (neo_unlikely(is_done(self))) { /* EOF? */
@@ -358,7 +365,7 @@ token_t lexer_scan_next(lexer_t *self) {
     }
 }
 
-size_t lexer_drain(lexer_t *self, token_t **tok) {
+size_t lexer_drain(lexer_t *self, token_t **tok) { /* Drain all tokens into a heap-allocated vector. */
     neo_dassert(self && tok);
     size_t cap = 1<<9, len = 0;
     *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
@@ -373,12 +380,12 @@ size_t lexer_drain(lexer_t *self, token_t **tok) {
     return len;
 }
 
-void lexer_free(lexer_t *self) {
+void lexer_free(lexer_t *self) { /* Free lexer. */
     neo_dassert(self);
     (void)self;
 }
 
-void token_dump(const token_t *self) {
+void token_dump(const token_t *self) { /* Dump token to stdout. */
     neo_dassert(self);
     printf("%" PRIu32 ":%" PRIu32 " Type: %s, Lexeme: %.*s\n",
         self->line,

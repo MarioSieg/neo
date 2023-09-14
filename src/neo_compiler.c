@@ -6,6 +6,12 @@
 #include "neo_lexer.h"
 #include "neo_parser.h"
 
+/*
+** This file is included into C++ from the unit tests, using raw #include <file.c>, to test all internals without exposing them.
+** That's why there are some redundant casts from void* to T* e.g: ... = (uint8_t *)neo_memalloc(...),
+** which are needed in C++ but not in C.
+*/
+
 /* Forward declarations. */
 static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors);
 
