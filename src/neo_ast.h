@@ -11,10 +11,32 @@
 extern "C" {
 #endif
 
+/*
+** ~~~~~ Some delightful words about the AST memory representation ~~~~~
+** The 'astnode_t' struct represents a single AST node.
+** It contains a tag or discriminator 'type' which is used to determine the type of the node.
+** The data of the individual node types is stored in the 'dat' union.
+** Because allocating all nodes on the heap would be slow and encourage heap fragmentation,
+** we use a memory pool 'astpool_t' to allocate them.
+** IMPORTANT:
+** 1. The pool might reallocate, so holding a pointer to a node or any data inside the node is not safe.
+**    This is the same as in C++, where you cannot store iterators to vector elements, because they might reallocate.
+**    -> So instead of storing a pointer, we store an index into the pool 'astref_t',
+**       which can be resolved into the actual node pointer using 'astref_resolve()',
+**       but this pointer should not be kept alive for long.
+**       The astref_t can also be ASTREF_NULL to indicate a null pointer. This is useful for optional nodes.
+** 2. The pool is thread local and all nodes are deallocated when the pool is freed.
+** 3. For blocks a list of astref_t is used to store the child nodes. This list is also allocated on the pool.
+**    -> To allocate and resolved lists of astref_t we use the listref_t type and the 'astref_resolve_list()' function.
+ *       This works exactly the same way as astref_t and 'astref_resolve()'.
+ *       Remember that is also not safe to store pointers to the list elements neither the list pointer itself.
+*/
+
+/* Reference to AST-node or AST-node-list as index (1-based) into the AST memory pool. */
 typedef uint32_t astref_t, listref_t;
 #define astref_decl(type) astref_t /* req = required, opt = optional. */
-#define ASTREF_NULL (0u)
-#define astref_isnull(ref) ((ref)==ASTREF_NULL)
+#define ASTREF_NULL (0u) /* Null reference yields NULL pointer when resolved. */
+#define astref_isnull(ref) ((ref)==ASTREF_NULL) /* Check if reference is null. */
 
 typedef struct astnode_t astnode_t; /* Node. */
 typedef struct astpool_t astpool_t; /* AST memory pool. */

@@ -15,6 +15,7 @@ option(NEO_BUILD_TESTS "Build NEO tests" OFF) # Requires googletest and C++ comp
 option(NEO_BUILD_FUZZER "Build NEO fuzzer" OFF) # Requires libFuzzer and C++ compiler.
 
 option(NEO_ENABLE_SSE41 "Enable SSE 4.1 Penryn instructions" ON) # Requires CPU >= x86-64 Intel Core 2 2 (Penryn) CPU.
+option(NEO_ENABLE_UBSAN "Enable undefined behavior sanitizer" OFF) # Requires clang.
 
 # The following extensions are useful to debug and investigate the NEO compiler and runtime, but not to the end user.
 option(NEO_EXTENSION_AST_RENDERING "Enable AST rendering support" OFF)
@@ -36,6 +37,10 @@ else()
     set(COMPILE_OPTIONS -std=gnu99 -Wall -Wextra -Werror -Wswitch -Wimplicit-fallthrough -Wconversion -Wmissing-field-initializers -Wno-error=type-limits) # basic compile options
     if (${NEO_ENABLE_SSE41})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -msse -msse2 -msse3 -mssse3 -msse4.1 -mcx16) # Enable advanced instructions
+    endif()
+    if (${NEO_ENABLE_UBSAN})
+        add_compile_options(-fsanitize=undefined)
+        add_link_options(-fsanitize=undefined)
     endif()
     if (${IS_RELEASE})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -O3 -fvisibility=hidden -fomit-frame-pointer) # advanced options

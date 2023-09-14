@@ -10,7 +10,7 @@
 static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors);
 
 static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
-    uint8_t *p = neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
+    uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
     memcpy(p, span.p, span.len*sizeof(*p));
     p[span.len] = '\0';
     return p;
@@ -19,7 +19,7 @@ static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-t
 NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg) {
     neo_assert(tok && "Token is NULL");
     neo_assert(msg && "Message is NULL");
-    compile_error_t *error = neo_memalloc(NULL, sizeof(*error));
+    compile_error_t *error = (compile_error_t *)neo_memalloc(NULL, sizeof(*error));
     error->type = type;
     error->line = tok->line;
     error->col = tok->col;
@@ -43,7 +43,7 @@ NEO_COLDPROC const compile_error_t *comerror_new(
     lexeme = lexeme ? lexeme : (const uint8_t *)"?";
     lexeme_line = lexeme_line ? lexeme_line : (const uint8_t *)"?";
     file = file ? file : (const uint8_t *)"?";
-    compile_error_t *error = neo_memalloc(NULL, sizeof(*error));
+    compile_error_t *error = (compile_error_t *)neo_memalloc(NULL, sizeof(*error));
     error->type = type;
     error->line = line;
     error->col = col;
@@ -85,7 +85,7 @@ void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
     }
     fprintf(
         f,
-        "%s:%"PRIu32":%"PRIu32": %s\n",
+        "%s:%" PRIu32 ":%" PRIu32 ": %s\n",
         self->file,
         self->line,
         self->col,
@@ -126,9 +126,9 @@ NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t *error
     if (!self->cap) {
         self->len = 0;
         self->cap = 1<<7;
-        self->p = neo_memalloc(self->p, self->cap*sizeof(*self->p));
+        self->p = (const compile_error_t **)neo_memalloc(self->p, self->cap*sizeof(*self->p));
     } else if (self->len >= self->cap) {
-        self->p = neo_memalloc(self->p, (self->cap<<=1)*sizeof(*self->p));
+        self->p = (const compile_error_t **)neo_memalloc(self->p, (self->cap<<=1)*sizeof(*self->p));
     }
     self->p[self->len++] = error;
 }
@@ -155,7 +155,9 @@ void errvec_clear(error_vector_t *self) {
         comerror_free(self->p[i]);
         self->p[i] = NULL;
     }
-    memset(self->p, 0, self->cap*sizeof(*self->p)); /* Reset error list. */
+    if (self->p != NULL) {
+        memset(self->p, 0, self->cap*sizeof(*self->p)); /* Reset error list. */
+    }
     self->len = 0;
 }
 
@@ -183,7 +185,7 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
         fseek(f, sizeof(bom), SEEK_SET); /* BOM detected, skip it */
         size -= sizeof(bom);
     }
-    uint8_t *buf = neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
+    uint8_t *buf = (uint8_t *)neo_memalloc(NULL, size+2); /* +1 for \n +1 for \0 */
     size_t bytes_read = fread(buf, sizeof(*buf), size, f);
     if (neo_unlikely(bytes_read != size)) { /* Read file into buffer */
         neo_memalloc(buf, 0);
@@ -219,7 +221,7 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
 #endif
     buf[size] = '\n'; /* Append final newline */
     buf[size+1] = '\0'; /* Append terminator */
-    source_t *self = neo_memalloc(NULL, sizeof(*self));
+    source_t *self = (source_t *)neo_memalloc(NULL, sizeof(*self));
     self->filename = neo_strdup2(path);
     self->src = buf;
     self->len = size+1; /* +1 for final newline. */
@@ -255,7 +257,7 @@ const source_t *source_from_memory_ref(const uint8_t *path, const uint8_t *src, 
         }
         return NULL;
     }
-    source_t *self = neo_memalloc(NULL, sizeof(*self));
+    source_t *self = (source_t *)neo_memalloc(NULL, sizeof(*self));
     self->filename = path;
     self->src = src;
     self->len = len;
@@ -275,7 +277,7 @@ void source_free(const source_t *self) {
 void source_dump(const source_t *self, FILE *f) {
     neo_dassert(self != NULL && f != NULL);
     fprintf(f, "Source: %s\n", self->filename);
-    fprintf(f, "Length: %"PRIu32"\n", (uint32_t)self->len);
+    fprintf(f, "Length: %" PRIu32 "\n", (uint32_t)self->len);
     fprintf(f, "Content: %s\n", self->src);
     for (uint32_t i = 0; i < self->len; ++i) {
         fprintf(f, "\\x%02x", self->src[i]);
@@ -302,7 +304,7 @@ struct neo_compiler_t {
 
 void compiler_init(neo_compiler_t **self, neo_compiler_flag_t flags) {
     neo_assert(self && "Compiler pointer is NULL");
-    *self = neo_memalloc(NULL, sizeof(**self));
+    *self = (neo_compiler_t *)neo_memalloc(NULL, sizeof(**self));
     memset(*self, 0, sizeof(**self));
     neo_mempool_init(&(**self).pool, 8192);
     errvec_init(&(**self).errors);
@@ -339,7 +341,6 @@ static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src
     errvec_clear(&self->errors);
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
-    neo_dassert(self->errors.len == 0);
     neo_dassert(self->parser.lex.src == src->src);
 }
 
@@ -349,7 +350,7 @@ static void render_ast(neo_compiler_t *self, const source_t *src) {
     if (!neo_utf8_is_ascii(src->filename, len)) {
         print_status_msg(self, NEO_CCRED, "Failed to render AST, filename is not ASCII.");
     } else {
-        char *filename = alloca(len+sizeof("_ast.jpg"));
+        char *filename = (char *)alloca(len+sizeof("_ast.jpg"));
         memcpy(filename, src->filename, len);
         memcpy(filename+len, "_ast.jpg", sizeof("_ast.jpg")-1);
         filename[len+sizeof("_ast.jpg")-1] = '\0';
@@ -389,7 +390,7 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr) {
         print_status_msg(
             self,
             NEO_CCRED,
-            "Compilation failed with %"PRIu32" error%s.",
+            "Compilation failed with %" PRIu32 " error%s.",
             self->errors.len,
             self->errors.len > 1 ? "s" : ""
         );
@@ -457,17 +458,17 @@ void compiler_set_flags(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
 
 void compiler_add_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
     neo_assert(self && "Compiler pointer is NULL");
-    self->flags |= new_flags;
+    self->flags = (neo_compiler_flag_t)(self->flags | new_flags);
 }
 
 void compiler_remove_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
     neo_assert(self && "Compiler pointer is NULL");
-    self->flags &= ~new_flags;
+    self->flags = (neo_compiler_flag_t)(self->flags & ~new_flags);
 }
 
 void compiler_toggle_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
     neo_assert(self && "Compiler pointer is NULL");
-    self->flags ^= new_flags;
+    self->flags = (neo_compiler_flag_t)(self->flags ^ new_flags);
 }
 
 void compiler_set_pre_compile_callback(neo_compiler_t *self, neo_compile_callback_hook_t *new_hook) {
@@ -638,7 +639,7 @@ static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const as
     memset(self, 0, sizeof(*self));
     self->errors = errors;
     self->pool = pool;
-    self->blocks = neo_memalloc(NULL, (self->cap=1<<6)*sizeof(*self->blocks));
+    self->blocks = (astref_t *)neo_memalloc(NULL, (self->cap=1<<6)*sizeof(*self->blocks));
 }
 
 static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
@@ -647,7 +648,7 @@ static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
     const astnode_t *node = astpool_resolve(self->pool, symtab);
     neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
     if (self->len >= self->cap) {
-        self->blocks = neo_memalloc(self->blocks, (self->cap<<=1)*sizeof(*self->blocks));
+        self->blocks = (astref_t *)neo_memalloc(self->blocks, (self->cap<<=1)*sizeof(*self->blocks));
     }
     self->blocks[self->len++] = symtab;
 }
