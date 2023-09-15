@@ -131,7 +131,9 @@ TEST(core, neo_mempool_alloc) {
     ASSERT_EQ(pool.cap, 16);
     *j = 0x1234567890abcdef;
     ASSERT_EQ(*j, 0x1234567890abcdef);
-    ASSERT_EQ(*(int64_t *)((uint8_t *)pool.top + 4), *j);
+    int64_t x {};
+    memcpy(&x, ((uint8_t *)pool.top + 4), sizeof(int64_t));
+    ASSERT_EQ(x, *j);
 
     neo_mempool_free(&pool);
 }

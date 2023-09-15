@@ -184,8 +184,9 @@ neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *pp
     while (pos < len) {
         size_t np = pos+16;
         if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
-            uint64_t v1 = *(const uint64_t *)(buf+pos);
-            uint64_t v2 = *(const uint64_t *)(buf+pos+sizeof(v1));
+            uint64_t v1, v2;
+            memcpy(&v1, buf+pos, sizeof(v1));
+            memcpy(&v2, buf+pos+sizeof(v1), sizeof(v2));
             if (!((v1|v2) & UINT64_C(0x8080808080808080))) {
                 pos = np;
                 continue;
@@ -251,7 +252,9 @@ uint32_t neo_hash_fnv1a(const void *key, size_t len) {
     uint64_t r = 0x811c9dc5;
     const uint8_t *data = (const uint8_t *)key;
     for (size_t i = 0; i < blocks; ++i) {
-        r ^= *(const uint64_t *)data;
+        uint64_t tmp;
+        memcpy(&tmp, data, sizeof(tmp));
+        r ^= tmp;
         r *= 0xbf58476d1ce4e5b9;
         data += 8;
     }
