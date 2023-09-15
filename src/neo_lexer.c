@@ -44,6 +44,7 @@ uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequ
 }
 
 uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
+    neo_dassert(p != NULL && *p != NULL);
     uint32_t cp = (uint32_t)**p;
     uint32_t len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 127; } /* ASCII and most common case. */
@@ -97,7 +98,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
 
 /* Decode one cycle of cached codepoints. */
 static NEO_AINLINE void decode_cache_cycle(lexer_t *self) {
-    neo_dassert(self && self->src && self->needle);
+    neo_dassert(self != NULL && self->src != NULL && self->needle!= NULL );
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -108,7 +109,7 @@ static NEO_AINLINE void decode_cache_cycle(lexer_t *self) {
 #define is_done(l) (peek(l) == 0) /* Are we done? */
 
 static void consume(lexer_t *self) { /* Consume one codepoint, update states and advance lexer. */
-    neo_dassert(self && self->src && self->needle);
+    neo_dassert(self != NULL && self->src != NULL && self->needle!= NULL );
     if (neo_unlikely(is_done(self))) { /* We're done here. */
         self->line_end = self->src+self->src_data->len;
         return;
@@ -129,7 +130,7 @@ static void consume(lexer_t *self) { /* Consume one codepoint, update states and
 }
 
 static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) { /* Check if current codepoint matches c. */
-    neo_dassert(self);
+    neo_dassert(self != NULL);
     if (peek(self) == c) {
         consume(self);
         return true;
@@ -141,6 +142,7 @@ static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) { /* Check if current
 #define COMMENT_BLOCK '*'
 
 static void consume_whitespace(lexer_t *self) { /* Consume whitespace and comments. */
+    neo_dassert(self != NULL);
     if (c32_is_whitespace(peek(self))) {
         consume(self);
     } else if (peek(self) == COMMENT_START) { /* We've reached a comment. */
