@@ -16,11 +16,11 @@ using namespace neo;
                 u8"end\n" \
             u8"end\n" \
         }; \
-        neo_source_code source { \
+        source_code source { \
             reinterpret_cast<const std::uint8_t *>(u8"test.neo"), \
             reinterpret_cast<const std::uint8_t *>(src) \
         }; \
-        neo_compiler compiler {}; \
+        compiler compiler {}; \
         ASSERT_TRUE(compiler(source)); \
         const astpool_t *pool {}; \
         astref_t ast = compiler.get_ast_root(pool); \
@@ -70,16 +70,16 @@ test_typeof_expr("let x: bool = true\n", TYPEID_BOOL, literal);
 test_typeof_expr("let x: Entity = ent\n", TYPEID_IDENT, literal);
 
 TEST(compiler, compile_test_file) {
-    neo_source_code source {reinterpret_cast<const std::uint8_t *>(u8"test/files/特羅洛洛.neo")};
+    source_code source {reinterpret_cast<const std::uint8_t *>(u8"test/files/特羅洛洛.neo")};
 
-    neo_compiler compiler {};
+    compiler compiler {};
     ASSERT_TRUE(compiler(source));
 }
 
 TEST(compiler, render_ast_test_file) {
-    neo_source_code source {"test/files/test.neo"};
+    source_code source {"test/files/test.neo"};
 
-    neo_compiler compiler {};
+    compiler compiler {};
     compiler |= COM_FLAG_RENDER_AST;
     ASSERT_TRUE(compiler(source));
 }

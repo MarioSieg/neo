@@ -1,0 +1,23 @@
+class A
+
+    method a()
+
+    end
+
+    method b() -> int
+
+    end
+
+    method c(x: float)
+
+    end
+
+    method d(x: float, y: float)
+
+    end
+
+    method e(x: float, y: float) -> float
+
+    end
+
+end
