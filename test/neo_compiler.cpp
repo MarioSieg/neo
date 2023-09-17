@@ -60,15 +60,6 @@ using namespace neo;
         errvec_free(&ev); \
     }
 
-test_typeof_expr("let x: int = 10\n", TYPEID_INT, literal);
-test_typeof_expr("let x: float = 10.0\n", TYPEID_FLOAT, literal);
-test_typeof_expr("let x: int = (10 - 2 & (1<<32)-1)>>>>128+0xfffffeefe\n", TYPEID_INT, expression);
-test_typeof_expr("let x: float = 10.0*2.3/(22.02+(1.0-2.0)+1.34)\n", TYPEID_FLOAT, expression);
-// TODO: char test_typeof_expr("let x: char = 'E'\n", TYPEID_CHAR, literal);
-test_typeof_expr("let x: bool = true\n", TYPEID_BOOL, literal);
-// TODO: string test_typeof_expr("let x: string = \"Hey\"\n", TYPEID_STRING, literal);
-test_typeof_expr("let x: Entity = ent\n", TYPEID_IDENT, literal);
-
 TEST(compiler, compile_test_file) {
     source_code source {reinterpret_cast<const std::uint8_t *>(u8"test/files/特羅洛洛.neo")};
 

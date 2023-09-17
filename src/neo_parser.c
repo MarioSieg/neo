@@ -69,11 +69,11 @@ static astref_t rule_branch(parser_t *self, bool within_loop);
 static astref_t rule_loop(parser_t *self, bool within_loop);
 static astref_t rule_return(parser_t *self);
 static astref_t rule_variable(parser_t *self, variable_scope_t var_scope);
-static astref_t rule_method(parser_t *self, bool is_static);
+static astref_t rule_function(parser_t *self, bool is_static);
 static astref_t rule_class(parser_t *self, bool is_static);
 
 /* Top-level root statement rules. */
-static NEO_NODISCARD astref_t parser_root_stmt_local(parser_t *self, bool within_loop);
+static NEO_NODISCARD astref_t parser_root_stmt(parser_t *self, bool within_loop);
 static NEO_NODISCARD astref_t parser_root_stmt_class(parser_t *self);
 static NEO_NODISCARD astref_t parser_root_stmt_module(parser_t *self, bool *skip);
 static NEO_NODISCARD astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, bool *skip);
@@ -82,7 +82,7 @@ static NEO_NODISCARD astref_t parser_drain_whole_module(parser_t *self);
 /* Parse rule table. */
 static const parse_rule_t parse_rules_lut[] = {
     /* KW_* = Keyword tokens. */
-    {NULL, NULL, PREC_NONE}, /* TOK_KW_METHOD, "method" */
+    {NULL, NULL, PREC_NONE}, /* TOK_KW_FUNCTION, "fn" */
     {NULL, NULL, PREC_NONE}, /* TOK_KW_LET, "let" */
     {NULL, NULL, PREC_NONE}, /* TOK_KW_NEW, "new" */
     {NULL, NULL, PREC_NONE}, /* TOK_KW_END, "end" */
@@ -505,6 +505,11 @@ static astref_t rule_free_expr_statement(parser_t *self) {
         return ASTREF_NULL;
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after expression. Rule:  <expression> <newline>");
+    const astnode_t *expr = astpool_resolve(&self->pool, node);
+    if (expr != NULL && expr->type == ASTNODE_IDENT_LIT) {
+        error(self, &self->prev, "Free expression statement is not allowed to be an identifier. Rule:  <expression> <newline>");
+        return ASTREF_NULL;
+    }
     return node;
 }
 
@@ -513,7 +518,7 @@ static astref_t rule_branch(parser_t *self, bool within_loop) {
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
     consume_or_err(self, TOK_KW_THEN, "Expected 'then' after if-condition. Rule:  if <condition> then <true-block>");
-    astref_t true_block = parser_root_stmt_local(self, within_loop);
+    astref_t true_block = parser_root_stmt(self, within_loop);
     return astnode_new_branch(&self->pool, &(node_branch_t) {
         .cond_expr = condition,
         .true_block = true_block,
@@ -526,7 +531,7 @@ static astref_t rule_loop(parser_t *self, bool within_loop) {
     astref_t condition = ASTREF_NULL;
     expr_eval_precedence(self, &condition, PREC_TERNARY);
     consume_or_err(self, TOK_KW_DO, "Expected 'do' after while-loop condition. Rule:  while <condition> do <true-block>");
-    astref_t true_block = parser_root_stmt_local(self, within_loop);
+    astref_t true_block = parser_root_stmt(self, within_loop);
     return astnode_new_loop(&self->pool, &(node_loop_t) {
         .cond_expr = condition,
         .true_block = true_block,
@@ -574,11 +579,11 @@ static astref_t rule_variable(parser_t *self, variable_scope_t var_scope) {
     });
 }
 
-static astref_t rule_method(parser_t *self, bool is_static) {
+static astref_t rule_function(parser_t *self, bool is_static) {
     (void)is_static;
     neo_dassert(self != NULL);
-    astref_t identifier = consume_identifier(self, "Expected method name. Rule: method <name>(<parameters>) -> <return-type>");
-    consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after method name. Rule: method <name>(<parameters>) -> <return-type>");
+    astref_t identifier = consume_identifier(self, "Expected function name. Rule: function <name>(<parameters>) -> <return-type>");
+    consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after function name. Rule: function <name>(<parameters>) -> <return-type>");
     astref_t parameters = ASTREF_NULL;
     if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
         node_block_t param_list = {
@@ -590,15 +595,15 @@ static astref_t rule_method(parser_t *self, bool is_static) {
             node_block_push_child(&self->pool, &param_list, rule_variable(self, VARSCOPE_PARAM));
             ++depth;
         } while (is_status_ok(self) && consume_match(self, TOK_PU_COMMA));
-        consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after method parameter list. Rule: method <name>(<parameters>) -> <return-type>");
+        consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after function parameter list. Rule: function <name>(<parameters>) -> <return-type>");
         parameters = astnode_new_block(&self->pool, &param_list);
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
-        ret_type = consume_identifier(self, "Expected type after '->'. Rule: method <name>(<parameters>) -> <return-type>");
+        ret_type = consume_identifier(self, "Expected type after '->'. Rule: function <name>(<parameters>) -> <return-type>");
     }
-    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method signature. Rule: method <name>(<parameters>) -> <return-type> <newline>");
-    astref_t body = parser_root_stmt_local(self, false);
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after function signature. Rule: function <name>(<parameters>) -> <return-type> <newline>");
+    astref_t body = parser_root_stmt(self, false);
     return astnode_new_method(&self->pool, &(node_method_t) {
        .ident = identifier,
        .params = parameters,
@@ -622,10 +627,10 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 /* Root rules. */
 
 /*
-** Parse local block statement. (Level 3+ statement.)
-** Local statements are method bodies, if-bodies, while-bodies etc. but not class or module bodies.
+** Parse root block statement. (Level 3+ statement.)
+** Local statements are global statements, function bodies, if-bodies, while-bodies etc. but not class or module bodies.
 */
-static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_loop) {
+static NEO_HOTPROC astref_t parser_root_stmt(parser_t *self, bool within_loop) {
     neo_dassert(self != NULL);
     node_block_t block = {
         .scope = BLOCKSCOPE_LOCAL
@@ -660,13 +665,13 @@ static NEO_HOTPROC astref_t parser_root_stmt_local(parser_t *self, bool within_l
             node_block_push_child(&self->pool, &block, rule_free_expr_statement(self));
         }
     }
-    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after method end. Rule: end <newline>");
+    consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after function end. Rule: end <newline>");
     return astnode_new_block(&self->pool, &block);
 }
 
 /*
 ** Parse class body statement. (Level 2 statement.)
-** Class body statements are methods, class variables, constructors etc..
+** Class body statements are functions, class variables, constructors etc..
 */
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self != NULL);
@@ -675,15 +680,15 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     };
     for (int depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
-        bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following method or variable static? */
-        if (consume_match(self, TOK_KW_METHOD)) {
-            node_block_push_child(&self->pool, &block, rule_method(self, is_static));
+        bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following function or variable static? */
+        if (consume_match(self, TOK_KW_FUNCTION)) {
+            node_block_push_child(&self->pool, &block, rule_function(self, is_static));
         } else if (consume_match(self, TOK_KW_LET)) {
             node_block_push_child(&self->pool, &block, rule_variable(self, is_static ? VARSCOPE_STATIC_FIELD : VARSCOPE_FIELD));
         } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
         } else {
-            error(self, &self->curr, "Expected method or variable.");
+            error(self, &self->curr, "Expected function or variable.");
             return ASTREF_NULL;
         }
     }
@@ -692,23 +697,39 @@ static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
 }
 
 /*
-** Parse module body statement. (Level 3 statement.)
-** Module level statements are classes, interfaces, enums etc..
+** Parse module body statement. (Level 1 statement.)
+** Module level statements are local statements, classes, interfaces, enums etc..
 */
 static NEO_HOTPROC astref_t parser_root_stmt_module(parser_t *self, bool *skip) {
-    neo_dassert(self && skip);
+    neo_dassert(self != NULL && skip != NULL);
     *skip = false; /* Assume that token is not skipped. */
     bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following class static? */
     if (consume_match(self, TOK_KW_CLASS)) {
         return rule_class(self, is_static);
+    } else if (consume_match(self, TOK_KW_FUNCTION)) {
+        return rule_function(self, is_static);
+    } else if (consume_match(self, TOK_KW_LET)) {
+        return rule_variable(self, VARSCOPE_LOCAL);
+    } else if (consume_match(self, TOK_KW_IF)) {
+        return rule_branch(self, false);
+    } else if (consume_match(self, TOK_KW_WHILE)) {
+        return rule_loop(self, false);
+    } else if (consume_match(self, TOK_KW_BREAK)) {
+        error(self, &self->prev, "'break' statement can only be used within loops");
+        return ASTREF_NULL;
+    } else if (consume_match(self, TOK_KW_CONTINUE)) {
+        error(self, &self->prev, "'continue' statement can only be used within loops");
+        return ASTREF_NULL;
+    } else if (consume_match(self, TOK_KW_RETURN)) {
+        error(self, &self->prev, "'return' statement can only be used within functions");
+        return ASTREF_NULL;
     } else if (consume_match(self, TOK_PU_NEWLINE)) {
         *skip = true; /* Don't add \n to AST. */
         return ASTREF_NULL;
     } else if (neo_unlikely(consume_match(self, TOK_ME_EOF))) {
         return ASTREF_NULL;
     } else {
-        error(self, &self->curr, "No class found to execute. Did you forget to add a class containing the 'main' method?");
-        return ASTREF_NULL;
+        return rule_free_expr_statement(self);
     }
 }
 

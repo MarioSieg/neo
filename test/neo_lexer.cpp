@@ -146,7 +146,7 @@ TEST(lexer, tok_##name) {\
     source_free(source);\
 }
 
-generic_lexer_test(method, "method", TOK_KW_METHOD)
+generic_lexer_test(method, "func", TOK_KW_FUNCTION)
 generic_lexer_test(let, "let", TOK_KW_LET)
 generic_lexer_test(new, "new", TOK_KW_NEW)
 generic_lexer_test(end, "end", TOK_KW_END)

@@ -1,17 +1,17 @@
 class Expressions
-    method bool1() -> bool
+    func bool1() -> bool
         return true and false or true
     end
 
-    method int1() -> int
+    func int1() -> int
         return 1 + 2 - 3 * 4 ** 5 !+ 6 !- 7 !* 8 !** 9 / 10 % 11 & 12 | 13 ^ 14 << 15 >> 16 <<< 17 >>> 18 >>>> ~19
     end
 
-    method int2() -> bool
+    func int2() -> bool
         return 10 < 20 and 2 <= 30 and 3 > 40 and 2 >= 50 and 60 == 60 and 2 != 70
     end
 
-    method int3() -> int
+    func int3() -> int
         let r: int = 0
         r += 1
         r -= 2
@@ -34,15 +34,15 @@ class Expressions
         return r
     end
 
-    method float1() -> float
+    func float1() -> float
         return 1.0 + 2.0 - 3.0 * 4.0 ** 9.0 / 10.0 % 11.0
     end
 
-    method float2() -> bool
+    func float2() -> bool
         return 10.0 < 20.0 and 2.0 <= 30.0 and 3.0 > 40.0 and 2.0 >= 50.0 and 60.0 == 60.0 and 2.0 != 70.0
     end
 
-    method float3() -> float
+    func float3() -> float
         let r: float = 0.0
         r += 1.0
         r -= 2.0

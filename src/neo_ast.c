@@ -77,15 +77,15 @@ void symtab_print(const symtab_t *self, FILE *f, const char *name) {
     symtab_iter(self, &symtab_print_visitor, f);
 }
 
+#define m(node) astmask(ASTNODE_##node)
 static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_CLASS), /* BLOCKSCOPE_MODULE */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_METHOD)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_CLASS */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE)|astmask(ASTNODE_BRANCH) /* BLOCKSCOPE_LOCAL */
-    |astmask(ASTNODE_LOOP)|astmask(ASTNODE_UNARY_OP)|astmask(ASTNODE_BINARY_OP)|astmask(ASTNODE_GROUP) /* BLOCKSCOPE_LOCAL */
-    |astmask(ASTNODE_RETURN)|astmask(ASTNODE_BREAK)|astmask(ASTNODE_CONTINUE), /* BLOCKSCOPE_LOCAL */
-    astmask(ASTNODE_ERROR)|astmask(ASTNODE_VARIABLE), /* BLOCKSCOPE_PARAMLIST */
+    m(ERROR)|m(CLASS)|m(VARIABLE)|m(BRANCH)|m(LOOP)|m(UNARY_OP)|m(BINARY_OP)|m(GROUP), /* BLOCKSCOPE_MODULE */
+    m(ERROR)|m(METHOD)|m(VARIABLE), /* BLOCKSCOPE_CLASS */
+    m(ERROR)|m(VARIABLE)|m(BRANCH)|m(LOOP)|m(UNARY_OP)|m(BINARY_OP)|m(GROUP)|m(RETURN)|m(BREAK)|m(CONTINUE), /* BLOCKSCOPE_LOCAL */
+    m(ERROR)|m(VARIABLE), /* BLOCKSCOPE_PARAMLIST */
     ASTNODE_EXPR_MASK /* BLOCKSCOPE_ARGLIST */
 };
+#undef m
 
 #define _(_1, _2) [_1] = _2
 const char *const astnode_names[ASTNODE__COUNT] = { nodedef(_, NEO_SEP) };

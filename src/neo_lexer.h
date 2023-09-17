@@ -18,7 +18,7 @@ extern NEO_EXPORT uint32_t utf8_decode(const uint8_t **p); /* Decode UTF-8 seque
 /* Token types. */
 #define tkdef(_, __)\
     /* Keywords */\
-    _(TOK_KW_METHOD, "method")__\
+    _(TOK_KW_FUNCTION, "func")__\
     _(TOK_KW_LET, "let")__\
     _(TOK_KW_NEW, "new")__\
     _(TOK_KW_END, "end")__\
@@ -116,7 +116,7 @@ typedef enum {
 } toktype_t;
 #undef _
 neo_static_assert(TOK__COUNT <= 255);
-#define KWR_START TOK_KW_METHOD /* First keyword token */
+#define KWR_START TOK_KW_FUNCTION /* First keyword token */
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
 neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
