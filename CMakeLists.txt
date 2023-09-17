@@ -63,11 +63,7 @@ if (${NEO_BUILD_TESTS} OR ${NEO_BUILD_FUZZER}) # These targets require a C++ 20 
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-if (NOT WIN32)
-    file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c src/*.s)
-else()
-    file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
-endif()
+file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
 add_library(neocore STATIC ${NEO_CORE_SOURCES}) # NEO compiler.
 target_compile_options(neocore PRIVATE "${COMPILE_OPTIONS}")
 
