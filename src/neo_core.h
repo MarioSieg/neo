@@ -330,8 +330,8 @@ extern "C" {
 #   else
 #       define neo_unreachable() __builtin_unreachable()
 #   endif
-#define neo_bsf32(x) (neo_likely(x) ? __builtin_ctz((x)) : 0)
-#define neo_bsr32(x) (neo_likely(x) ? __builtin_clz((x))^31 : 0)
+#define neo_bsf32(x) (neo_likely(x) ? (uint32_t)__builtin_ctz((x)) : 0u)
+#define neo_bsr32(x) (neo_likely(x) ? (uint32_t)__builtin_clz((x))^31 : 0u)
 #   define neo_bswap32(x) __builtin_bswap32(x)
 #   define neo_bswap64(x) __builtin_bswap64(x)
 #   if NEO_CPU_AMD64
@@ -693,6 +693,10 @@ typedef union NEO_ALIGN(8) record_t {
     int16_t ri16;
     uint8_t ru8;
     int8_t ri8;
+    struct {
+        uint32_t lo;
+        uint32_t hi;
+    } ru32x2;
 } record_t;
 neo_static_assert(sizeof(record_t) == 8);
 #define rec_setnan(o) ((o).ru64 = 0xfff8000000000000ull) /* Set NaN. */
@@ -774,6 +778,12 @@ typedef enum neo_strscan_format_t {
 /* I (IMAG), U (U32), LL (I64), ULL/LLU (U64), L (long), UL/LU (ulong). */
 /* NYI: f (float). Not needed until cp_number() handles non-integers. */
 extern NEO_EXPORT neo_strscan_format_t neo_strscan_scan(const uint8_t *p, size_t len, record_t *o, neo_strscan_opt_t opt);
+
+/* ---- String Formatting ---- */
+
+extern NEO_EXPORT uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x);
+extern NEO_EXPORT uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x);
+extern NEO_EXPORT uint8_t *neo_fmt_ptr(uint8_t *p, const void *v);
 
 #ifdef __cplusplus
 }

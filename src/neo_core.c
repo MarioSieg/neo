@@ -794,7 +794,7 @@ static neo_strscan_format_t strscan_dec(
                     n = (double)(int64_t)x;
                     if (neg) n = -n;
                     o->as_float = n;
-                    return fmt;
+                return fmt;
             }
         }
     }
@@ -1080,4 +1080,649 @@ neo_strscan_format_t neo_strscan_scan(
         }
         return fmt;
     }
+}
+
+/* Rescale factors to push the exponent of a number towards zero. */
+#define RESCALE_EXPONENTS(P, N) \
+  P(308), P(289), P(270), P(250), P(231), P(212), P(193), P(173), P(154), \
+  P(135), P(115), P(96), P(77), P(58), P(38), P(0), P(0), P(0), N(39), N(58), \
+  N(77), N(96), N(116), N(135), N(154), N(174), N(193), N(212), N(231), \
+  N(251), N(270), N(289)
+
+#define ONE_E_P(X) 1e+0 ## X
+#define ONE_E_N(X) 1e-0 ## X
+static const int16_t rescale_e[] = { RESCALE_EXPONENTS(-, +) };
+static const double rescale_n[] = { RESCALE_EXPONENTS(ONE_E_P, ONE_E_N) };
+#undef ONE_E_N
+#undef ONE_E_P
+#undef RESCALE_EXPONENTS
+
+/*
+** For p in range -70 through 57, this table encodes pairs (m, e) such that
+** 4*2^p <= (uint8_t)m*10^e, and is the smallest value for which this holds.
+*/
+static const int8_t four_ulp_m_e[] = {
+    34, -21, 68, -21, 14, -20, 28, -20, 55, -20, 2, -19, 3, -19, 5, -19, 9, -19,
+    -82, -18, 35, -18, 7, -17, -117, -17, 28, -17, 56, -17, 112, -16, -33, -16,
+    45, -16, 89, -16, -78, -15, 36, -15, 72, -15, -113, -14, 29, -14, 57, -14,
+    114, -13, -28, -13, 46, -13, 91, -12, -74, -12, 37, -12, 73, -12, 15, -11, 3,
+    -11, 59, -11, 2, -10, 3, -10, 5, -10, 1, -9, -69, -9, 38, -9, 75, -9, 15, -7,
+    3, -7, 6, -7, 12, -6, -17, -7, 48, -7, 96, -7, -65, -6, 39, -6, 77, -6, -103,
+    -5, 31, -5, 62, -5, 123, -4, -11, -4, 49, -4, 98, -4, -60, -3, 4, -2, 79, -3,
+    16, -2, 32, -2, 63, -2, 2, -1, 25, 0, 5, 1, 1, 2, 2, 2, 4, 2, 8, 2, 16, 2,
+    32, 2, 64, 2, -128, 2, 26, 2, 52, 2, 103, 3, -51, 3, 41, 4, 82, 4, -92, 4,
+    33, 4, 66, 4, -124, 5, 27, 5, 53, 5, 105, 6, 21, 6, 42, 6, 84, 6, 17, 7, 34,
+    7, 68, 7, 2, 8, 3, 8, 6, 8, 108, 9, -41, 9, 43, 10, 86, 9, -84, 10, 35, 10,
+    69, 10, -118, 11, 28, 11, 55, 12, 11, 13, 22, 13, 44, 13, 88, 13, -80, 13,
+    36, 13, 71, 13, -115, 14, 29, 14, 57, 14, 113, 15, -30, 15, 46, 15, 91, 15,
+    19, 16, 37, 16, 73, 16, 2, 17, 3, 17, 6, 17
+};
+
+/* min(2^32-1, 10^e-1) for e in range 0 through 10 */
+static uint32_t ndigits_dec_threshold[] = {
+    0, 9U, 99U, 999U, 9999U, 99999U, 999999U,
+    9999999U, 99999999U, 999999999U, 0xffffffffU
+};
+
+#define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
+static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
+    neo_dassert(p != NULL);
+    uint32_t u = (uint32_t)k;
+    if (k < 0) { u = ~u+1u; *p++ = '-'; }
+    if (u < 10000) {
+        if (u < 10) { goto dig1; }
+        if (u < 100) { goto dig2; }
+        if (u < 1000) { goto dig3; }
+    } else {
+        uint32_t v = u / 10000; u -= v * 10000;
+        if (v < 10000) {
+            if (v < 10) { goto dig5; }
+            if (v < 100) { goto dig6; }
+            if (v < 1000) { goto dig7; }
+        } else {
+            uint32_t w = v / 10000; v -= w * 10000;
+            if (w >= 10) { wint_r(w, 10, 10) }
+            *p++ = (uint8_t)('0'+w);
+        }
+        wint_r(v, 23, 1000)
+        dig7: wint_r(v, 12, 100)
+        dig6: wint_r(v, 10, 10)
+        dig5: *p++ = (uint8_t)('0'+v);
+    }
+    wint_r(u, 23, 1000)
+    dig3: wint_r(u, 12, 100)
+    dig2: wint_r(u, 10, 10)
+    dig1: *p++ = (uint8_t)('0'+u);
+    return p;
+}
+#undef wint_r
+
+uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x) {
+    neo_dassert(p != NULL);
+    p = fmt_i32(p, (int32_t) (x & 0xffffffffll));
+    return fmt_i32(p, (int32_t) (x >> 32));
+}
+
+/* Format types (max. 16). */
+typedef enum fmt_type_t {
+    STRFMT_EOF, STRFMT_ERR, STRFMT_LIT,
+    STRFMT_INT, STRFMT_UINT, STRFMT_NUM, STRFMT_STR, STRFMT_CHAR, STRFMT_PTR
+} fmt_type_t;
+
+typedef uint32_t sfmt_t;
+
+/* Compute the number of digits in the decimal representation of x. */
+static size_t ndigits_dec(uint32_t x) {
+    size_t t = (size_t)((neo_bsr32(x | 1) * 77) >> 8) + 1; /* 2^8/77 is roughly log2(10) */
+    return t + (x > ndigits_dec_threshold[t]);
+}
+
+/* Format subtypes (bits are reused). */
+#define STRFMT_T_HEX	0x0010	/* STRFMT_UINT */
+#define STRFMT_T_OCT	0x0020	/* STRFMT_UINT */
+#define STRFMT_T_FP_A	0x0000	/* STRFMT_NUM */
+#define STRFMT_T_FP_E	0x0010	/* STRFMT_NUM */
+#define STRFMT_T_FP_F	0x0020	/* STRFMT_NUM */
+#define STRFMT_T_FP_G	0x0030	/* STRFMT_NUM */
+#define STRFMT_T_QUOTED	0x0010	/* STRFMT_STR */
+
+/* Format flags. */
+#define STRFMT_F_LEFT	0x0100
+#define STRFMT_F_PLUS	0x0200
+#define STRFMT_F_ZERO	0x0400
+#define STRFMT_F_SPACE	0x0800
+#define STRFMT_F_ALT	0x1000
+#define STRFMT_F_UPPER	0x2000
+
+/* Format indicator fields. */
+#define STRFMT_SH_WIDTH	16
+#define STRFMT_SH_PREC	24
+
+#define STRFMT_TYPE(sf) ((FormatType)((sf) & 15))
+#define STRFMT_WIDTH(sf) (((sf) >> STRFMT_SH_WIDTH) & 255u)
+#define STRFMT_PREC(sf)	((((sf) >> STRFMT_SH_PREC) & 255u) - 1u)
+#define STRFMT_FP(sf) (((sf) >> 4) & 3)
+
+/* Formats for conversion characters. */
+#define STRFMT_A	(STRFMT_NUM|STRFMT_T_FP_A)
+#define STRFMT_C	(STRFMT_CHAR)
+#define STRFMT_D	(STRFMT_INT)
+#define STRFMT_E	(STRFMT_NUM|STRFMT_T_FP_E)
+#define STRFMT_F	(STRFMT_NUM|STRFMT_T_FP_F)
+#define STRFMT_G	(STRFMT_NUM|STRFMT_T_FP_G)
+#define STRFMT_I	STRFMT_D
+#define STRFMT_O	(STRFMT_UINT|STRFMT_T_OCT)
+#define STRFMT_P	(STRFMT_PTR)
+#define STRFMT_Q	(STRFMT_STR|STRFMT_T_QUOTED)
+#define STRFMT_S	(STRFMT_STR)
+#define STRFMT_U	(STRFMT_UINT)
+#define STRFMT_X	(STRFMT_UINT|STRFMT_T_HEX)
+#define STRFMT_G14	(STRFMT_G | ((14+1) << STRFMT_SH_PREC))
+
+#define ND_MUL2K_MAX_SHIFT 29
+#define ND_MUL2K_DIV1E9(val) ((uint32_t)((val)/1000000000))
+
+/* Multiply nd by 2^k and add carry_in (ndlo is assumed to be zero). */
+static uint32_t nd_mul2k(uint32_t* nd, uint32_t ndhi, uint32_t k, uint32_t carry_in, sfmt_t sf) {
+    neo_dassert(nd != NULL);
+    uint32_t i, ndlo = 0, start = 1;
+    /* Performance hacks. */
+    if (k > ND_MUL2K_MAX_SHIFT*2 && STRFMT_FP(sf) != STRFMT_FP(STRFMT_T_FP_F)) {
+        start = ndhi - (STRFMT_PREC(sf) + 17) / 8;
+    }
+    /* Real logic. */
+    while (k >= ND_MUL2K_MAX_SHIFT) {
+        for (i = ndlo; i <= ndhi; i++) {
+            uint64_t val = ((uint64_t)nd[i] << ND_MUL2K_MAX_SHIFT) | carry_in;
+            carry_in = ND_MUL2K_DIV1E9(val);
+            nd[i] = (uint32_t)val - carry_in * 1000000000;
+        }
+        if (carry_in) {
+            nd[++ndhi] = carry_in; carry_in = 0;
+            if (start++ == ndlo) { ++ndlo; }
+        }
+        k -= ND_MUL2K_MAX_SHIFT;
+    }
+    if (k) {
+        for (i = ndlo; i <= ndhi; i++) {
+            uint64_t val = ((uint64_t)nd[i] << k) | carry_in;
+            carry_in = ND_MUL2K_DIV1E9(val);
+            nd[i] = (uint32_t)val - carry_in * 1000000000;
+        }
+        if (carry_in) { nd[++ndhi] = carry_in; }
+    }
+    return ndhi;
+}
+
+/* Divide nd by 2^k (ndlo is assumed to be zero). */
+static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
+    neo_dassert(nd != NULL);
+    uint32_t ndlo = 0, stop1 = ~0u, stop2 = ~0u;
+    /* Performance hacks. */
+    if (!ndhi) {
+        if (!nd[0]) {
+            return 0;
+        } else {
+            uint32_t s = neo_bsf32(nd[0]);
+            if (s >= k) { nd[0] >>= k; return 0; }
+            nd[0] >>= s; k -= s;
+        }
+    }
+    if (k > 18) {
+        if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_F)) {
+            stop1 = (uint32_t)(63 - (int32_t)STRFMT_PREC(sf) / 9);
+        } else {
+            int32_t floorlog2 = (int32_t)(ndhi * 29 + neo_bsr32(nd[ndhi]) - k);
+            int32_t floorlog10 = (int32_t)(floorlog2 * 0.30102999566398114);
+            stop1 = (uint32_t)(62 + (floorlog10 - (int32_t)STRFMT_PREC(sf)) / 9);
+            stop2 = (uint32_t)(61 + (int32_t)ndhi - (int32_t)STRFMT_PREC(sf) / 8);
+        }
+    }
+    /* Real logic. */
+    while (k >= 9) {
+        uint32_t i = ndhi, carry = 0;
+        for (;;) {
+            uint32_t val = nd[i];
+            nd[i] = (val >> 9) + carry;
+            carry = (val & 0x1ff) * 1953125;
+            if (i == ndlo) { break; }
+            i = (i - 1) & 0x3f;
+        }
+        if (ndlo != stop1 && ndlo != stop2) {
+            if (carry) { ndlo = (ndlo - 1) & 0x3f; nd[ndlo] = carry; }
+            if (!nd[ndhi]) { ndhi = (ndhi - 1) & 0x3f; stop2--; }
+        } else if (!nd[ndhi]) {
+            if (ndhi != ndlo) { ndhi = (ndhi - 1) & 0x3f; stop2--; }
+            else { return ndlo; }
+        }
+        k -= 9;
+    }
+    if (k) {
+        uint32_t mask = (1U << k) - 1, mul = 1000000000 >> k, i = ndhi, carry = 0;
+        for (;;) {
+            uint32_t val = nd[i];
+            nd[i] = (val >> k) + carry;
+            carry = (val & mask) * mul;
+            if (i == ndlo) { break; }
+            i = (i - 1) & 0x3f;
+        }
+        if (carry) { ndlo = (ndlo - 1) & 0x3f; nd[ndlo] = carry; }
+    }
+    return ndlo;
+}
+
+/* Add m*10^e to nd (assumes ndlo <= e/9 <= ndhi and 0 <= m <= 9). */
+static uint32_t nd_add_m10e(uint32_t* nd, uint32_t ndhi, uint8_t m, int32_t e) {
+    neo_dassert(nd != NULL);
+    uint32_t i, carry;
+    if (e >= 0) {
+        i = (uint32_t)e/9;
+        carry = m * (ndigits_dec_threshold[e - (int32_t)i*9] + 1);
+    } else {
+        int32_t f = (e-8)/9;
+        i = (uint32_t)(64 + f);
+        carry = m * (ndigits_dec_threshold[e - f*9] + 1);
+    }
+    for (;;) {
+        uint32_t val = nd[i] + carry;
+        if (neo_unlikely(val >= 1000000000)) {
+            val -= 1000000000;
+            nd[i] = val;
+            if (neo_unlikely(i == ndhi)) {
+                ndhi = (ndhi + 1) & 0x3f;
+                nd[ndhi] = 1;
+                break;
+            }
+            carry = 1;
+            i = (i + 1) & 0x3f;
+        } else {
+            nd[i] = val;
+            break;
+        }
+    }
+    return ndhi;
+}
+
+#define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
+/* Write 9-digit unsigned integer to buffer. */
+static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
+    neo_dassert(p != NULL);
+    uint32_t v = u / 10000, w;
+    u -= v * 10000;
+    w = v / 10000;
+    v -= w * 10000;
+    *p++ = (uint8_t)('0'+w);
+    wint_r(v, 23, 1000)
+    wint_r(v, 12, 100)
+    wint_r(v, 10, 10)
+    *p++ = (uint8_t)('0'+v);
+    wint_r(u, 23, 1000)
+    wint_r(u, 12, 100)
+    wint_r(u, 10, 10)
+    *p++ = (uint8_t)('0'+u);
+    return p;
+}
+#undef wint_r
+
+/* Test whether two "nd" values are equal in their most significant digits. */
+static int nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
+    neo_dassert(nd != NULL && ref != NULL);
+    uint8_t nd9[9], ref9[9];
+    if (hilen <= prec) {
+        if (neo_unlikely(nd[ndhi] != *ref)) { return 0; }
+        prec -= hilen; ref--; ndhi = (ndhi - 1) & 0x3f;
+        if (prec >= 9) {
+            if (neo_unlikely(nd[ndhi] != *ref)) { return 0; }
+            prec -= 9; ref--; ndhi = (ndhi - 1) & 0x3f;
+        }
+    } else {
+        prec -= hilen - 9;
+    }
+    neo_assert(prec < 9 && "bad precision");
+    fmt_wuint9(nd9, nd[ndhi]);
+    fmt_wuint9(ref9, *ref);
+    return !memcmp(nd9, ref9, prec) && (nd9[prec] < '5') == (ref9[prec] < '5');
+}
+
+static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
+    neo_dassert(p != NULL);
+    size_t width = STRFMT_WIDTH(sf), prec = STRFMT_PREC(sf), len;
+    record_t t;
+    t.as_float = x;
+    if (neo_unlikely((t.ru32x2.hi << 1) >= 0xffe00000)) {
+        /* Handle non-finite values uniformly for %a, %e, %f, %g. */
+        int prefix = 0, ch = (sf & STRFMT_F_UPPER) ? 0x202020 : 0;
+        if (((t.ru32x2.hi & 0x000fffff) | t.ru32x2.lo) != 0) {
+            ch ^= ('n' << 16) | ('a' << 8) | 'n';
+            if ((sf & STRFMT_F_SPACE)) { prefix = ' '; }
+        } else {
+            ch ^= ('i' << 16) | ('n' << 8) | 'f';
+            if ((t.ru32x2.hi & 0x80000000)) { prefix = '-'; }
+            else if ((sf & STRFMT_F_PLUS)) { prefix = '+'; }
+            else if ((sf & STRFMT_F_SPACE)) { prefix = ' '; }
+        }
+        len = 3 + (prefix != 0);
+        if (!(sf & STRFMT_F_LEFT)) {
+            while (width-- > len) { *p++ = ' '; }
+        }
+        if (prefix) *p++ = (uint8_t)prefix;
+        *p++ = (uint8_t)(ch >> 16);
+        *p++ = (uint8_t)(ch >> 8);
+        *p++ = (uint8_t)ch;
+    } else if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_A)) {
+        /* %a */
+        const uint8_t *hexdig = (const uint8_t *)((sf & STRFMT_F_UPPER) ? "0123456789ABCDEFPX" : "0123456789abcdefpx");
+        int32_t e = (int32_t)(t.ru32x2.hi >> 20) & 0x7ff;
+        uint8_t prefix = 0, eprefix = '+';
+        if (t.ru32x2.hi & 0x80000000) { prefix = '-'; }
+        else if ((sf & STRFMT_F_PLUS)) { prefix = '+'; }
+        else if ((sf & STRFMT_F_SPACE)) { prefix = ' '; }
+        t.ru32x2.hi &= 0xfffff;
+        if (e) {
+            t.ru32x2.hi |= 0x100000;
+            e -= 1023;
+        } else if (t.ru32x2.lo | t.ru32x2.hi) {
+            /* Non-zero denormal - normalise it. */
+            uint32_t shift = t.ru32x2.hi ? 20-(uint32_t)neo_bsr32(t.ru32x2.hi) : 52-(uint32_t)neo_bsr32(t.ru32x2.lo);
+            e = -1022 - (int32_t)shift;
+            t.ru64 <<= shift;
+        }
+        /* abs(n) == t.u64 * 2^(e - 52) */
+        /* If n != 0, bit 52 of t.u64 is set, and is the highest set bit. */
+        if ((int32_t)prec < 0) {
+            /* Default precision: use smallest precision giving exact result. */
+            prec = t.ru32x2.lo ? 13-(uint32_t)neo_bsf32(t.ru32x2.lo)/4 : 5-(uint32_t)neo_bsf32(t.ru32x2.hi|0x100000)/4;
+        } else if (prec < 13) {
+            /* Precision is sufficiently low as to maybe require rounding. */
+            t.ru64 += (((uint64_t)1) << (51 - prec*4));
+        }
+        if (e < 0) {
+            eprefix = '-';
+            e = -e;
+        }
+        len = 5 + ndigits_dec((uint32_t)e) + prec + (prefix != 0)
+              + ((prec | (sf & STRFMT_F_ALT)) != 0);
+        if (!(sf & (STRFMT_F_LEFT | STRFMT_F_ZERO))) {
+            while (width-- > len) { *p++ = ' '; }
+        }
+        if (prefix) { *p++ = prefix; }
+        *p++ = '0';
+        *p++ = hexdig[17]; /* x or X */
+        if ((sf & (STRFMT_F_LEFT | STRFMT_F_ZERO)) == STRFMT_F_ZERO) {
+            while (width-- > len) { *p++ = '0'; }
+        }
+        *p++ = ('0' + (t.ru32x2.hi >> 20)) & 255; /* Usually '1', sometimes '0' or '2'. */
+        if ((prec | (sf & STRFMT_F_ALT))) {
+            /* Emit fractional part. */
+            uint8_t *q = p + 1 + prec;
+            *p = '.';
+            if (prec < 13) { t.ru64 >>= (52 - prec*4); }
+            else { while (prec > 13) { p[prec--] = '0'; } }
+            while (prec) {
+                p[prec--] = hexdig[t.ru64 & 15];
+                t.ru64 >>= 4;
+            }
+            p = q;
+        }
+        *p++ = hexdig[16]; /* p or P */
+        *p++ = eprefix; /* + or - */
+        p = fmt_i32(p, e);
+    } else {
+        /* %e or %f or %g - begin by converting n to "nd" format. */
+        uint32_t nd[64];
+        uint32_t ndhi = 0, ndlo, i;
+        int32_t e = (t.ru32x2.hi >> 20) & 0x7ff, ndebias = 0;
+        uint8_t prefix = 0, *q;
+        if (t.ru32x2.hi & 0x80000000) { prefix = '-'; }
+        else if ((sf & STRFMT_F_PLUS)) { prefix = '+'; }
+        else if ((sf & STRFMT_F_SPACE)) { prefix = ' '; }
+        prec += ((int32_t)prec >> 31) & 7; /* Default precision is 6. */
+        if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_G)) {
+            /* %g - decrement precision if non-zero (to make it like %e). */
+            prec--;
+            prec ^= (uint32_t)((int32_t)prec >> 31);
+        }
+        if ((sf & STRFMT_T_FP_E) && prec < 14 && x != 0) {
+            /* Precision is sufficiently low that rescaling will probably work. */
+            if ((ndebias = rescale_e[e >> 6])) {
+                t.as_float = x * rescale_n[e >> 6];
+                if (neo_unlikely(!e)) {
+                    t.as_float *= 1e10, ndebias -= 10;
+                }
+                t.ru64 -= 2; /* Convert 2ulp below (later we convert 2ulp above). */
+                nd[0] = 0x100000 | (t.ru32x2.hi & 0xfffff);
+                e = ((int32_t)(t.ru32x2.hi >> 20) & 0x7ff) - 1075 - (ND_MUL2K_MAX_SHIFT < 29);
+                goto load_t_lo; rescale_failed:
+                t.as_float = x;
+                e = (t.ru32x2.hi >> 20) & 0x7ff;
+                ndebias = 0;
+                ndhi = 0;
+            }
+        }
+        nd[0] = t.ru32x2.hi & 0xfffff;
+        if (e == 0) { ++e; }
+        else { nd[0] |= 0x100000; }
+        e -= 1043;
+        if (t.ru32x2.lo) {
+            e -= 32 + (ND_MUL2K_MAX_SHIFT < 29);
+            load_t_lo:
+#if ND_MUL2K_MAX_SHIFT >= 29
+            nd[0] = (nd[0] << 3) | (t.ru32x2.lo >> 29);
+            ndhi = nd_mul2k(nd, ndhi, 29, t.ru32x2.lo & 0x1fffffff, sf);
+#elif ND_MUL2K_MAX_SHIFT >= 11
+            ndhi = nd_mul2k(nd, ndhi, 11, t.ru32x2.lo >> 21, sf);
+            ndhi = nd_mul2k(nd, ndhi, 11, (t.ru32x2.lo >> 10) & 0x7ff, sf);
+            ndhi = nd_mul2k(nd, ndhi, 11, (t.ru32x2.lo <<  1) & 0x7ff, sf);
+#else
+#   error "ND_MUL2K_MAX_SHIFT too small"
+#endif
+        }
+        if (e >= 0) {
+            ndhi = nd_mul2k(nd, ndhi, (uint32_t)e, 0, sf);
+            ndlo = 0;
+        } else {
+            ndlo = nd_div2k(nd, ndhi, (uint32_t)-e, sf);
+            if (ndhi && !nd[ndhi]) { --ndhi; }
+        }
+        /* abs(n) == nd * 10^ndebias (for slightly loose interpretation of ==) */
+        if ((sf & STRFMT_T_FP_E)) {
+            /* %e or %g - assume %e and start by calculating nd's exponent (nde). */
+            uint8_t eprefix = '+';
+            int32_t nde = -1;
+            size_t hilen;
+            if (ndlo && !nd[ndhi]) {
+                ndhi = 64;
+                while (!nd[--ndhi]);
+                nde -= 64 * 9;
+            }
+            hilen = ndigits_dec(nd[ndhi]);
+            nde += (int32_t)(ndhi * 9 + hilen);
+            if (ndebias) {
+                /*
+                ** Rescaling was performed, but this introduced some error, and might
+                ** have pushed us across a rounding boundary. We check whether this
+                ** error affected the result by introducing even more error (2ulp in
+                ** either direction), and seeing whether a rounding boundary was
+                ** crossed. Having already converted the -2ulp case, we save off its
+                ** most significant digits, convert the +2ulp case, and compare them.
+                */
+                int32_t eidx = e
+                    + 70 + (ND_MUL2K_MAX_SHIFT < 29)
+                    + (t.ru32x2.lo >= 0xfffffffe && !(~t.ru32x2.hi << 12));
+                const int8_t *m_e = four_ulp_m_e + eidx * 2;
+                neo_assert(0 <= eidx && eidx < 128 && "bad eidx");
+                nd[33] = nd[ndhi];
+                nd[32] = nd[(ndhi - 1) & 0x3f];
+                nd[31] = nd[(ndhi - 2) & 0x3f];
+                nd_add_m10e(nd, ndhi, (uint8_t)*m_e, m_e[1]);
+                if (neo_unlikely(!nd_similar(nd, ndhi, nd + 33, hilen, prec + 1))) {
+                    goto rescale_failed;
+                }
+            }
+            if ((int32_t)(prec - (size_t)nde) < (0x3f & -(int32_t)ndlo) * 9) {
+                /* Precision is sufficiently low as to maybe require rounding. */
+                ndhi = nd_add_m10e(nd, ndhi, 5, (int32_t)((size_t)nde - prec - 1));
+                nde += (hilen != ndigits_dec(nd[ndhi]));
+            }
+            nde += ndebias;
+            if ((sf & STRFMT_T_FP_F)) {
+                /* %g */
+                if ((int32_t)prec >= nde && nde >= -4) {
+                    if (nde < 0) ndhi = 0;
+                    prec -= (size_t)nde;
+                    goto g_format_like_f;
+                } else if (!(sf & STRFMT_F_ALT) && prec && width > 5) {
+                    /* Decrease precision in order to strip trailing zeroes. */
+                    uint8_t tail[9];
+                    uint32_t maxprec = (uint32_t)(hilen - 1 + ((ndhi - ndlo) & 0x3f) * 9);
+                    if (prec >= maxprec) prec = maxprec;
+                    else ndlo = (uint32_t)((ndhi - (uint32_t)(((int32_t)(prec - hilen) + 9) / 9)) & 0x3f);
+                    i = (uint32_t)(prec - hilen - (((ndhi - ndlo) & 0x3f) * 9) + 10);
+                    fmt_wuint9(tail, nd[ndlo]);
+                    while (prec && tail[--i] == '0') {
+                        prec--;
+                        if (!i) {
+                            if (ndlo == ndhi) { prec = 0; break; }
+                            fmt_wuint9(tail, nd[++ndlo]);
+                            i = 9;
+                        }
+                    }
+                }
+            }
+            if (nde < 0) {
+                /* Make nde non-negative. */
+                eprefix = '-';
+                nde = -nde;
+            }
+            len = 3 + prec + (prefix != 0) + ndigits_dec((uint32_t)nde) + (nde < 10)
+                  + ((prec | (sf & STRFMT_F_ALT)) != 0);
+            if (!(sf & (STRFMT_F_LEFT | STRFMT_F_ZERO))) {
+                while (width-- > len) { *p++ = ' '; }
+            }
+            if (prefix) { *p++ = (uint8_t)prefix; }
+            if ((sf & (STRFMT_F_LEFT | STRFMT_F_ZERO)) == STRFMT_F_ZERO) {
+                while (width-- > len) { *p++ = '0'; }
+            }
+            q = fmt_i32(p + 1, (int32_t)nd[ndhi]);
+            p[0] = p[1]; /* Put leading digit in the correct place. */
+            if ((prec | (sf & STRFMT_F_ALT))) {
+                /* Emit fractional part. */
+                p[1] = '.'; p += 2;
+                prec -= (size_t)(q - p); p = q; /* Account for digits already emitted. */
+                /* Then emit chunks of 9 digits (this may emit 8 digits too many). */
+                for (i = ndhi; (int32_t)prec > 0 && i != ndlo; prec -= 9) {
+                    i = (i - 1) & 0x3f;
+                    p = fmt_wuint9(p, nd[i]);
+                }
+                if ((sf & STRFMT_T_FP_F) && !(sf & STRFMT_F_ALT)) {
+                    /* %g (and not %#g) - strip trailing zeroes. */
+                    p += (int32_t)prec & ((int32_t)prec >> 31);
+                    while (p[-1] == '0') { p--; }
+                    if (p[-1] == '.') p--;
+                } else {
+                    /* %e (or %#g) - emit trailing zeroes. */
+                    while ((int32_t)prec > 0) { *p++ = '0'; prec--; }
+                    p += (int32_t)prec;
+                }
+            } else {
+                ++p;
+            }
+            *p++ = (sf & STRFMT_F_UPPER) ? 'E' : 'e';
+            *p++ = eprefix; /* + or - */
+            if (nde < 10) *p++ = '0'; /* Always at least two digits of exponent. */
+            p = fmt_i32(p, nde);
+        } else {
+            /* %f (or, shortly, %g in %f style) */
+            if (prec < (size_t)(0x3f & -(int32_t)ndlo) * 9) {
+                /* Precision is sufficiently low as to maybe require rounding. */
+                ndhi = nd_add_m10e(nd, ndhi, 5, (int32_t)(0 - prec - 1));
+            }
+            g_format_like_f:
+            if ((sf & STRFMT_T_FP_E) && !(sf & STRFMT_F_ALT) && prec && width) {
+                /* Decrease precision in order to strip trailing zeroes. */
+                if (ndlo) {
+                    /* nd has a fractional part; we need to look at its digits. */
+                    uint8_t tail[9];
+                    uint32_t maxprec = (64 - ndlo) * 9;
+                    if (prec >= maxprec) prec = maxprec;
+                    else ndlo = (uint32_t)(64 - (prec + 8) / 9);
+                    i = (uint32_t)(prec - ((63 - ndlo) * 9));
+                    fmt_wuint9(tail, nd[ndlo]);
+                    while (prec && tail[--i] == '0') {
+                        prec--;
+                        if (!i) {
+                            if (ndlo == 63) { prec = 0; break; }
+                            fmt_wuint9(tail, nd[++ndlo]);
+                            i = 9;
+                        }
+                    }
+                } else {
+                    /* nd has no fractional part, so precision goes straight to zero. */
+                    prec = 0;
+                }
+            }
+            len = ndhi * 9 + ndigits_dec(nd[ndhi]) + prec + (prefix != 0)
+                  + ((prec | (sf & STRFMT_F_ALT)) != 0);
+            if (!(sf & (STRFMT_F_LEFT | STRFMT_F_ZERO))) {
+                while (width-- > len) *p++ = ' ';
+            }
+            if (prefix) *p++ = prefix;
+            if ((sf & (STRFMT_F_LEFT | STRFMT_F_ZERO)) == STRFMT_F_ZERO) {
+                while (width-- > len) *p++ = '0';
+            }
+            /* Emit integer part. */
+            p = fmt_i32(p, (int32_t)nd[ndhi]);
+            i = ndhi;
+            while (i) p = fmt_wuint9(p, nd[--i]);
+            if ((prec | (sf & STRFMT_F_ALT))) {
+                /* Emit fractional part. */
+                *p++ = '.';
+                /* Emit chunks of 9 digits (this may emit 8 digits too many). */
+                while ((int32_t)prec > 0 && i != ndlo) {
+                    i = (i - 1) & 0x3f;
+                    p = fmt_wuint9(p, nd[i]);
+                    prec -= 9;
+                }
+                if ((sf & STRFMT_T_FP_E) && !(sf & STRFMT_F_ALT)) {
+                    /* %g (and not %#g) - strip trailing zeroes. */
+                    p += (int32_t)prec & ((int32_t)prec >> 31);
+                    while (p[-1] == '0') p--;
+                    if (p[-1] == '.') p--;
+                } else {
+                    /* %f (or %#g) - emit trailing zeroes. */
+                    while ((int32_t)prec > 0) { *p++ = '0'; prec--; }
+                    p += (int32_t)prec;
+                }
+            }
+        }
+    }
+    if ((sf & STRFMT_F_LEFT)) while (width-- > len) {
+        *p++ = ' ';
+    }
+    return p;
+}
+
+uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x) {
+    neo_dassert(p != NULL);
+    return fmt_f64(p, x, STRFMT_G14);
+}
+
+uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
+    neo_dassert(p != NULL);
+    ptrdiff_t x = (ptrdiff_t)v;
+    size_t i, n = 2+2*sizeof(ptrdiff_t);
+    if (!x) {
+        *p++ = 'n';
+        *p++ = 'u';
+        *p++ = 'l';
+        *p++ = 'l';
+        return p;
+    }
+    n = 2+2*4+((x>>32) ? 2+2*((size_t)neo_bsr32((uint32_t)(x>>32))>>3) : 0);
+    p[0] = '0';
+    p[1] = 'x';
+    for (i = n-1; i >= 2; i--, x >>= 4) {
+        p[i] = ((const uint8_t *)"0123456789abcdef")[(x & 15)];
+    }
+    return p+n;
 }
