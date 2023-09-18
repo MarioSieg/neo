@@ -695,6 +695,10 @@ typedef union NEO_ALIGN(8) record_t {
     int8_t ri8;
 } record_t;
 neo_static_assert(sizeof(record_t) == 8);
+#define rec_setnan(o) ((o).ru64 = 0xfff8000000000000ull) /* Set NaN. */
+#define rec_setpinf(o) ((o).ru64 = 0x7ff0000000000000ull) /* Set +Inf. */
+#define rec_setminf(o) ((o).ru64 = 0xfff0000000000000ull) /* Set -Inf. */
+#define rec_isnan(o) (((o).ru64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) /* Check if NaN. */
 
 /* Tagged record value. */
 typedef struct NEO_ALIGN(8) tvalue_t {

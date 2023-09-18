@@ -597,10 +597,6 @@ static const uint8_t char_bits[257] = {
 };
 
 
-#define setnanV(o) ((o)->ru64 = 0xfff8000000000000ull)
-#define setpinfV(o)	((o)->ru64 = 0x7ff0000000000000ull)
-#define setminfV(o)	((o)->ru64 = 0xfff0000000000000ull)
-
 /* Definitions for circular decimal digit buffer (base 100 = 2 digits/byte). */
 #define NEO_STRSCAN_DIG	1024
 #define NEO_STRSCAN_MAXDIG	800	 /* 772 + extra are sufficient. */
@@ -814,7 +810,11 @@ static neo_strscan_format_t strscan_dec(
         int32_t ex2 = 0, idig = (int32_t)lo + (ex10 >> 1);
         neo_assert(lo > 0 && (ex10 & 1) == 0 && "bad lo ex10");
         /* Handle simple overflow/underflow. */
-        if (idig > 310/2) { if (neg) { setminfV(o); } else { setpinfV(o); } return fmt; }
+        if (idig > 310/2) {
+            if (neg) { rec_setminf(*o); }
+            else { rec_setpinf(*o); }
+            return fmt;
+        }
         else if (idig < -326/2) { o->as_float = neg ? -0.0 : 0.0; return fmt; }
         while (idig < 9 && idig < dlen(lo, hi)) { /* Scale up until we have at least 17 or 18 integer part digits. */
             uint32_t i, cy = 0;
@@ -938,12 +938,12 @@ neo_strscan_format_t neo_strscan_scan(
         if (*p == '+' || *p == '-') { neg = (*p++ == '-'); }
         if (neo_unlikely(*p >= 'A')) {  /* Parse "inf", "infinity" or "nan". */
             record_t tmp;
-            setnanV(&tmp);
+            rec_setnan(tmp);
             if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'f')) {
                 if (neg) {
-                    setminfV(&tmp);
+                    rec_setminf(tmp);
                 } else {
-                    setpinfV(&tmp);
+                    rec_setpinf(tmp);
                 }
                 p += 3;
                 if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'i') &&
