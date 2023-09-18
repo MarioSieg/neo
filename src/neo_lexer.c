@@ -194,7 +194,7 @@ static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int o
     if (peek(self) == '0') { /* Check for radix prefix. */
         switch (c32_to_ascii_lower(peek_next(self))&127) {
             case 'b': rdx = RADIX_BIN; break;
-            case 'o': rdx = RADIX_OCT; break;
+            case 'c': rdx = RADIX_OCT; break;
             case 'x': rdx = RADIX_HEX; break;
         }
         if (rdx != RADIX_DEC) { /* Because trailing decimal zeros are allowed. */
@@ -213,10 +213,6 @@ static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int o
     }
     token_t tok = mktok(self, type, 0);
     tok.radix = rdx;
-    if (rdx != RADIX_DEC) { /* If radix is not decimal, we need to strip the radix prefix. (0*) */
-        tok.lexeme.p += 2;
-        tok.lexeme.len -= 2;
-    }
     return tok;
 }
 

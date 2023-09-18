@@ -79,8 +79,8 @@ void symtab_print(const symtab_t *self, FILE *f, const char *name) {
 
 #define m(node) astmask(ASTNODE_##node)
 static const uint64_t block_valid_masks[BLOCKSCOPE__COUNT] = { /* This table contains masks of the allowed ASTNODE_* types for each block type inside a node_block_t. */
-    m(ERROR)|m(CLASS)|m(VARIABLE)|m(BRANCH)|m(LOOP)|m(UNARY_OP)|m(BINARY_OP)|m(GROUP), /* BLOCKSCOPE_MODULE */
-    m(ERROR)|m(METHOD)|m(VARIABLE), /* BLOCKSCOPE_CLASS */
+    m(ERROR)|m(FUNCTION)|m(CLASS)|m(VARIABLE)|m(BRANCH)|m(LOOP)|m(UNARY_OP)|m(BINARY_OP)|m(GROUP), /* BLOCKSCOPE_MODULE */
+    m(ERROR)|m(FUNCTION)|m(VARIABLE), /* BLOCKSCOPE_CLASS */
     m(ERROR)|m(VARIABLE)|m(BRANCH)|m(LOOP)|m(UNARY_OP)|m(BINARY_OP)|m(GROUP)|m(RETURN)|m(BREAK)|m(CONTINUE), /* BLOCKSCOPE_LOCAL */
     m(ERROR)|m(VARIABLE), /* BLOCKSCOPE_PARAMLIST */
     ASTNODE_EXPR_MASK /* BLOCKSCOPE_ARGLIST */
@@ -222,7 +222,7 @@ astref_t astnode_new_method(astpool_t *pool, const node_method_t *node) {
 
     /* Create AST node. */
     astnode_t *nn = NULL;
-    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_METHOD);
+    astref_t ref = astpool_alloc(pool, &nn, ASTNODE_FUNCTION);
     nn->dat.n_method = *node;
     return ref;
 }
@@ -436,7 +436,7 @@ void node_block_push_child(astpool_t *pool, node_block_t *self, astref_t node) {
     uint64_t mask = block_valid_masks[self->scope];
     uint64_t node_mask = astmask(pnode->type);
     if (neo_unlikely((mask & node_mask) == 0)) {
-        neo_error("Block node type '%s' is not allowed in '%s' self kind.", astnode_names[pnode->type], block_names[self->scope]);
+        neo_panic("Block node type '%s' is not allowed in '%s' self kind.", astnode_names[pnode->type], block_names[self->scope]);
     }
 }
 
@@ -471,7 +471,7 @@ static void astnode_visit_root_impl(astpool_t *pool, astref_t rootref, void (*vi
             astnode_visit_root_impl(pool, data->left_expr, visitor, user, c);
             astnode_visit_root_impl(pool, data->right_expr, visitor, user, c);
         } break;
-        case ASTNODE_METHOD: {
+        case ASTNODE_FUNCTION: {
             const node_method_t *data = &root->dat.n_method;
             astnode_visit_root_impl(pool, data->ident, visitor, user, c);
             astnode_visit_root_impl(pool, data->params, visitor, user, c);
@@ -776,7 +776,7 @@ static void graphviz_ast_visitor(
             graphviz_ast_visitor(pool, graph, nn, data->left_expr, id, " left");
             graphviz_ast_visitor(pool, graph, nn, data->right_expr, id, " right");
         } return;
-        case ASTNODE_METHOD: {
+        case ASTNODE_FUNCTION: {
             const node_method_t *data = &node->dat.n_method;
             Agnode_t *nn = graph_append(node, graph, anode, id, NULL, NULL, edge);
             graphviz_ast_visitor(pool, graph, nn, data->ident, id, " ident");
@@ -952,7 +952,7 @@ static void my_ast_visitor(astpool_t *pool, astref_t noderef, void *user) {
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &node->dat.n_binary_op;
         } return;
-        case ASTNODE_METHOD: {
+        case ASTNODE_FUNCTION: {
             const node_method_t *data = &node->dat.n_method;
         } return;
         case ASTNODE_BLOCK: {

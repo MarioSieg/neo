@@ -110,7 +110,7 @@ typedef uint32_t umm24_t;
 #define BCI_MOD2 1
 #define bci_unpackopc(i) ((opcode_t)((i)&127))
 #define bci_packopc(i, opc) ((bci_instr_t)((i)|((opc)&127)))
-#define bci_unpackmod(i) (((i)&128)>>7)
+#define bci_unpackmod(i) (((uint32_t)(i)&128u)>>7)
 #define bci_packmod(i, mod) ((bci_instr_t)((i)|(((mod)&1)<<7)))
 #define bci_switchmod(i) ((bci_instr_t)(((i)^128)&255))
 
@@ -124,7 +124,7 @@ typedef uint32_t umm24_t;
 #define bci_u24tou32(x) ((umm24_t)(x))
 #define bci_u32tou24(x) ((umm24_t)(x)&(~(umm24_t)0>>8))
 #define bci_i24toi32(x) (((imm24_t)(x)<<8)>>8)
-#define bci_i32toi24(x) ((umm24_t)((int32_t)(x)&(1<<23)\
+#define bci_i32toi24(x) ((umm24_t)((int32_t)(x)&0x800000\
     ? ((int32_t)(x)&~-16777216)|-16777216 \
     : ((int32_t)(x)&(int32_t)(~(uint32_t)0>>8))&~-16777216))
 #define BCI_MOD1IMM24_BIAS (1<<3)
@@ -155,29 +155,6 @@ static inline NEO_NODISCARD bci_instr_t bci_comp_mod1_no_imm(opcode_t opc) {
     neo_assert(opc_imm[opc&127] == IMM_NONE && "invalid imm mode for instruction"); /* Verify immediate mode. */
     return bci_packopc(0, opc);
 }
-
-typedef enum rtag_t { /* Record type tag. */
-    RT_INT = 0,
-    RT_FLOAT,
-    RT_CHAR,
-    RT_BOOL,
-    RT_REF,
-    RT__LEN
-} rtag_t;
-neo_static_assert(RT__LEN <= 255);
-
-typedef union NEO_ALIGN(8) record_t { /* Represents an undiscriminated value in the VM/CP. Either a value type of reference to a class. */
-    neo_int_t as_int;
-    neo_uint_t as_uint;
-    neo_float_t as_float;
-    neo_char_t as_char;
-    neo_bool_t as_bool;
-    void *as_ref; /* Reference type. */
-    uint8_t raw[sizeof(neo_int_t)];
-} record_t;
-neo_static_assert(sizeof(record_t) == 8);
-
-extern NEO_EXPORT bool record_eq(record_t a, record_t b, rtag_t tag);
 
 typedef uint32_t cpkey_t; /* 24-bit Metaspace index key. */
 #define CONSTPOOL_MAX BCI_MOD1UMM24MAX /* Maximum constant pool index, because the ldc immediate is an 24-bit unsigned integer. */

@@ -20,7 +20,7 @@ const uint8_t opc_imm[OPC__COUNT] = {opdef(_, NEO_SEP)};
 #undef _
 
 bool bci_validate_instr(bci_instr_t instr) {
-    int mod = bci_unpackmod(instr);
+    uint32_t mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);
         if (neo_unlikely(opc >= OPC__COUNT)) { /* Invalid opcode value. */
@@ -41,7 +41,7 @@ bool bci_validate_instr(bci_instr_t instr) {
 
 void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored) {
     neo_dassert(out);
-    int mod = bci_unpackmod(instr);
+    uint32_t mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);
         const char *cc_mnemonic = colored ? NEO_CCBLUE : "";
@@ -64,17 +64,6 @@ void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored) {
         }
     } else {
         /* NYI */
-    }
-}
-
-bool record_eq(record_t a, record_t b, rtag_t tag) {
-    switch (tag) {
-        case RT_INT: return a.as_int == b.as_int;
-        case RT_FLOAT: return a.as_float == b.as_float; /* TODO: Use ULP-based comparison? */
-        case RT_CHAR: return a.as_char == b.as_char;
-        case RT_BOOL: return a.as_bool == b.as_bool;
-        case RT_REF: return a.as_ref == b.as_ref;
-        default: return false;
     }
 }
 

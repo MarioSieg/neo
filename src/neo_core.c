@@ -138,6 +138,17 @@ void neo_mempool_free(neo_mempool_t *self) {
     neo_memalloc(self->top, 0);
 }
 
+bool record_eq(record_t a, record_t b, rtag_t tag) {
+    switch (tag) {
+        case RT_INT: return a.as_int == b.as_int;
+        case RT_FLOAT: return a.as_float == b.as_float; /* TODO: Use ULP-based comparison? */
+        case RT_CHAR: return a.as_char == b.as_char;
+        case RT_BOOL: return a.as_bool == b.as_bool;
+        case RT_REF: return a.as_ref == b.as_ref;
+        default: return false;
+    }
+}
+
 #define get_fmodstr(_)\
     if (mode == NEO_FMODE_R) { modstr = _##"r"; }\
     else if (mode == NEO_FMODE_W) { modstr = _##"w"; }\
@@ -482,4 +493,591 @@ void neo_printutf8(FILE *f, const uint8_t *str) {
 #else
 #  error "unsupported platform"
 #endif
+}
+
+/*
+** String Scanning which
+** replaces the standard C library's strtod() family functions.
+** Slightly modified LuaJIT code which is:
+** Copyright (C) 2005-2023 Mike Pall.
+** For full copyright information see LICENSE.
+*/
+
+/*
+** Rationale for the builtin string to number conversion library:
+**
+** It removes a dependency on libc's strtod(), which is a true portability
+** nightmare. Mainly due to the plethora of supported OS and toolchain
+** combinations. Sadly, the various implementations
+** a) are often buggy, incomplete (no hex floats) and/or imprecise,
+** b) sometimes crash or hang on certain inputs,
+** c) return non-standard NaNs that need to be filtered out, and
+** d) fail if the locale-specific decimal separator is not a dot,
+**    which can only be fixed with atrocious workarounds.
+**
+** Also, most of the strtod() implementations are hopelessly bloated,
+** which is not just an I-cache hog, but a problem for static linkage
+** on embedded systems, too.
+**
+** OTOH the builtin conversion function is very compact. Even though it
+** does a lot more, like parsing long longs, octal or imaginary numbers
+** and returning the result in different formats:
+** a) It needs less than 3 KB (!) of machine code (on x64 with -Os),
+** b) it doesn't perform any dynamic allocation and,
+** c) it needs only around 600 bytes of stack space.
+**
+** The builtin function is faster than strtod() for typical inputs, e.g.
+** "123", "1.5" or "1e6". Arguably, it's slower for very large exponents,
+** which are not very common (this could be fixed, if needed).
+**
+** And most importantly, the builtin function is equally precise on all
+** platforms. It correctly converts and rounds any input to a double.
+** If this is not the case, please send a bug report -- but PLEASE verify
+** that the implementation you're comparing to is not the culprit!
+**
+** The implementation quickly pre-scans the entire string first and
+** handles simple integers on-the-fly. Otherwise, it dispatches to the
+** base-specific parser. Hex and octal is straightforward.
+**
+** Decimal to binary conversion uses a fixed-length circular buffer in
+** base 100. Some simple cases are handled directly. For other cases, the
+** number in the buffer is up-scaled or down-scaled until the integer part
+** is in the proper range. Then the integer part is rounded and converted
+** to a double which is finally rescaled to the result. Denormals need
+** special treatment to prevent incorrect 'double rounding'.
+*/
+
+#define CHAR_CNTRL	0x01
+#define CHAR_SPACE	0x02
+#define CHAR_PUNCT	0x04
+#define CHAR_DIGIT	0x08
+#define CHAR_XDIGIT	0x10
+#define CHAR_UPPER	0x20
+#define CHAR_LOWER	0x40
+#define CHAR_IDENT	0x80
+#define CHAR_ALPHA	(CHAR_LOWER|CHAR_UPPER)
+#define CHAR_ALNUM	(CHAR_ALPHA|CHAR_DIGIT)
+#define CHAR_GRAPH	(CHAR_ALNUM|CHAR_PUNCT)
+
+/* Only pass -1 or 0..255 to these macros. Never pass a signed char! */
+#define char_isa(c, t)	((char_bits+1)[(c)] & t)
+#define char_iscntrl(c)	char_isa((c), CHAR_CNTRL)
+#define char_isspace(c)	char_isa((c), CHAR_SPACE)
+#define char_ispunct(c)	char_isa((c), CHAR_PUNCT)
+#define char_isdigit(c)	char_isa((c), CHAR_DIGIT)
+#define char_isxdigit(c)	char_isa((c), CHAR_XDIGIT)
+#define char_isupper(c)	char_isa((c), CHAR_UPPER)
+#define char_islower(c)	char_isa((c), CHAR_LOWER)
+#define char_isident(c)	char_isa((c), CHAR_IDENT)
+#define char_isalpha(c)	char_isa((c), CHAR_ALPHA)
+#define char_isalnum(c)	char_isa((c), CHAR_ALNUM)
+#define char_isgraph(c)	char_isa((c), CHAR_GRAPH)
+
+#define char_toupper(c)	((c) - (char_islower(c) >> 1))
+#define char_tolower(c)	((c) + char_isupper(c))
+
+static const uint8_t char_bits[257] = {
+    0,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  3,  3,  3,  3,  3,  1,  1,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
+    2,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+    152,152,152,152,152,152,152,152,152,152,  4,  4,  4,  4,  4,  4,
+    4,176,176,176,176,176,176,160,160,160,160,160,160,160,160,160,
+    160,160,160,160,160,160,160,160,160,160,160,  4,  4,  4,  4,132,
+    4,208,208,208,208,208,208,192,192,192,192,192,192,192,192,192,
+    192,192,192,192,192,192,192,192,192,192,192,  4,  4,  4,  4,  1,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
+    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128
+};
+
+
+#define setnanV(o) ((o)->ru64 = 0xfff8000000000000ull)
+#define setpinfV(o)	((o)->ru64 = 0x7ff0000000000000ull)
+#define setminfV(o)	((o)->ru64 = 0xfff0000000000000ull)
+
+/* Definitions for circular decimal digit buffer (base 100 = 2 digits/byte). */
+#define NEO_STRSCAN_DIG	1024
+#define NEO_STRSCAN_MAXDIG	800	 /* 772 + extra are sufficient. */
+#define NEO_STRSCAN_DDIG (NEO_STRSCAN_DIG/2)
+#define NEO_STRSCAN_DMASK (NEO_STRSCAN_DDIG-1)
+#define NEO_STRSCAN_MAXEXP	(1<<20)
+
+/* Helpers for circular buffer. */
+#define dnext(a) (((a)+1) & NEO_STRSCAN_DMASK)
+#define dprev(a) (((a)-1) & NEO_STRSCAN_DMASK)
+#define dlen(lo, hi) ((int32_t)(((lo)-(hi)) & NEO_STRSCAN_DMASK))
+#define casecmp(c, k) (((c) | 0x20) == k)
+
+/* Final conversion to double. */
+static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
+    neo_dassert(o != NULL);
+    double n;
+    /* Avoid double rounding for denormals. */
+    if (neo_unlikely(ex2 <= -1075 && x != 0)) {
+#if NEO_COM_GCC ^ NEO_COM_CLANG
+        int32_t b = (int32_t)(__builtin_clzll(x)^63);
+#else
+        int32_t b = (x>>32)
+                    ? 32+(int32_t)neo_bsr32((uint32_t)(x>>32)) :
+                    (int32_t)fls((uint32_t)x);
+#endif
+        if ((int32_t)b + ex2 <= -1023 && (int32_t)b + ex2 >= -1075) {
+            uint64_t rb = (uint64_t)1 << (-1075-ex2);
+            if ((x & rb) && ((x & (rb+rb+rb-1)))) x += rb+rb;
+            x = (x & ~(rb+rb-1));
+        }
+    }
+    /* Convert to double using a signed int64_t conversion, then rescale. */
+    neo_assert((int64_t)x >= 0 && "bad double conversion");
+    n = (double)(int64_t)x;
+    if (neg) { n = -n; }
+    if (ex2) { n = ldexp(n, ex2); }
+    o->as_float = n;
+}
+
+/* Parse hexadecimal number. */
+static neo_strscan_format_t strscan_hex(
+    const uint8_t *p,
+    record_t *o,
+    neo_strscan_format_t fmt,
+    uint32_t opt,
+    int32_t ex2,
+    int32_t neg,
+    uint32_t dig
+) {
+    neo_dassert(p != NULL && o != NULL);
+    uint64_t x = 0;
+    uint32_t i;
+    for (i = dig > 16 ? 16 : dig ; i; i--, p++) {     /* Scan hex digits. */
+        uint32_t d = (*p != '.' ? *p : *++p); if (d > '9') d += 9;
+        x = (x << 4) + (d & 15);
+    }
+    for (i = 16; i < dig; i++, p++) { /* Summarize rounding-effect of excess digits. */
+        x |= ((*p != '.' ? *p : *++p) != '0'), ex2 += 4;
+    }
+    switch (fmt) {     /* Format-specific handling. */
+        case NEO_STRSCAN_INT:
+            if (!(opt & NEO_STRSCAN_OPT_TONUM)
+                && x < 0x80000000u+(uint32_t)neg
+                && !(x == 0 && neg)) {
+                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
+            }
+            if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; break; }
+            NEO_FALLTHROUGH;
+        case NEO_STRSCAN_U32:
+            if (dig > 8) { return NEO_STRSCAN_ERROR; }
+            o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            return NEO_STRSCAN_U32;
+        case NEO_STRSCAN_I64:
+        case NEO_STRSCAN_U64:
+            if (dig > 16) { return NEO_STRSCAN_ERROR; }
+            o->ru64 = neg ? ~x+1u : x;
+            return fmt;
+        default:
+            break;
+    }
+    /* Reduce range, then convert to double. */
+    if ((x & 0xc00000000000000ull)) { x = (x >> 2) | (x & 3); ex2 += 2; }
+    strscan_double(x, o, ex2, neg);
+    return fmt;
+}
+
+/* Parse octal number. */
+static neo_strscan_format_t strscan_oct(
+    const uint8_t *p,
+    record_t *o,
+    neo_strscan_format_t fmt,
+    int32_t neg,
+    uint32_t dig
+) {
+    neo_dassert(p != NULL && o != NULL);
+    uint64_t x = 0;
+    if (dig > 22 || (dig == 22 && *p > '1')) { return NEO_STRSCAN_ERROR; }
+    while (dig-- > 0) {     /* Scan octal digits. */
+        if (!(*p >= '0' && *p <= '7')) { return NEO_STRSCAN_ERROR; }
+        x = (x << 3) + (*p++ & 7);
+    }
+    switch (fmt) {     /* Format-specific handling. */
+        case NEO_STRSCAN_INT:
+            if (x >= 0x80000000u+(uint32_t)neg) {
+                fmt = NEO_STRSCAN_U32;
+            } NEO_FALLTHROUGH;
+        case NEO_STRSCAN_U32:
+            if ((x >> 32)) { return NEO_STRSCAN_ERROR; }
+            o->ri32 = neg ? (int32_t)(~(uint32_t)x+1u) : (int32_t)x;
+            break;
+        default:
+        case NEO_STRSCAN_I64:
+        case NEO_STRSCAN_U64:
+            o->ru64 = neg ? ~x+1u : x;
+            break;
+    }
+    return fmt;
+}
+
+/* Parse decimal number. */
+static neo_strscan_format_t strscan_dec(
+    const uint8_t *p,
+    record_t *o,
+    neo_strscan_format_t fmt,
+    uint32_t opt,
+    int32_t ex10,
+    int32_t neg,
+    uint32_t dig
+) {
+    neo_dassert(p != NULL && o != NULL);
+    uint8_t xi[NEO_STRSCAN_DDIG], *xip = xi;
+    if (dig) {
+        uint32_t i = dig;
+        if (i > NEO_STRSCAN_MAXDIG) {
+            ex10 += (int32_t)(i - NEO_STRSCAN_MAXDIG);
+            i = NEO_STRSCAN_MAXDIG;
+        }
+        if ((((uint32_t)ex10^i) & 1)) { /* Scan unaligned leading digit. */
+            *xip++ = ((*p != '.' ? *p : *++p) & 15), i--, p++;
+        }
+        for ( ; i > 1; i -= 2) { /* Scan aligned double-digits. */
+            uint32_t d = 10 * ((*p != '.' ? *p : *++p) & 15); p++;
+            *xip++ = (uint8_t)(d + ((*p != '.' ? *p : *++p) & 15)); p++;
+        }
+        /* Scan and realign trailing digit. */
+        if (i) { *xip++ = 10 * ((*p != '.' ? *p : *++p) & 15), ex10--, dig++, p++; }
+        if (dig > NEO_STRSCAN_MAXDIG) { /* Summarize rounding-effect of excess digits. */
+            do {
+                if ((*p != '.' ? *p : *++p) != '0') {
+                    xip[-1] |= 1;
+                    break;
+                }
+                ++p;
+            } while (--dig > NEO_STRSCAN_MAXDIG);
+            dig = NEO_STRSCAN_MAXDIG;
+        } else {  /* Simplify exponent. */
+            while (ex10 > 0 && dig <= 18) {
+                *xip++ = 0;
+                ex10 -= 2;
+                dig += 2;
+            }
+        }
+    } else {  /* Only got zeros. */
+        ex10 = 0;
+        xi[0] = 0;
+    }
+    if (dig <= 20 && ex10 == 0) {  /* Fast path for numbers in integer format (but handles e.g. 1e6, too). */
+        uint8_t *xis;
+        uint64_t x = xi[0];
+        double n;
+        for (xis = xi+1; xis < xip; xis++) x = x * 100 + *xis;
+        if (!(dig == 20 && (xi[0] > 18 || (int64_t)x >= 0))) {  /* No overflow? */
+            /* Format-specific handling. */
+            switch (fmt) {
+                case NEO_STRSCAN_INT:
+                    if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u+(uint32_t)neg) {
+                        o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                        return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
+                    }
+                    if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; goto plainnumber; }
+                    NEO_FALLTHROUGH;
+                case NEO_STRSCAN_U32:
+                    if ((x >> 32) != 0) { return NEO_STRSCAN_ERROR; }
+                    o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                    return NEO_STRSCAN_U32;
+                case NEO_STRSCAN_I64:
+                case NEO_STRSCAN_U64:
+                    o->ru64 = neg ? ~x+1u : x;
+                    return fmt;
+                default:
+                plainnumber:  /* Fast path for plain numbers < 2^63. */
+                    if ((int64_t)x < 0) { break; }
+                    n = (double)(int64_t)x;
+                    if (neg) n = -n;
+                    o->as_float = n;
+                    return fmt;
+            }
+        }
+    }
+
+    if (fmt == NEO_STRSCAN_INT) { /* Slow non-integer path. */
+        if ((opt & NEO_STRSCAN_OPT_C)) return NEO_STRSCAN_ERROR;
+        fmt = NEO_STRSCAN_NUM;
+    } else if (fmt > NEO_STRSCAN_INT) {
+        return NEO_STRSCAN_ERROR;
+    }
+    {
+        uint32_t hi = 0, lo = (uint32_t)(xip-xi);
+        int32_t ex2 = 0, idig = (int32_t)lo + (ex10 >> 1);
+        neo_assert(lo > 0 && (ex10 & 1) == 0 && "bad lo ex10");
+        /* Handle simple overflow/underflow. */
+        if (idig > 310/2) { if (neg) { setminfV(o); } else { setpinfV(o); } return fmt; }
+        else if (idig < -326/2) { o->as_float = neg ? -0.0 : 0.0; return fmt; }
+        while (idig < 9 && idig < dlen(lo, hi)) { /* Scale up until we have at least 17 or 18 integer part digits. */
+            uint32_t i, cy = 0;
+            ex2 -= 6;
+            for (i = dprev(lo); ; i = dprev(i)) {
+                uint32_t d = (uint32_t)(xi[i] << 6) + cy;
+                cy = (((d >> 2) * 5243) >> 17);
+                d = d - cy * 100;  /* Div/mod 100. */
+                xi[i] = (uint8_t)d;
+                if (i == hi) { break; }
+                if (d == 0 && i == dprev(lo)){  lo = i; }
+            }
+            if (cy) {
+                hi = dprev(hi);
+                if (xi[dprev(lo)] == 0) { lo = dprev(lo); }
+                else if (hi == lo) { lo = dprev(lo); xi[dprev(lo)] |= xi[lo]; }
+                xi[hi] = (uint8_t)cy;
+                ++idig;
+            }
+        }
+        while (idig > 9) { /* Scale down until no more than 17 or 18 integer part digits remain. */
+            uint32_t i = hi, cy = 0;
+            ex2 += 6;
+            do {
+                cy += xi[i];
+                xi[i] = (cy >> 6) & 255;
+                cy = 100 * (cy & 0x3f);
+                if (xi[i] == 0 && i == hi) { hi = dnext(hi), idig--; }
+                i = dnext(i);
+            } while (i != lo);
+            while (cy) {
+                if (hi == lo) { xi[dprev(lo)] |= 1; break; }
+                xi[lo] = (cy >> 6) & 255;
+                lo = dnext(lo);
+                cy = 100 * (cy & 0x3f);
+            }
+        }
+        { /* Collect integer part digits and convert to rescaled double. */
+            uint64_t x = xi[hi];
+            uint32_t i;
+            for (i = dnext(hi); --idig > 0 && i != lo; i = dnext(i)) {
+                x = x * 100 + xi[i];
+            }
+            if (i == lo) {
+                while (--idig >= 0) {
+                    x = x * 100;
+                }
+            } else {  /* Gather round bit from remaining digits. */
+                x <<= 1; --ex2;
+                do {
+                    if (xi[i]) {
+                        x |= 1;
+                        break;
+                    }
+                    i = dnext(i);
+                } while (i != lo);
+            }
+            strscan_double(x, o, ex2, neg);
+        }
+    }
+    return fmt;
+}
+
+/* Parse binary number. */
+static neo_strscan_format_t strscan_bin(
+    const uint8_t *p,
+    record_t *o,
+    neo_strscan_format_t fmt,
+    uint32_t opt,
+    int32_t ex2,
+    int32_t neg,
+    uint32_t dig
+) {
+    neo_dassert(p != NULL && o != NULL);
+    uint64_t x = 0;
+    uint32_t i;
+    if (ex2 || dig > 64) { return NEO_STRSCAN_ERROR; }
+    for (i = dig; i; i--, p++) {     /* Scan binary digits. */
+        if ((*p & ~1) != '0') { return NEO_STRSCAN_ERROR; }
+        x = (x << 1) | (*p & 1);
+    }
+    switch (fmt) {     /* Format-specific handling. */
+        case NEO_STRSCAN_INT:
+            if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u+(uint32_t)neg) {
+                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
+            }
+            if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; break; }
+            NEO_FALLTHROUGH;
+        case NEO_STRSCAN_U32:
+            if (dig > 32) return NEO_STRSCAN_ERROR;
+            o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            return NEO_STRSCAN_U32;
+        case NEO_STRSCAN_I64:
+        case NEO_STRSCAN_U64:
+            o->ru64 = neg ? ~x+1u : x;
+            return fmt;
+        default:
+            break;
+    }
+    /* Reduce range, then convert to double. */
+    if ((x & 0xc00000000000000ull)) { x = (x >> 2) | (x & 3); ex2 += 2; }
+    strscan_double(x, o, ex2, neg);
+    return fmt;
+}
+
+/* Scan string containing a number. Returns format. Returns value in o. */
+neo_strscan_format_t neo_strscan_scan(
+    const uint8_t *p,
+    size_t len,
+    record_t *o,
+    neo_strscan_opt_t opt
+) {
+    neo_dassert(p != NULL && o != NULL);
+    if (!len || !*p) { o->ru64 = 0; return NEO_STRSCAN_EMPTY; }
+    int32_t neg = 0;
+    const uint8_t *pe = p + len;
+    /* Remove leading space, parse sign and non-numbers. */
+    if (neo_unlikely(!char_isdigit(*p))) {
+        while (char_isspace(*p)) { p++; }
+        if (*p == '+' || *p == '-') { neg = (*p++ == '-'); }
+        if (neo_unlikely(*p >= 'A')) {  /* Parse "inf", "infinity" or "nan". */
+            record_t tmp;
+            setnanV(&tmp);
+            if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'f')) {
+                if (neg) {
+                    setminfV(&tmp);
+                } else {
+                    setpinfV(&tmp);
+                }
+                p += 3;
+                if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'i') &&
+                    casecmp(p[3],'t') && casecmp(p[4],'y')) { p += 5; }
+            } else if (casecmp(p[0],'n') && casecmp(p[1],'a') && casecmp(p[2],'n')) {
+                p += 3;
+            }
+            while (char_isspace(*p)) { ++p; }
+            if (*p || p < pe) { return NEO_STRSCAN_ERROR; }
+            o->ru64 = tmp.ru64;
+            return NEO_STRSCAN_NUM;
+        }
+    }
+
+    /* Parse regular number. */
+    {
+        neo_strscan_format_t fmt = NEO_STRSCAN_INT;
+        int cmask = CHAR_DIGIT;
+        int base = (opt & NEO_STRSCAN_OPT_C) && *p == '0' ? 0 : 10;
+        const uint8_t *sp, *dp = NULL;
+        uint32_t dig = 0, hasdig = 0, x = 0;
+        int32_t ex = 0;
+        if (neo_unlikely(*p <= '0')) { /* Determine base and skip leading zeros. */
+            if (*p == '0') {
+                if (casecmp(p[1], 'x')) { /* Hex */
+                    base = 16, cmask = CHAR_XDIGIT, p += 2;
+                } else if (casecmp(p[1], 'b')) { /* Bin */
+                    base = 2, cmask = CHAR_DIGIT, p += 2;
+                } else if (casecmp(p[1], 'c')) { /* Oct */
+                    base = 0, p += 2;
+                }
+            }
+            for ( ; ; p++) {
+                if (*p == '0') {
+                    hasdig = 1;
+                } else if (*p == '.') {
+                    if (dp) return NEO_STRSCAN_ERROR;
+                    dp = p;
+                } else {
+                    break;
+                }
+            }
+        }
+        for (sp = p; ; p++) { /* Preliminary digit and decimal point scan. */
+            if (neo_likely(char_isa(*p, cmask))) {
+                x = x * 10 + (*p & 15);  /* For fast path below. */
+                ++dig;
+            } else if (*p == '.') {
+                if (dp) { return NEO_STRSCAN_ERROR; }
+                dp = p;
+            } else {
+                break;
+            }
+        }
+        if (!(hasdig | dig)) { return NEO_STRSCAN_ERROR; }
+        if (dp) { /* Handle decimal point. */
+            if (base == 2) { return NEO_STRSCAN_ERROR; }
+            fmt = NEO_STRSCAN_NUM;
+            if (dig) {
+                ex = (int32_t)(dp-(p-1)); dp = p-1;
+                while (ex < 0 && *dp-- == '0') { ++ex, --dig; }  /* Skip trailing zeros. */
+                if (ex <= -NEO_STRSCAN_MAXEXP) { return NEO_STRSCAN_ERROR; }
+                if (base == 16) { ex *= 4; }
+            }
+        }
+        if (base >= 10 && casecmp(*p, (uint32_t)(base == 16 ? 'p' : 'e'))) {  /* Parse exponent. */
+            uint32_t xx;
+            int negx = 0;
+            fmt = NEO_STRSCAN_NUM; p++;
+            if (*p == '+' || *p == '-') { negx = (*p++ == '-'); }
+            if (!char_isdigit(*p)) { return NEO_STRSCAN_ERROR; }
+            xx = (*p++ & 15);
+            while (char_isdigit(*p)) {
+                xx = xx * 10 + (*p & 15);
+                if (xx >= NEO_STRSCAN_MAXEXP) { return NEO_STRSCAN_ERROR; }
+                p++;
+            }
+            ex += negx ? (int32_t)(~xx+1u) : (int32_t)xx;
+        }
+        /* Parse suffix. */
+        if (*p) {
+            /* I (IMAG), U (U32), LL (I64), ULL/LLU (U64), L (long), UL/LU (ulong). */
+            /* NYI: f (float). Not needed until cp_number() handles non-integers. */
+            if (casecmp(*p, 'i')) {
+                if (!(opt & NEO_STRSCAN_OPT_IMAG)) { return NEO_STRSCAN_ERROR; }
+                ++p; fmt = NEO_STRSCAN_IMAG;
+            } else if (fmt == NEO_STRSCAN_INT) {
+                if (casecmp(*p, 'u')) { p++, fmt = NEO_STRSCAN_U32; }
+                if (casecmp(*p, 'l')) {
+                    ++p;
+                    if (casecmp(*p, 'l')) { p++, fmt += NEO_STRSCAN_I64 - NEO_STRSCAN_INT; }
+                    else if (!(opt & NEO_STRSCAN_OPT_C)) {  return NEO_STRSCAN_ERROR; }
+                    else if (sizeof(long) == 8) { fmt += NEO_STRSCAN_I64 - NEO_STRSCAN_INT; }
+                }
+                if (casecmp(*p, 'u') && (fmt == NEO_STRSCAN_INT || fmt == NEO_STRSCAN_I64)) {
+                    ++p, fmt += NEO_STRSCAN_U32 - NEO_STRSCAN_INT;
+                }
+                if ((fmt == NEO_STRSCAN_U32 && !(opt & NEO_STRSCAN_OPT_C)) ||
+                    (fmt >= NEO_STRSCAN_I64 && !(opt & NEO_STRSCAN_OPT_LL))) {
+                    return NEO_STRSCAN_ERROR;
+                }
+            }
+            while (char_isspace(*p)) { ++p; }
+            if (*p && p < pe) { return NEO_STRSCAN_ERROR; }
+        }
+        if (p < pe) { return NEO_STRSCAN_ERROR; }
+        if (fmt == NEO_STRSCAN_INT && base == 10 && /* Fast path for decimal 32-bit integers. */
+            (dig < 10 || (dig == 10 && *sp <= '2' && x < 0x80000000u+(uint32_t)neg))) {
+            if ((opt & NEO_STRSCAN_OPT_TONUM)) {
+                o->as_float = neg ? -(double)x : (double)x;
+                return NEO_STRSCAN_NUM;
+            } else if (x == 0 && neg) {
+                o->as_float = -0.0;
+                return NEO_STRSCAN_NUM;
+            } else {
+                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                return NEO_STRSCAN_INT;
+            }
+        }
+        if (base == 0 && !(fmt == NEO_STRSCAN_NUM || fmt == NEO_STRSCAN_IMAG)) { /* Dispatch to base-specific parser. */
+            return strscan_oct(sp, o, fmt, neg, dig);
+        } else if (base == 16) {
+            fmt = strscan_hex(sp, o, fmt, opt, ex, neg, dig);
+        } else if (base == 2) {
+            fmt = strscan_bin(sp, o, fmt, opt, ex, neg, dig);
+        } else {
+            fmt = strscan_dec(sp, o, fmt, opt, ex, neg, dig);
+        }
+        /* Try to convert number to integer, if requested. */
+        if (fmt == NEO_STRSCAN_NUM && (opt & NEO_STRSCAN_OPT_TOINT) && o->ru64 != 0x8000000000000000ull) {
+            double n = o->as_float;
+            int32_t i = (int32_t)(n);
+            if (n == (double)i) { o->ri32 = i; return NEO_STRSCAN_INT; }
+        }
+        return fmt;
+    }
 }

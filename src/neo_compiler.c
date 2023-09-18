@@ -17,7 +17,9 @@ static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vect
 
 static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-terminated heap copy of source span. */
     uint8_t *p = (uint8_t *)neo_memalloc(NULL, (1+span.len)*sizeof(*p)); /* +1 for \0. */
-    memcpy(p, span.p, span.len*sizeof(*p));
+    if (span.p != NULL) {
+        memcpy(p, span.p, span.len*sizeof(*p));
+    }
     p[span.len] = '\0';
     return p;
 }
@@ -732,7 +734,7 @@ static astref_t sym_extract_class(const astnode_t *target) {
 }
 
 static astref_t sym_extract_method(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_METHOD);
+    neo_dassert(target != NULL && target->type == ASTNODE_FUNCTION);
     return target->dat.n_method.ident;
 }
 
@@ -771,7 +773,7 @@ static void populate_symbol_tables(
                     &self->symtabs.sc_class.method_table,
                     pool,
                     target,
-                    ASTNODE_METHOD,
+                    ASTNODE_FUNCTION,
                     &sym_extract_method,
                     ctx
                 );
@@ -863,7 +865,7 @@ static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
             const node_binary_op_t *data = &node->dat.n_binary_op;
             (void)data;
         } return;
-        case ASTNODE_METHOD: {
+        case ASTNODE_FUNCTION: {
             const node_method_t *data = &node->dat.n_method;
             (void)data;
         } return;

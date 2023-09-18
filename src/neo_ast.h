@@ -311,7 +311,7 @@ typedef struct node_module_t {
     _(ASTNODE_GROUP, "GROUP")__\
     _(ASTNODE_UNARY_OP, "UNARY OP")__\
     _(ASTNODE_BINARY_OP, "BINARY OP")__\
-    _(ASTNODE_METHOD, "METHOD")__\
+    _(ASTNODE_FUNCTION, "FUNCTION")__\
     _(ASTNODE_BLOCK, "BLOCK")__\
     _(ASTNODE_VARIABLE, "VARIABLE")__\
     _(ASTNODE_RETURN, "RETURN")__\

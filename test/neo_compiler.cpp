@@ -38,7 +38,7 @@ using namespace neo;
         ASSERT_EQ(node->type, ASTNODE_BLOCK); \
         node = astpool_resolve(pool, astpool_resolvelist(pool, node->dat.n_block.nodes)[0]); \
         ASSERT_NE(node, nullptr); \
-        ASSERT_EQ(node->type, ASTNODE_METHOD); \
+        ASSERT_EQ(node->type, ASTNODE_FUNCTION); \
         node = astpool_resolve(pool, node->dat.n_method.body); \
         ASSERT_NE(node, nullptr); \
         ASSERT_EQ(node->type, ASTNODE_BLOCK); \

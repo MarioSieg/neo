@@ -38,7 +38,7 @@ else()
     if (${NEO_ENABLE_SSE41})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -msse -msse2 -msse3 -mssse3 -msse4.1 -mcx16) # Enable advanced instructions
     endif()
-    if (${NEO_ENABLE_UBSAN})
+    if (${NEO_ENABLE_UBSAN} AND ${IS_DEBUG})
         add_compile_options(-fsanitize=undefined)
         add_link_options(-fsanitize=undefined)
     endif()

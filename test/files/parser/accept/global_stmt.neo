@@ -25,3 +25,5 @@ let r: int = 0
 while r < MAX do
     r = f(r ** 2)
 end
+r *= 10 + (r+1)/0x8000
+print(r)
