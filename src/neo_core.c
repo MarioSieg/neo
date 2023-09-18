@@ -621,7 +621,7 @@ static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
 #else
         int32_t b = (x>>32)
                     ? 32+(int32_t)neo_bsr32((uint32_t)(x>>32)) :
-                    (int32_t)fls((uint32_t)x);
+                    (int32_t)neo_bsr32((uint32_t)x);
 #endif
         if ((int32_t)b + ex2 <= -1023 && (int32_t)b + ex2 >= -1075) {
             uint64_t rb = (uint64_t)1 << (-1075-ex2);
