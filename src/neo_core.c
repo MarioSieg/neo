@@ -1712,11 +1712,8 @@ uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
     ptrdiff_t x = (ptrdiff_t)v;
     size_t i, n = 2+2*sizeof(ptrdiff_t);
     if (!x) {
-        *p++ = 'n';
-        *p++ = 'u';
-        *p++ = 'l';
-        *p++ = 'l';
-        return p;
+        memcpy(p, "null", 4);
+        return p+4;
     }
     n = 2+2*4+((x>>32) ? 2+2*((size_t)neo_bsr32((uint32_t)(x>>32))>>3) : 0);
     p[0] = '0';
