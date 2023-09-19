@@ -1,11 +1,5 @@
 # (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
-@Intrinsic
-@Standard
-@Version("0.1")
-@PrimitiveType
-@Serializable
-@UUID("4df0ded0-a90d-4672-b8a9-e709bcbaede7")
 class int
     # The maximum value of an int - (64-bit signed integer).
     static const MAX_VALUE: int = 0x7fffffffffffffff
@@ -20,19 +14,16 @@ class int
     static const BIT_SIZE: int = BYTE_SIZE * 8
 
     # Returns the lower 32-bits of <self>.
-    @Inline
     func getLower32Bits() -> int
         return self & 0xffffffff
     end
 
     # Returns the upper 32-bits of <self>.
-    @Inline
     func getUpper32Bits() -> int
         return (self >>>> 32) & 0xffffffff
     end
 
     # Returns a hash code which fits fully into 32-bits. Useful or interop.
-    @Inline
     func getHashCode32() -> int
         return getLower32Bits(self) ^ getUpper32Bits(self)
     end
@@ -94,18 +85,15 @@ class int
     # Returns the signum function of <self>.
     # The return value is -1 if the specified value is negative; 0 if the
     # specified value is zero; and 1 if the specified value is positive.
-    @Inline
     func signum() -> int
         return ((self >> 63) | (-self >>>> 63))
     end
 
     # Returns true if self is within the interval (inclusive).
-    @Inline
     func isWithin(from: int, to: int) -> int
         return self >= from and self <= to
     end
 
-    @Inline
     override func getHashCode() -> int
         return self
     end
