@@ -95,8 +95,8 @@ $$
     [\text{Expr}] ++ \\
     [\text{Expr}] -- \\
 \end{cases} \\
-[\text{BinExpr}] &\to 
-\begin{cases} 
+[\text{BinExpr}] &\to
+\begin{cases}
     [\text{Expr}] \text{ . } [\text{Expr}] \\
     [\text{Expr}] \text{ = } [\text{Expr}] \\
     [\text{Expr}] \text{ + } [\text{Expr}] \\
@@ -108,7 +108,7 @@ $$
     [\text{Expr}] \text{ !* } [\text{Expr}] \\
     [\text{Expr}] \text{ !** } [\text{Expr}] \\
     [\text{Expr}] \text{ / } [\text{Expr}] \\
-    [\text{Expr}] \text{ % } [\text{Expr}] \\
+    [\text{Expr}] \text{ \% } [\text{Expr}] \\
     [\text{Expr}] \text{ += } [\text{Expr}] \\
     [\text{Expr}] \text{ -= } [\text{Expr}] \\
     [\text{Expr}] \text{ *= } [\text{Expr}] \\
@@ -118,7 +118,7 @@ $$
     [\text{Expr}] \text{ !*= } [\text{Expr}] \\
     [\text{Expr}] \text{ !**= } [\text{Expr}] \\
     [\text{Expr}] \text{ /= } [\text{Expr}] \\
-    [\text{Expr}] \text{ %= } [\text{Expr}] \\
+    [\text{Expr}] \text{ \%= } [\text{Expr}] \\
     [\text{Expr}] \text{ == } [\text{Expr}] \\
     [\text{Expr}] \text{ < } [\text{Expr}] \\
     [\text{Expr}] \text{ > } [\text{Expr}] \\

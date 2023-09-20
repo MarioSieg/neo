@@ -139,8 +139,15 @@ neo_int_t vmop_ipow64_no_ov(register neo_int_t x, register neo_int_t k) {
     } else { return (neo_int_t)vmop_upow64_no_ov((neo_uint_t)x, (neo_uint_t)k); }
 }
 
-#define imulov(x, y, rr) if (neo_unlikely(i64_mul_overflow((x), (y), (rr)))) { *r = 0; return true; /* Overflow happened. */ }
-#define umulov(x, y, rr) if (neo_unlikely(u64_mul_overflow((x), (y), (rr)))) { *r = 0; return true; /* Overflow happened. */ }
+#define imulov(x, y, rr) \
+    if (neo_unlikely(i64_mul_overflow((x), (y), (rr)))) { \
+        *r = 0; return true; /* Overflow happened. */ \
+    }
+
+#define umulov(x, y, rr) \
+    if (neo_unlikely(u64_mul_overflow((x), (y), (rr)))) { \
+        *r = 0; return true; /* Overflow happened. */ \
+    }
 
 bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
     neo_dassert(r);
@@ -187,93 +194,6 @@ bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by 
     }
 }
 
-/* On AMD-64 these are implemented in ASM. */
-#if NEO_CPU_AMD64 && NEO_COM_GCC && 0
-
-/* Referenced from ASM, applies to IEEE-754 binary-64. */
-const volatile uint64_t __KSSE_ABS_MASK = 0x7fffffffffffffffull;
-const volatile uint64_t __KSSE_SIGN_MASK = 0x8000000000000000ull;
-const volatile uint64_t __KSSE_1 = 0x3ff0000000000000ull;
-const volatile uint64_t __KSSE_2P52 = 0x4330000000000000ull;
-
-neo_float_t vmop_ceil(neo_float_t x) {
-    double result;
-    __asm__ __volatile__ (
-        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
-        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
-        "movapd %%xmm0, %%xmm1\t\n"
-        "andpd %%xmm2, %%xmm1\t\n"
-        "ucomisd %%xmm1, %%xmm3\t\n"
-        "jbe 1f\t\n"
-        "andnpd %%xmm0, %%xmm2\t\n"
-        "addsd %%xmm3, %%xmm1\t\n"
-        "subsd %%xmm3, %%xmm1\t\n"
-        "orpd %%xmm2, %%xmm1\t\n"
-        "movq __KSSE_1(%%rip), %%xmm3\t\n"
-        "cmpnlesd %%xmm1, %%xmm0\t\n"
-        "andpd %%xmm3, %%xmm0\t\n"
-        "addsd %%xmm0, %%xmm1\t\n"
-        "orpd %%xmm2, %%xmm1\t\n"
-        "movapd %%xmm1, %0\t\n"
-        "1:\n"
-        : "=x" (result)
-        : "0" (x)
-        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
-    );
-    return result;
-}
-
-neo_float_t vmop_floor(neo_float_t x) {
-    double result;
-    __asm__ __volatile__ (
-        "movq __KSSE_ABS_MASK(%%rip), %%xmm2\t\n"
-        "movq __KSSE_2P52(%%rip), %%xmm3\t\n"
-        "movapd %%xmm0, %%xmm1\t\n"
-        "andpd %%xmm2, %%xmm1\t\n"
-        "ucomisd %%xmm1, %%xmm3\t\n"
-        "jbe 1f\t\n"
-        "andnpd %%xmm0, %%xmm2\t\n"
-        "addsd %%xmm3, %%xmm1\t\n"
-        "subsd %%xmm3, %%xmm1\t\n"
-        "orpd %%xmm2, %%xmm1\t\n"
-        "movq __KSSE_1(%%rip), %%xmm3\t\n"
-        "cmpltsd %%xmm1, %%xmm0\t\n"
-        "andpd %%xmm3, %%xmm0\t\n"
-        "subsd %%xmm0, %%xmm1\t\n"
-        "movapd %%xmm1, %%xmm0\t\n"
-        "1:\n"
-        : "=x" (result)
-        : "0" (x)
-        : "%xmm0", "%xmm1", "%xmm2", "%xmm3"
-    );
-    return result;
-}
-
-neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
-    double result;
-    __asm__ __volatile__ (
-        "movsd  %0, -16(%%rsp)\t\n"
-        "movsd  %1, -8(%%rsp)\t\n"
-        "fldl -8(%%rsp)\t\n"
-        "fldl -16(%%rsp)\t\n"
-        "1:\t\n"
-        "fprem\t\n"
-        "fnstsw  %%ax\t\n"
-        "testb $4, %%ah\t\n"
-        "jne 1b\t\n"
-        "fstp %%st(1)\t\n"
-        "fstpl -16(%%rsp)\t\n"
-        "movsd -16(%%rsp), %0\t\n"
-        : "=x" (result)
-        : "0" (x), "x" (y)
-        : "%rax", "%st", "%xmm0", "%xmm1"
-    );
-
-    return result;
-}
-
-#else
-
 neo_float_t vmop_ceil(neo_float_t x) {
     return ceil(x);
 }
@@ -285,8 +205,6 @@ neo_float_t vmop_floor(neo_float_t x) {
 neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
     return fmod(x, y);
 }
-
-#endif
 
 /* ---- PRNG ---- */
 
@@ -310,10 +228,10 @@ neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
 void prng_init_seed(prng_state_t *self, uint64_t noise) {
     neo_dassert(self != NULL);
     noise = noise ? noise : neo_tid(); /* Use the noise to add thread-local entropy. */
-    self->s[0] = ((0xa0d27757ull << 32) + 0x0a345b8cull) ^ noise; /* Precomputed constants from prng_from_seed(0.0). */
-    self->s[1] = ((0x764a296cull << 32) + 0x5d4aa64full) ^ noise;
-    self->s[2] = ((0x51220704ull << 32) + 0x070adeaaull) ^ noise;
-    self->s[3] = ((0x2a2717b5ull << 32) + 0xa7b7b927ull) ^ noise;
+    self->s[0] = 0xa0d277570a345b8cull ^ noise; /* Precomputed constants from prng_from_seed(0.0). */
+    self->s[1] = 0x764a296c5d4aa64full ^ noise;
+    self->s[2] = 0x51220704070adeaaull ^ noise;
+    self->s[3] = 0x2a2717b5a7b7b927ull ^ noise;
 }
 
 void prng_from_seed(prng_state_t *self, double seed) {

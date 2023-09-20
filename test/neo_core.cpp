@@ -4,6 +4,38 @@
 #include <neo_lexer.h>
 #include <neo_core.h>
 
+TEST(core, float_fmt) {
+    char buf[64] {};
+    neo_fmt_float((uint8_t *)buf, 0.0);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0.0");
+    neo_fmt_float((uint8_t *)buf, -31.322);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-31.322");
+    neo_fmt_float((uint8_t *)buf, 0.25);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0.25");
+}
+
+TEST(core, int_fmt) {
+    char buf[64] {};
+    neo_fmt_int((uint8_t *)buf, 0);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0");
+    neo_fmt_int((uint8_t *)buf, NEO_INT_MAX);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "9223372036854775807");
+    neo_fmt_int((uint8_t *)buf, NEO_INT_MIN);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-9223372036854775808");
+    neo_fmt_int((uint8_t *)buf, -1);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-1");
+    neo_fmt_int((uint8_t *)buf, 10);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "10");
+}
+
 TEST(core, float_parse) {
     record_t v{};
     neo_strscan_format_t fmt = neo_strscan_scan((const uint8_t *)"1.0", sizeof("1.0")-1, &v, NEO_STRSCAN_OPT_NONE);

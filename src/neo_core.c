@@ -1120,7 +1120,7 @@ static const int8_t four_ulp_m_e[] = {
 };
 
 /* min(2^32-1, 10^e-1) for e in range 0 through 10 */
-static uint32_t ndigits_dec_threshold[] = {
+static uint32_t ndigits_dec_threshold[11] = {
     0, 9U, 99U, 999U, 9999U, 99999U, 999999U,
     9999999U, 99999999U, 999999999U, 0xffffffffU
 };
@@ -1160,8 +1160,8 @@ static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
 
 uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x) {
     neo_dassert(p != NULL);
-    p = fmt_i32(p, (int32_t) (x & ~(uint32_t)0));
-    return fmt_i32(p, (int32_t) (x >> 32));
+    p = fmt_i32(p, (int32_t)(x & ~(uint32_t)0));
+    return (x >> 32) == 0 ? p : fmt_i32(p, (int32_t)(x >> 32));
 }
 
 /* Format types (max. 16). */
@@ -1366,15 +1366,19 @@ static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
 #undef wint_r
 
 /* Test whether two "nd" values are equal in their most significant digits. */
-static int nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
+static bool nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
     neo_dassert(nd != NULL && ref != NULL);
     uint8_t nd9[9], ref9[9];
     if (hilen <= prec) {
         if (neo_unlikely(nd[ndhi] != *ref)) { return 0; }
-        prec -= hilen; ref--; ndhi = (ndhi - 1) & 0x3f;
+        prec -= hilen;
+        --ref;
+        ndhi = (ndhi - 1) & 0x3f;
         if (prec >= 9) {
             if (neo_unlikely(nd[ndhi] != *ref)) { return 0; }
-            prec -= 9; ref--; ndhi = (ndhi - 1) & 0x3f;
+            prec -= 9;
+            --ref;
+            ndhi = (ndhi - 1) & 0x3f;
         }
     } else {
         prec -= hilen - 9;

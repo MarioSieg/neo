@@ -781,9 +781,9 @@ extern NEO_EXPORT neo_strscan_format_t neo_strscan_scan(const uint8_t *p, size_t
 
 /* ---- String Formatting ---- */
 
-extern NEO_EXPORT uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x);
-extern NEO_EXPORT uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x);
-extern NEO_EXPORT uint8_t *neo_fmt_ptr(uint8_t *p, const void *v);
+extern NEO_EXPORT uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x); /* Format int to buffer. Does NOT zero-terminate the buffer. */
+extern NEO_EXPORT uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x); /* Format float to buffer. Does NOT zero-terminate the buffer. */
+extern NEO_EXPORT uint8_t *neo_fmt_ptr(uint8_t *p, const void *v); /* Format ptr to buffer. Does NOT zero-terminate the buffer. */
 
 #ifdef __cplusplus
 }
