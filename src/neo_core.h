@@ -330,8 +330,8 @@ extern "C" {
 #   else
 #       define neo_unreachable() __builtin_unreachable()
 #   endif
-#define neo_bsf32(x) (neo_likely(x) ? (uint32_t)__builtin_ctz((x)) : 0u)
-#define neo_bsr32(x) (neo_likely(x) ? (uint32_t)__builtin_clz((x))^31 : 0u)
+#define neo_bsf32(x) (__builtin_ctz((x)))
+#define neo_bsr32(x) (__builtin_clz((x))^31)
 #   define neo_bswap32(x) __builtin_bswap32(x)
 #   define neo_bswap64(x) __builtin_bswap64(x)
 #   if NEO_CPU_AMD64

@@ -549,7 +549,6 @@ void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_h
 static NEO_COLDPROC void node_block_dump_symbols(const node_block_t *self, FILE *f);
 
 typedef enum typeid_t {
-    TYPEID_VOID,
     TYPEID_INT,
     TYPEID_FLOAT,
     TYPEID_CHAR,
@@ -571,44 +570,24 @@ typedef struct type_t {
     };
 } type_t;
 
-static NEO_NODISCARD NEO_UNUSED typeid_t deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr) {
+typedef struct deduced_t {
+    bool is_valid;
+    typeid_t tid;
+} deduced_t;
+
+static NEO_NODISCARD NEO_UNUSED deduced_t deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr) {
     neo_dassert(pool != NULL && errors != NULL);
-    if (astref_isnull(expr)) { return TYPEID_VOID; }
+    if (astref_isnull(expr)) { return (deduced_t){.is_valid = false}; }
     const astnode_t *node = astpool_resolve(pool, expr);
     switch (node->type) {
-        case ASTNODE_INT_LIT: {
-            const node_int_literal_t *data = &node->dat.n_int_lit;
-            (void)data;
-            return TYPEID_INT;
-        }
-        case ASTNODE_FLOAT_LIT: {
-            const node_float_literal_t *data = &node->dat.n_float_lit;
-            (void)data;
-            return TYPEID_FLOAT;
-        }
-        case ASTNODE_CHAR_LIT: {
-            const node_char_literal_t *data = &node->dat.n_char_lit;
-            (void)data;
-            return TYPEID_CHAR;
-        }
-        case ASTNODE_BOOL_LIT: {
-            const node_bool_literal_t *data = &node->dat.n_bool_lit;
-            (void)data;
-            return TYPEID_BOOL;
-        }
-        case ASTNODE_STRING_LIT: {
-            const node_string_literal_t *data = &node->dat.n_string_lit;
-            (void)data;
-            return TYPEID_STRING;
-        }
-        case ASTNODE_IDENT_LIT: {
-            const node_ident_literal_t *data = &node->dat.n_ident_lit;
-            (void)data;
-            return TYPEID_IDENT;
-        }
-        case ASTNODE_SELF_LIT: {
-            return TYPEID_IDENT;
-        }
+        case ASTNODE_INT_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_INT};
+        case ASTNODE_FLOAT_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_FLOAT};
+        case ASTNODE_CHAR_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_CHAR};
+        case ASTNODE_BOOL_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_BOOL};
+        case ASTNODE_STRING_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_STRING};
+        case ASTNODE_IDENT_LIT:
+        case ASTNODE_SELF_LIT:
+            return (deduced_t){.is_valid = true, .tid = TYPEID_IDENT};
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
             return deduce_typeof_expr(pool, errors, data->child_expr);
@@ -619,16 +598,17 @@ static NEO_NODISCARD NEO_UNUSED typeid_t deduce_typeof_expr(const astpool_t *poo
         }
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &node->dat.n_binary_op;
-            typeid_t left = deduce_typeof_expr(pool, errors, data->left_expr);
-            typeid_t right = deduce_typeof_expr(pool, errors, data->right_expr);
-            if (neo_likely(left == right)) { return left; } /* Both sides are the same type. */
+            deduced_t left = deduce_typeof_expr(pool, errors, data->left_expr);
+            deduced_t right = deduce_typeof_expr(pool, errors, data->right_expr);
+            if (neo_unlikely(!left.is_valid || !right.is_valid)) { return (deduced_t){.is_valid = false}; }
+            if (neo_likely(left.tid == right.tid)) { return (deduced_t){.is_valid = true, .tid = left.tid}; } /* Both sides are the same type. */
             errvec_push(errors, comerror_new(COMERR_TYPE_MISMATCH, 0, 0, NULL, NULL, NULL, NULL));
-            return TYPEID_VOID;
+            return (deduced_t){.is_valid = false};
         } break;
         default: {
             neo_assert((ASTNODE_EXPR_MASK & astmask(node->type)) == 0 && "AST node is expression, but not handled");
             errvec_push(errors, comerror_new(COMERR_INVALID_EXPRESSION, 0, 0, NULL, NULL, NULL, NULL));
-            return TYPEID_VOID;
+            return (deduced_t){.is_valid = false};
         }
     }
 }

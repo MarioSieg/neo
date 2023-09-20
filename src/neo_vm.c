@@ -5,6 +5,52 @@
 
 #include <math.h>
 
+void stk_alloc(opstck_t *self, size_t bsize, size_t bwarmup) {
+    neo_dassert(self != NULL);
+    bsize = bsize && bsize % sizeof(record_t) == 0 ? bsize : VMSTK_DEF_SIZE;
+    bwarmup = bwarmup && bwarmup % sizeof(record_t) == 0 ? bwarmup : VMSTK_DEF_WARMUP;
+    self->len = bsize>>3; /* Bytes to record count -> / sizeof(record_t) */
+    self->p = neo_memalloc(NULL, bsize); /* Todo: use mmap/VirtualAlloc. */
+    memset(self->p, 0, bwarmup); /* Warmup region, preallocate pages. */
+}
+
+void stk_free(opstck_t *self, bool poison) {
+    neo_dassert(self != NULL);
+    if (poison) {
+        memset(self->p, 0, self->len*sizeof(*self->p));
+    }
+    neo_memalloc(self->p, 0);
+}
+
+void vm_init(vm_isolate_t **self, const char *name) {
+    neo_assert(self != NULL);
+    *self = neo_memalloc(NULL, sizeof(**self));
+    memset(*self, 0, sizeof(**self));
+    if (name) {
+        strncpy((*self)->name, name, sizeof((*self)->name));
+        (*self)->name[sizeof((*self)->name)-1] = '\0';
+    }
+    static volatile int64_t mkid = 0x1000;
+    uint64_t tid = neo_tid();
+    (*self)->id = neo_atomic_fetch_add(&mkid, 1, NEO_MEMORD_RELX); /* Generate ID. */
+    (*self)->id ^= (int64_t)((tid >> 32) | (tid & ~(uint32_t)0)); /* Mix in thread ID. */
+    stk_alloc(&(*self)->stack, VMSTK_DEF_SIZE, VMSTK_DEF_WARMUP); /* Allocate stack. */
+    (**self).io_input = stdin;
+    (**self).io_output = stdout;
+    (**self).io_error = stderr;
+    prng_from_seed(&(*self)->prng, (double)((**self).id >> 32)); /* Init PRNG. */
+}
+
+void vm_free(vm_isolate_t **self) {
+    neo_assert(self != NULL);
+    stk_free(&(*self)->stack, true);
+    neo_memalloc(*self, 0);
+    memset(*self, 0, sizeof(**self));
+    *self = NULL;
+}
+
+/* ---- Core VM Routines ---- */
+
 #define NEO_VM_COMPUTED_GOTO
 #ifdef NEO_VM_COMPUTED_GOTO
 #   define decl_op(name) __##name##__:
@@ -242,6 +288,8 @@ neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
 
 #endif
 
+/* ---- PRNG ---- */
+
 /*
 ** NEO uses a Linear Feedback Shift Register (LFSR) (also known aus Tausworthe) random number generator,
 ** with a periodic length of 2^223. The generator provides a very good random distribution, but is not cryptographically secure.
@@ -314,6 +362,8 @@ neo_float_t prng_next_f64(prng_state_t *self) {
     return u.d - 1.0;
 }
 
+/* ---- Core VM Helpers ---- */
+
 #undef imulov
 #undef umulov
 #define i64_pow_overflow(...) vmop_ipow64(__VA_ARGS__)
@@ -346,7 +396,73 @@ neo_float_t prng_next_f64(prng_state_t *self) {
         bin_int_op(op);\
     }
 
-NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
+/* ---- System Calls ---- */
+
+#define impl_syscall(name) static bool syscall_##name(vm_isolate_t *self, record_t *sp)
+#define syscall_check()   neo_dassert(self != NULL && sp != NULL)
+
+impl_syscall(print_int) {
+    syscall_check();
+    uint8_t tmp [64];
+    memset(tmp, 0, sizeof(tmp));
+    neo_fmt_int(tmp, pint(0));
+    fputs((const char *)tmp, self->io_output);
+    return false;
+}
+
+impl_syscall(print_float) {
+    syscall_check();
+    uint8_t tmp [64];
+    memset(tmp, 0, sizeof(tmp));
+    neo_fmt_float(tmp, pfloat(0));
+    fputs((const char *)tmp, self->io_output);
+    return false;
+}
+
+impl_syscall(print_bool) {
+    syscall_check();
+    fputs(peek(0)->as_bool == NEO_TRUE ? "true" : "false", self->io_output);
+    return false;
+}
+
+impl_syscall(print_char) {
+    syscall_check();
+    neo_char_t nc = peek(0)->as_char;
+    if (nc < 0x80) { /* Is ASCII ? */
+        fputc((char)nc, self->io_output);
+    } else { /* TODO: UTF-8 encode. */
+        uint8_t tmp[64];
+        memset(tmp, 0, sizeof(tmp));
+        neo_fmt_int(tmp, nc);
+        fputs((const char *)tmp, self->io_output);
+    }
+    return false;
+}
+
+impl_syscall(print_ptr) {
+    syscall_check();
+    uint8_t tmp[64];
+    memset(tmp, 0, sizeof(tmp));
+    neo_fmt_ptr(tmp, sp);
+    fputs((const char *)tmp, self->io_output);
+    return false;
+}
+
+/* Dispatch table for system calls. For system calls see neo_bc.h. */
+static bool (*const syscall_table[])(vm_isolate_t *self, record_t *sp) = {
+    [SYSCALL_PRINT_INT] = &syscall_print_int,
+    [SYSCALL_PRINT_FLOAT] = &syscall_print_float,
+    [SYSCALL_PRINT_BOOL] = &syscall_print_bool,
+    [SYSCALL_PRINT_CHAR] = &syscall_print_char,
+    [SYSCALL_PRINT_PTR] = &syscall_print_ptr
+};
+neo_static_assert(sizeof(syscall_table)/sizeof(*syscall_table) == SYSCALL__LEN && "syscall_table size mismatch");
+
+#undef impl_syscall
+
+/* ---- Core VM Impl (Hot code) ---- */
+
+NEO_HOTPROC bool vm_exec(vm_isolate_t *self, const bytecode_t *bcode) {
     neo_assert(self && bcode && bcode->p && bcode->len && self->stack.len);
     neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
     neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
@@ -363,14 +479,15 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
     register const uintptr_t spe = (uintptr_t)(self->stack.p + self->stack.len) - sizeof(*self->stack.p); /* End of stack (last element). */
     register record_t *restrict sp = self->stack.p; /* Current stack pointer. */
     register const record_t *restrict cp = bcode->pool.p; /* Constant pool pointer. */
-    register vminterrupt_t vif = VMINT_OK; /* VM interrupt flag. */
+    register vm_interrupt_t vif = VMINT_OK; /* VM interrupt flag. */
 
     sp->as_uint = STK_PADD_MAGIC;
 
 #ifdef NEO_VM_COMPUTED_GOTO
-    static const void *restrict const jump_table[OPC__COUNT] = {
+    static const void *restrict const jump_table[OPC__LEN] = {
         label_ref(HLT),
         label_ref(NOP),
+        label_ref(SYSCALL),
         label_ref(IPUSH),
         label_ref(IPUSH0),
         label_ref(IPUSH1),
@@ -404,6 +521,8 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
     };
 #endif
 
+    /* VM instruction labels/cases. MUST be in order! */
+
     zone_enter()
 
     decl_op(HLT) /* Halt VM execution. */
@@ -412,6 +531,19 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
 
     decl_op(NOP) /* NO-Operation. */
 
+    dispatch()
+
+    decl_op(SYSCALL) {
+        umm24_t call_id = bci_mod1unpack_umm24(*ip);
+        int32_t depth = (int32_t)syscall_depths[call_id];
+        stk_check_ov(depth); /* Check for stack overflow. */
+        stk_check_uv(depth); /* Check for stack underflow. */
+        if (neo_unlikely((*syscall_table[call_id])(self, sp))) {
+            vif = VMINT_SYS_SYSCALL; /* System call failed, abort. */
+            goto exit; /* System call failed, abort. */
+        }
+        sp -= depth; /* Pop depth delta. */
+    }
     dispatch()
 
     decl_op(IPUSH) /* Push 24-bit int value. */
@@ -539,23 +671,23 @@ NEO_HOTPROC bool vm_exec(vmisolate_t *self, const bytecode_t *bcode) {
     dispatch()
 
 #ifndef NEO_VM_COMPUTED_GOTO /* To suppress enumeration value ‘OPC__**’ not handled in switch [-Werror=switch]. */
-    case OPC__COUNT:
+    case OPC__LEN:
     case OPC__MAX: break;
 #endif
 
     zone_exit()
 
 exit:
-    self->interrupt = vif;
-    self->ip = ip;
-    self->sp = sp;
-    self->ip_delta = ip-(const bci_instr_t *)ipb;
-    self->sp_delta = sp-(const record_t *)spb;
-    ++self->invocs;
-    if (vif == VMINT_OK) { ++self->invocs_ok; }
-    else { ++self->invocs_err; }
+    self->rstate.interrupt = vif;
+    self->rstate.ip = ip;
+    self->rstate.sp = sp;
+    self->rstate.ip_delta = ip-(const bci_instr_t *)ipb;
+    self->rstate.sp_delta = sp-(const record_t *)spb;
+    ++self->rstate.invocs;
+    if (vif == VMINT_OK) { ++self->rstate.invocs_ok; }
+    else { ++self->rstate.invocs_err; }
     if (self->post_exec_hook) {
-        (*self->post_exec_hook)(self, bcode, self->interrupt);
+        (*self->post_exec_hook)(self, bcode, self->rstate.interrupt);
     }
 
     return vif == VMINT_OK;

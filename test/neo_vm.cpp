@@ -70,7 +70,7 @@ TEST(vm_exec, iror) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -107,7 +107,7 @@ TEST(vm_exec, irol) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -134,7 +134,7 @@ TEST(vm_exec, irol) {
 
 TEST(vm_exec, islr) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -161,7 +161,7 @@ TEST(vm_exec, islr) {
 
 TEST(vm_exec, isar) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -188,7 +188,7 @@ TEST(vm_exec, isar) {
 
 TEST(vm_exec, isal) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -215,7 +215,7 @@ TEST(vm_exec, isal) {
 
 TEST(vm_exec, ixor) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -242,7 +242,7 @@ TEST(vm_exec, ixor) {
 
 TEST(vm_exec, ior) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -269,7 +269,7 @@ TEST(vm_exec, ior) {
 
 TEST(vm_exec, iand) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -306,7 +306,7 @@ TEST(vm_exec, imod_zero_division) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -332,7 +332,7 @@ TEST(vm_exec, imod_zero_division) {
 
 TEST(vm_exec, imod) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -371,7 +371,7 @@ TEST(vm_exec, idiv_zero_division) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -397,7 +397,7 @@ TEST(vm_exec, idiv_zero_division) {
 
 TEST(vm_exec, idiv) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -436,7 +436,7 @@ TEST(vm_exec, ipowo_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -463,7 +463,7 @@ TEST(vm_exec, ipowo_overflow) {
 
 TEST(vm_exec, ipowo) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -502,7 +502,7 @@ TEST(vm_exec, imulo_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -529,7 +529,7 @@ TEST(vm_exec, imulo_overflow) {
 
 TEST(vm_exec, imulo) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -568,7 +568,7 @@ TEST(vm_exec, isubo_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -595,7 +595,7 @@ TEST(vm_exec, isubo_overflow) {
 
 TEST(vm_exec, isubo) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -634,7 +634,7 @@ TEST(vm_exec, iaddo_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -661,7 +661,7 @@ TEST(vm_exec, iaddo_overflow) {
 
 TEST(vm_exec, iaddo) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -700,7 +700,7 @@ TEST(vm_exec, ipow_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -726,7 +726,7 @@ TEST(vm_exec, ipow_overflow) {
 
 TEST(vm_exec, ipow) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -765,7 +765,7 @@ TEST(vm_exec, imul_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -791,7 +791,7 @@ TEST(vm_exec, imul_overflow) {
 
 TEST(vm_exec, imul) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -830,7 +830,7 @@ TEST(vm_exec, isub_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -856,7 +856,7 @@ TEST(vm_exec, isub_overflow) {
 
 TEST(vm_exec, isub) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -893,7 +893,7 @@ TEST(vm_exec, iadd_overflow) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -927,7 +927,7 @@ TEST(vm_exec, iadd_overflow_neg) {
     };
     ASSERT_EQ(constpool.size(), tags.size());
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -953,7 +953,7 @@ TEST(vm_exec, iadd_overflow_neg) {
 
 TEST(vm_exec, iadd) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -982,7 +982,7 @@ TEST(vm_exec, iadd) {
 
 TEST(vm_exec, ipush) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -1022,7 +1022,7 @@ TEST(vm_exec, ldc) {
     tags[0] = RT_INT;
     tags[BCI_MOD1UMM24MAX] = RT_INT;
 
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
     vm.constpool.p = constpool.data();
@@ -1053,7 +1053,7 @@ TEST(vm_exec, ldc) {
 
 TEST(vm_exec, stack_underflow) {
     std::array<record_t, 8> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -1075,7 +1075,7 @@ TEST(vm_exec, stack_underflow) {
 
 TEST(vm_exec, stack_overflow) {
     std::array<record_t, 3> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 
@@ -1103,7 +1103,7 @@ TEST(vm_exec, stack_overflow) {
 
 TEST(vm_exec, stack_overflow2) {
     std::array<record_t, 1> stack {};
-    vmisolate_t vm {};
+    vm_isolate_t vm {};
     vm.stack.p = stack.data();
     vm.stack.len = stack.size();
 

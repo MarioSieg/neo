@@ -860,10 +860,11 @@ static neo_strscan_format_t strscan_dec(
             }
             if (i == lo) {
                 while (--idig >= 0) {
-                    x = x * 100;
+                    x *= 100;
                 }
             } else {  /* Gather round bit from remaining digits. */
-                x <<= 1; --ex2;
+                x <<= 1;
+                --ex2;
                 do {
                     if (xi[i]) {
                         x |= 1;
@@ -1159,7 +1160,7 @@ static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
 
 uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x) {
     neo_dassert(p != NULL);
-    p = fmt_i32(p, (int32_t) (x & 0xffffffffll));
+    p = fmt_i32(p, (int32_t) (x & ~(uint32_t)0));
     return fmt_i32(p, (int32_t) (x >> 32));
 }
 
@@ -1263,7 +1264,7 @@ static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
         if (!nd[0]) {
             return 0;
         } else {
-            uint32_t s = neo_bsf32(nd[0]);
+            uint32_t s = (uint32_t)neo_bsf32(nd[0]);
             if (s >= k) { nd[0] >>= k; return 0; }
             nd[0] >>= s; k -= s;
         }
@@ -1272,7 +1273,7 @@ static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
         if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_F)) {
             stop1 = (uint32_t)(63 - (int32_t)STRFMT_PREC(sf) / 9);
         } else {
-            int32_t floorlog2 = (int32_t)(ndhi * 29 + neo_bsr32(nd[ndhi]) - k);
+            int32_t floorlog2 = (int32_t)(ndhi * 29 + (uint32_t)neo_bsr32(nd[ndhi]) - k);
             int32_t floorlog10 = (int32_t)(floorlog2 * 0.30102999566398114);
             stop1 = (uint32_t)(62 + (floorlog10 - (int32_t)STRFMT_PREC(sf)) / 9);
             stop2 = (uint32_t)(61 + (int32_t)ndhi - (int32_t)STRFMT_PREC(sf) / 8);
@@ -1710,7 +1711,7 @@ uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x) {
 uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
     neo_dassert(p != NULL);
     ptrdiff_t x = (ptrdiff_t)v;
-    size_t i, n = 2+2*sizeof(ptrdiff_t);
+    size_t n = 2+2*sizeof(ptrdiff_t);
     if (!x) {
         memcpy(p, "null", 4);
         return p+4;
@@ -1718,7 +1719,7 @@ uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
     n = 2+2*4+((x>>32) ? 2+2*((size_t)neo_bsr32((uint32_t)(x>>32))>>3) : 0);
     p[0] = '0';
     p[1] = 'x';
-    for (i = n-1; i >= 2; i--, x >>= 4) {
+    for (size_t i = n-1; i >= 2; --i, x >>= 4) {
         p[i] = ((const uint8_t *)"0123456789abcdef")[(x & 15)];
     }
     return p+n;
