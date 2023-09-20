@@ -27,7 +27,14 @@ void vm_init(vm_isolate_t **self, const char *name) {
     *self = neo_memalloc(NULL, sizeof(**self));
     memset(*self, 0, sizeof(**self));
     if (name) {
+#if NEO_COM_GCC
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+#endif
         strncpy((*self)->name, name, sizeof((*self)->name));
+#if NEO_COM_GCC
+#pragma GCC diagnostic pop
+#endif
         (*self)->name[sizeof((*self)->name)-1] = '\0';
     }
     static volatile int64_t mkid = 0x1000;
