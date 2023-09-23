@@ -16,10 +16,6 @@ NEO_THREAD_LOCAL void *volatile neo_tls_proxy = NULL;
 #   error "unsupported platform"
 #endif
 
-void neo_assert_impl(const char *expr, const char *file, int line) {
-    neo_panic("%s:%d Internal NEO ERROR - expression: '%s'", file, line, expr);
-}
-
 void neo_panic(const char *msg, ...) {
     fprintf(stderr, "%s", NEO_CCRED);
     va_list args;
@@ -38,7 +34,7 @@ static neo_osi_t osi_data; /* Global OSI data. Only set once inneo_osi_init(). *
 void neo_osi_init(void) {
     memset(&osi_data, 0, sizeof(osi_data));
 #if NEO_OS_WINDOWS
-    neo_assert(setlocale(LC_ALL, ".UTF-8") && "failed to set locale");
+    neo_assert(setlocale(LC_ALL, ".UTF-8"), "Failed to set locale");
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 0x1000;
@@ -62,17 +58,17 @@ void *neo_defmemalloc(void *blk, size_t len) {
         return NULL;
     } else if(!blk) {  /* allocation */
         blk = neo_alloc_malloc(len);
-        neo_assert(blk && "allocation failed");
+        neo_assert(blk != NULL, "Memory allocation of %zub failed", len);
         return blk;
     } else { /* reallocation */
         void *newblock = neo_alloc_realloc(blk, len);
-        neo_assert(newblock && "reallocation failed");
+        neo_assert(newblock != NULL, "Memory reallocation of %zub failed", len);
         return newblock;
     }
 }
 
 void neo_mempool_init(neo_mempool_t *self, size_t cap) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
     cap = cap ? cap : 1<<9;
     self->cap = cap;
@@ -81,8 +77,8 @@ void neo_mempool_init(neo_mempool_t *self, size_t cap) {
 }
 
 void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
-    neo_dassert(self);
-    neo_assert(len);
+    neo_dassert(self != NULL, "self is NULL");
+    neo_assert(len != 0, "Allocation length must not be zero");
     size_t total = self->len+len;
     if (total >= self->cap) {
         size_t old = self->cap;
@@ -100,7 +96,7 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
 }
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     neo_dassert(align && align >= sizeof(void*) && !(align&(align-1)));
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
@@ -110,7 +106,7 @@ void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
 size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
     neo_dassert(self && len);
     size_t idx = self->len+base*len;
-    neo_assert(idx <= lim && "Pool index limit reached");
+    neo_assert(idx <= lim, "Pool index limit reached. Max: %zu, Current: %zu", lim, idx);
     void *p = neo_mempool_alloc(self, len);
     if (pp) { *pp = p; }
     idx /= len;
@@ -118,8 +114,8 @@ size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, siz
 }
 
 void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t newlen) {
-    neo_dassert(self);
-    neo_assert(blk && oldlen && newlen);
+    neo_dassert(self != NULL, "self is NULL");
+    neo_assert(blk != NULL && oldlen != 0 && newlen != 0, "Invalid arguments");
     if (neo_unlikely(oldlen == newlen)) { return blk; }
     const void *prev = blk; /* We need to copy the old data into the new block. */
     blk = neo_mempool_alloc(self, newlen);
@@ -128,13 +124,13 @@ void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t 
 }
 
 void neo_mempool_reset(neo_mempool_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     self->len = 0;
     self->num_allocs = 0;
 }
 
 void neo_mempool_free(neo_mempool_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     neo_memalloc(self->top, 0);
 }
 
@@ -477,7 +473,7 @@ uint8_t *neo_strdup2(const uint8_t *str) {
 }
 
 char *neo_strdup(const char *str) {
-    neo_assert(str && "Invalid ptr to clone");
+    neo_assert(str != NULL, "String ptr is NULL");
     size_t len = strlen(str); /* strlen also works with UTF-8 strings to find the end \0. */
     char *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
     memcpy(dup, str, len);
@@ -486,7 +482,7 @@ char *neo_strdup(const char *str) {
 }
 
 void neo_printutf8(FILE *f, const uint8_t *str) {
-    neo_assert(f != NULL && "Invalid file ptr");
+     neo_assert(str != NULL, "String ptr is NULL");
     if (neo_unlikely(!str || !*str)) { return; }
 #if NEO_OS_LINUX
     fputs((const char *)str, f); /* Linux terminal is UTF-8 by default. */
@@ -630,7 +626,7 @@ static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
         }
     }
     /* Convert to double using a signed int64_t conversion, then rescale. */
-    neo_assert((int64_t)x >= 0 && "bad double conversion");
+    neo_assert((int64_t)x >= 0, "Bad double conversion");
     n = (double)(int64_t)x;
     if (neg) { n = -n; }
     if (ex2) { n = ldexp(n, ex2); }
@@ -808,7 +804,7 @@ static neo_strscan_format_t strscan_dec(
     {
         uint32_t hi = 0, lo = (uint32_t)(xip-xi);
         int32_t ex2 = 0, idig = (int32_t)lo + (ex10 >> 1);
-        neo_assert(lo > 0 && (ex10 & 1) == 0 && "bad lo ex10");
+        neo_assert(lo > 0 && (ex10 & 1) == 0, "Bad lo ex10: %" PRIx32, ex10);
         /* Handle simple overflow/underflow. */
         if (idig > 310/2) {
             if (neg) { rec_setminf(*o); }
@@ -1383,7 +1379,7 @@ static bool nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen,
     } else {
         prec -= hilen - 9;
     }
-    neo_assert(prec < 9 && "bad precision");
+    neo_assert(prec < 9, "Bad precision: %zu", prec);
     fmt_wuint9(nd9, nd[ndhi]);
     fmt_wuint9(ref9, *ref);
     return !memcmp(nd9, ref9, prec) && (nd9[prec] < '5') == (ref9[prec] < '5');
@@ -1555,7 +1551,7 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                     + 70 + (ND_MUL2K_MAX_SHIFT < 29)
                     + (t.ru32x2.lo >= 0xfffffffe && !(~t.ru32x2.hi << 12));
                 const int8_t *m_e = four_ulp_m_e + eidx * 2;
-                neo_assert(0 <= eidx && eidx < 128 && "bad eidx");
+                neo_assert(0 <= eidx && eidx < 128, "Bad eidx: %" PRIi32, eidx);
                 nd[33] = nd[ndhi];
                 nd[32] = nd[(ndhi - 1) & 0x3f];
                 nd[31] = nd[(ndhi - 2) & 0x3f];

@@ -270,7 +270,7 @@ static void mov_ri(mcode_t **mxp, gpr_t reg, imm_t x) {
 
 /* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: addq $10, %rax. */
 static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
-    neo_assert(checku32(x.u64) && "32-bit Imm out of range");
+    neo_assert(checku32(x.u64), "32-bit Imm out of range: " PRIu64, x.u64);
     mcode_t *p = *mxp; /* Pointer to current machine code buffer. */
     if (checku8(x.u64)) { /* Small 8-bit immediate. */
         *--p = *(mcode_t *)&x;

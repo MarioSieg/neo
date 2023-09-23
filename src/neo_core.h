@@ -398,14 +398,18 @@ extern uint64_t _byteswap_uint64(uint64_t x);
 #define neo_assert_name(line) neo_assert_name2(_assert_, line)
 #define neo_static_assert(expr) extern void neo_assert_name(__LINE__)(bool STATIC_ASSERTION_FAILED[((expr)?1:-1)])
 extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
-extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, const char *file, int line);
 #define NEO_SEP ,
 
-#define neo_assert(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* Assert for debug and release builds. */
+/* Assert for debug and release builds. */
+#define neo_assert(ex, msg, ...) \
+    if (neo_unlikely(!(ex))) { \
+        neo_panic("%s:%d Assertion failed: " #ex msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+    }
+
 #if NEO_DBG
-#   define neo_dassert(ex) neo_assert(ex) /* Assert for debug only builds. */
+#   define neo_dassert(ex, msg, ...) neo_assert(ex, msg, ## __VA_ARGS__) /* Assert for debug only builds. */
 #else
-#   define neo_dassert(ex) (void)(ex) /* Assert for debug only builds. */
+#   define neo_dassert(ex, msg, ...) /* Disable in release builds. */
 #endif
 
 /* ---- Logging ---- */

@@ -401,30 +401,30 @@ extern NEO_EXPORT void astpool_reset(astpool_t *self); /* Resets the astpool_t o
 extern NEO_EXPORT NEO_NODISCARD astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type);
 extern NEO_EXPORT NEO_NODISCARD listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len);
 static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidref(const astpool_t *self, astref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return neo_likely(!astref_isnull(ref) && ((size_t)ref*sizeof(astnode_t))-sizeof(astnode_t) < self->node_pool.len);
 }
 static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidlistref(const astpool_t *self, listref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return neo_likely((size_t)ref*sizeof(astref_t) < self->list_pool.len); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 /* Resolves AST reference to node pointer! Do NOT keep the node pointer alive, it might be invalidated on reallocation.
 ** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
 */
 static NEO_AINLINE NEO_NODISCARD astnode_t *astpool_resolve(const astpool_t *self, astref_t ref) {
-    neo_dassert(self != NULL);
-    neo_dassert(self->node_pool.cap > self->node_pool.len);
+    neo_dassert(self != NULL, "self is NULL");
+    neo_dassert(self->node_pool.cap > self->node_pool.len, "Pool is full.");
 #if NEO_DBG
     if (!astref_isnull(ref)) {
-        neo_dassert(astpool_isvalidref(self, ref));
+        neo_dassert(astpool_isvalidref(self, ref), "Invalid AST reference.");
     }
 #endif
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
 static NEO_AINLINE NEO_NODISCARD astref_t *astpool_resolvelist(const astpool_t *self, listref_t ref) {
-    neo_dassert(self != NULL);
-    neo_dassert(self->list_pool.cap > self->list_pool.len);
-    neo_assert(astpool_isvalidlistref(self, ref));
+    neo_dassert(self != NULL, "self is NULL");
+    neo_dassert(self->node_pool.cap > self->node_pool.len, "Pool is full.");
+    neo_assert(astpool_isvalidlistref(self, ref), "Invalid list reference.");
     return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 

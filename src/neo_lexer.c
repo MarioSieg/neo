@@ -130,7 +130,7 @@ static void consume(lexer_t *self) { /* Consume one codepoint, update states and
 }
 
 static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) { /* Check if current codepoint matches c. */
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     if (peek(self) == c) {
         consume(self);
         return true;
@@ -142,7 +142,7 @@ static NEO_AINLINE bool ismatch(lexer_t *self, uint32_t c) { /* Check if current
 #define COMMENT_BLOCK '*'
 
 static void consume_whitespace(lexer_t *self) { /* Consume whitespace and comments. */
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     if (c32_is_whitespace(peek(self))) {
         consume(self);
     } else if (peek(self) == COMMENT_START) { /* We've reached a comment. */
@@ -164,20 +164,20 @@ static void consume_whitespace(lexer_t *self) { /* Consume whitespace and commen
 }
 
 static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) { /* Create token from current state. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     token_t tok;
     memset(&tok, 0, sizeof(tok));
     tok.type = type;
     if (neo_likely(type != TOK_ME_EOF)) { /* Regular token case. */
         ptrdiff_t delta = self->needle-self->tok_start;
-        neo_assert(delta >= 0 && "invalid lexeme length");
+        neo_assert(delta >= 0, "Invalid lexeme length: %" PRIi64, delta);
         const uint8_t *lp = self->needle-delta+pdelta;
         if (delta > 0) { delta -= pdelta<<1; }
-        neo_assert(neo_bnd_check(lp, self->src, self->src_data->len) && "invalid lexeme pointer"); /* bounds check */
+        neo_assert(neo_bnd_check(lp, self->src, self->src_data->len), "Lexeme pointer out of bounds"); /* bounds check */
         tok.lexeme = (srcspan_t){.p=lp,.len=(uint32_t)delta};
         tok.col = (uint32_t)abs((int)self->col-(int)delta);
         delta = self->line_end-self->line_start; /* Line delta */
-        neo_assert(delta >= 0 && "invalid lexeme line length");
+         neo_assert(delta >= 0, "Invalid lexeme length: %" PRIi64, delta);
         tok.lexeme_line = (srcspan_t){.p=self->line_start,.len=(uint32_t)delta};
     } else { /* EOF or empty token case. */
         tok.lexeme = (srcspan_t){.p=(const uint8_t *)"",.len=0};
@@ -188,7 +188,7 @@ static token_t mktok(const lexer_t *self, toktype_t type, int pdelta) { /* Creat
 }
 
 static token_t consume_numeric_literal(lexer_t *self) { /* Consumes either int or float literal. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     toktype_t type = TOK_LI_INT; /* Assume integer literal by default. */
     radix_t rdx = RADIX_DEC; /* Assume decimal by default. */
     if (peek(self) == '0') { /* Check for radix prefix. */
@@ -223,7 +223,7 @@ static bool kw_found(const lexer_t *self, toktype_t i) {
 }
 
 static token_t consume_keyword_or_identifier(lexer_t *self) { /* Consumes either keyword or identifier. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     while (c32_is_ident_cont(peek(self))) {
         consume(self);
     }
@@ -241,7 +241,7 @@ static token_t consume_keyword_or_identifier(lexer_t *self) { /* Consumes either
 }
 
 static token_t consume_string(lexer_t *self) { /* Consumes string literal. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     while (!is_done(self) && peek(self) != '"') {
         consume(self);
     }
@@ -253,7 +253,7 @@ static token_t consume_string(lexer_t *self) { /* Consumes string literal. */
 }
 
 void lexer_init(lexer_t *self) { /* Initialize lexer. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
 }
 
@@ -379,12 +379,12 @@ size_t lexer_drain(lexer_t *self, token_t **tok) { /* Drain all tokens into a he
 }
 
 void lexer_free(lexer_t *self) { /* Free lexer. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     (void)self;
 }
 
 void token_dump(const token_t *self) { /* Dump token to stdout. */
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     printf("%" PRIu32 ":%" PRIu32 " Type: %s, Lexeme: %.*s\n",
         self->line,
         self->col,

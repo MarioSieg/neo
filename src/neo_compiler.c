@@ -25,8 +25,8 @@ static NEO_COLDPROC const uint8_t *clone_span(srcspan_t span) { /* Create null-t
 }
 
 NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const token_t *tok, const uint8_t *msg) {
-    neo_assert(tok && "Token is NULL");
-    neo_assert(msg && "Message is NULL");
+    neo_assert(tok != NULL, "Token is NULL");
+    neo_assert(msg != NULL, "Message is NULL");
     compile_error_t *error = (compile_error_t *)neo_memalloc(NULL, sizeof(*error));
     error->type = type;
     error->line = tok->line;
@@ -63,7 +63,7 @@ NEO_COLDPROC const compile_error_t *comerror_new(
 }
 
 void comerror_print(const compile_error_t *self, FILE *f, bool colored) {
-    neo_dassert(self != NULL && f != NULL);
+    neo_dassert(self != NULL && f != NULL, "Invalid arguments");
     char error_message [0x1000];
     bool src_hint = false; /* Print source hint? */
     const char *color = colored ? NEO_CCRED : NULL;
@@ -125,12 +125,12 @@ NEO_COLDPROC void comerror_free(const compile_error_t *self) {
 }
 
 NEO_COLDPROC void errvec_init(error_vector_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
 }
 
 NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t *error) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     if (!self->cap) {
         self->len = 0;
         self->cap = 1<<7;
@@ -142,7 +142,7 @@ NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t *error
 }
 
 NEO_COLDPROC void errvec_free(error_vector_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     for (uint32_t i = 0; i < self->len; ++i) { /* Free individual errors. */
         comerror_free(self->p[i]);
         self->p[i] = NULL;
@@ -151,14 +151,14 @@ NEO_COLDPROC void errvec_free(error_vector_t *self) {
 }
 
 void errvec_print(const error_vector_t *self, FILE *f, bool colored) {
-    neo_dassert(self && f);
+    neo_dassert(self != NULL && f != NULL, "Invalid arguments");
     for (uint32_t i = 0; i < self->len; ++i) {
         comerror_print(self->p[i], f, colored);
     }
 }
 
 void errvec_clear(error_vector_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     for (uint32_t i = 0; i < self->len; ++i) { /* Free individual errors. */
         comerror_free(self->p[i]);
         self->p[i] = NULL;
@@ -170,7 +170,7 @@ void errvec_clear(error_vector_t *self) {
 }
 
 const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *err_info) {
-    neo_dassert(path);
+    neo_dassert(path != NULL, "path is NULL");
     FILE *f = NULL;
     if (neo_unlikely(!neo_fopen(&f, path, NEO_FMODE_R|NEO_FMODE_BIN))) {
         if (err_info) {
@@ -274,7 +274,7 @@ const source_t *source_from_memory_ref(const uint8_t *path, const uint8_t *src, 
 }
 
 void source_free(const source_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     if (self->is_file) { /* Memory is owned when source was loaded from file, else referenced. */
         neo_memalloc((void *)self->filename, 0);
         neo_memalloc((void *)self->src, 0);
@@ -283,7 +283,7 @@ void source_free(const source_t *self) {
 }
 
 void source_dump(const source_t *self, FILE *f) {
-    neo_dassert(self != NULL && f != NULL);
+    neo_dassert(self != NULL && f != NULL, "Invalid arguments");
     fprintf(f, "Source: %s\n", self->filename);
     fprintf(f, "Length: %" PRIu32 "\n", (uint32_t)self->len);
     fprintf(f, "Content: %s\n", self->src);
@@ -294,7 +294,7 @@ void source_dump(const source_t *self, FILE *f) {
 }
 
 bool source_is_empty(const source_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return self->len == 0 || *self->src == '\0' || *self->src == '\n';
 }
 
@@ -311,7 +311,7 @@ struct neo_compiler_t {
 };
 
 void compiler_init(neo_compiler_t **self, neo_compiler_flag_t flags) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     *self = (neo_compiler_t *)neo_memalloc(NULL, sizeof(**self));
     memset(*self, 0, sizeof(**self));
     neo_mempool_init(&(**self).pool, 8192);
@@ -321,7 +321,7 @@ void compiler_init(neo_compiler_t **self, neo_compiler_flag_t flags) {
 }
 
 void compiler_free(neo_compiler_t **self) {
-    neo_assert(self && *self && "Compiler pointer is NULL");
+    neo_assert(self != NULL && *self != NULL, "Compiler pointer is NULL");
     parser_free(&(**self).parser);
     errvec_free(&(**self).errors);
     neo_mempool_free(&(**self).pool);
@@ -349,7 +349,7 @@ static void compiler_reset_and_prepare(neo_compiler_t *self, const source_t *src
     errvec_clear(&self->errors);
     self->ast = ASTREF_NULL;
     parser_setup_source(&self->parser, src);
-    neo_dassert(self->parser.lex.src == src->src);
+    neo_dassert(self->parser.lex.src == src->src, "Source mismatch");
 }
 
 static void render_ast(neo_compiler_t *self, const source_t *src) {
@@ -370,10 +370,10 @@ static void render_ast(neo_compiler_t *self, const source_t *src) {
 }
 
 static NEO_NODISCARD bool compile_module(neo_compiler_t *self, const source_t *src) {
-    neo_dassert(self != NULL && src != NULL);
+    neo_dassert(self != NULL && src != NULL, "Invalid arguments");
     compiler_reset_and_prepare(self, src); /* 1. Reset compiler state and prepare for new compilation. */
     self->ast = parser_drain(&self->parser); /* 2. Parse source code into AST. */
-    neo_assert(!astref_isnull(self->ast) && "Parser did not emit any AST");
+    neo_assert(!astref_isnull(self->ast), "Parser did not emit any AST");
     if (neo_unlikely(!perform_semantic_analysis(&self->parser.pool, self->ast, &self->errors))) { /* 3. Perform semantic analysis. */
         return false;
     }
@@ -387,7 +387,7 @@ static NEO_NODISCARD bool compile_module(neo_compiler_t *self, const source_t *s
     }
 
 bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     if (neo_unlikely(!src)) { return false; }
     if (source_is_empty(src)) { return true; } /* Empty source -> we're done here. */
     clock_t begin = clock();
@@ -420,18 +420,18 @@ bool compiler_compile(neo_compiler_t *self, const source_t *src, void *usr) {
 }
 
 const error_vector_t *compiler_get_errors(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     return &self->errors;
 }
 
 astref_t compiler_get_ast_root(const neo_compiler_t *self, const astpool_t **pool) {
-    neo_assert(self && pool && "Compiler pointer is NULL");
+    neo_assert(self != NULL && pool != NULL, "Compiler pointer is NULL");
     *pool = &self->parser.pool;
     return self->ast;
 }
 
 neo_compiler_flag_t compiler_get_flags(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     return self->flags;
 }
 
@@ -440,66 +440,66 @@ bool compiler_has_flags(const neo_compiler_t *self, neo_compiler_flag_t flags) {
 }
 
 neo_compile_callback_hook_t *compiler_get_pre_compile_callback(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     return self->pre_compile_callback;
 }
 
 neo_compile_callback_hook_t *compiler_get_post_compile_callback(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self!= NULL, "Compiler pointer is NULL");
     return self->post_compile_callback;
 }
 
 neo_compile_callback_hook_t *compiler_get_on_warning_callback(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     return self->on_warning_callback;
 }
 
 neo_compile_callback_hook_t *compiler_get_on_error_callback(const neo_compiler_t *self) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     return self->on_error_callback;
 }
 
 void compiler_set_flags(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     self->flags = new_flags;
 }
 
 void compiler_add_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     self->flags = (neo_compiler_flag_t)(self->flags | new_flags);
 }
 
 void compiler_remove_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     self->flags = (neo_compiler_flag_t)(self->flags & ~new_flags);
 }
 
 void compiler_toggle_flag(neo_compiler_t *self, neo_compiler_flag_t new_flags) {
-    neo_assert(self && "Compiler pointer is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
     self->flags = (neo_compiler_flag_t)(self->flags ^ new_flags);
 }
 
 void compiler_set_pre_compile_callback(neo_compiler_t *self, neo_compile_callback_hook_t *new_hook) {
-    neo_assert(self && "Compiler pointer is NULL");
-    neo_assert(new_hook && "Callback hook is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
+    neo_assert(new_hook != NULL, "Callback hook is NULL");
     self->pre_compile_callback = new_hook;
 }
 
 void compiler_set_post_compile_callback(neo_compiler_t *self, neo_compile_callback_hook_t *new_hook) {
-    neo_assert(self && "Compiler pointer is NULL");
-    neo_assert(new_hook && "Callback hook is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
+    neo_assert(new_hook != NULL, "Callback hook is NULL");
     self->post_compile_callback = new_hook;
 }
 
 void compiler_set_on_warning_callback(neo_compiler_t *self, neo_compile_callback_hook_t *new_hook) {
-    neo_assert(self && "Compiler pointer is NULL");
-    neo_assert(new_hook && "Callback hook is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
+    neo_assert(new_hook != NULL, "Callback hook is NULL");
     self->on_warning_callback = new_hook;
 }
 
 void compiler_set_on_error_callback(neo_compiler_t *self, neo_compile_callback_hook_t *new_hook) {
-    neo_assert(self && "Compiler pointer is NULL");
-    neo_assert(new_hook && "Callback hook is NULL");
+    neo_assert(self != NULL, "Compiler pointer is NULL");
+    neo_assert(new_hook != NULL, "Callback hook is NULL");
     self->on_error_callback = new_hook;
 }
 
@@ -576,7 +576,7 @@ typedef struct deduced_t {
 } deduced_t;
 
 static NEO_NODISCARD NEO_UNUSED deduced_t deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr) {
-    neo_dassert(pool != NULL && errors != NULL);
+    neo_dassert(pool != NULL && errors != NULL, "Invalid arguments");
     if (astref_isnull(expr)) { return (deduced_t){.is_valid = false}; }
     const astnode_t *node = astpool_resolve(pool, expr);
     switch (node->type) {
@@ -606,7 +606,7 @@ static NEO_NODISCARD NEO_UNUSED deduced_t deduce_typeof_expr(const astpool_t *po
             return (deduced_t){.is_valid = false};
         } break;
         default: {
-            neo_assert((ASTNODE_EXPR_MASK & astmask(node->type)) == 0 && "AST node is expression, but not handled");
+            neo_assert((ASTNODE_EXPR_MASK & astmask(node->type)) == 0, "AST node is of type expression, but not handled");
             errvec_push(errors, comerror_new(COMERR_INVALID_EXPRESSION, 0, 0, NULL, NULL, NULL, NULL));
             return (deduced_t){.is_valid = false};
         }
@@ -623,7 +623,7 @@ typedef struct sema_context_t {
 } sema_context_t;
 
 static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const astpool_t *pool) {
-    neo_dassert(self != NULL && errors != NULL);
+    neo_dassert(self != NULL && errors != NULL, "Invalid arguments");
     memset(self, 0, sizeof(*self));
     self->errors = errors;
     self->pool = pool;
@@ -631,10 +631,10 @@ static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const as
 }
 
 static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     if (neo_unlikely(astref_isnull(symtab))) { return; }
     const astnode_t *node = astpool_resolve(self->pool, symtab);
-    neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+    neo_assert(node != NULL && node->type == ASTNODE_BLOCK, "AST node is not a block");
     if (self->len >= self->cap) {
         self->blocks = (astref_t *)neo_memalloc(self->blocks, (self->cap<<=1)*sizeof(*self->blocks));
     }
@@ -642,7 +642,7 @@ static void sema_ctx_push_block(sema_context_t *self, astref_t symtab) {
 }
 
 static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables in a block. */
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
         case BLOCKSCOPE_MODULE:
             symtab_free(&self->symtabs.sc_module.class_table);
@@ -663,10 +663,10 @@ static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables i
 }
 
 static void sema_ctx_free(sema_context_t *self) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     for (uint32_t i = 0; i < self->len; ++i) {
         astnode_t *node = astpool_resolve(self->pool, self->blocks[i]);
-        neo_assert(node != NULL && node->type == ASTNODE_BLOCK && "AST node is not a block");
+        neo_assert(node != NULL && node->type == ASTNODE_BLOCK, "AST node is not a block");
         block_free_symtabs(&node->dat.n_block);
     }
     neo_memalloc(self->blocks, 0);
@@ -681,12 +681,12 @@ static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
     astref_t (*extractor)(const astnode_t *target),
     sema_context_t *ctx
 ) {
-    neo_dassert(target != NULL && pool != NULL && extractor != NULL && ctx != NULL);
+    neo_dassert(target != NULL && pool != NULL && extractor != NULL && ctx != NULL, "Invalid arguments");
     if (neo_unlikely(astref_isnull(noderef))) { return; }
     const astnode_t *node = astpool_resolve(pool, noderef);
     if (node->type != target_type) { return; } /* Skip non-target nodes. */
     const astnode_t *ident = astpool_resolve(pool, (*extractor)(node));
-    neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT && "AST node is not an identifier");
+    neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT, "AST node is not an identifier");
     const node_ident_literal_t key = ident->dat.n_ident_lit;
     if (!target->cap || !target->buckets) { /* Init symbol table if not already done. */
         symtab_init(target, 1<<4); /* Init symbol table. */
@@ -694,7 +694,7 @@ static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
     /* Now that we have the key, check if the identifier is already defined in the current symbol table. */
     const symrecord_t *existing = NULL;
     if (neo_unlikely(symtab_get(target, &key, &existing))) { /* Key already exists -> ERROR. Note that this only checks if an identifier exists within the SAME symbol table. */
-        neo_dassert(existing != NULL);
+        neo_dassert(existing != NULL, "Existing symbol record is NULL");
         uint8_t *cloned;
         srcspan_stack_clone(key.span, cloned); /* Clone span into zero terminated stack-string. */
         errvec_push(ctx->errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
@@ -709,17 +709,17 @@ static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
 }
 
 static astref_t sym_extract_class(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_CLASS);
+    neo_dassert(target != NULL && target->type == ASTNODE_CLASS, "Invalid arguments");
     return target->dat.n_class.ident;
 }
 
 static astref_t sym_extract_method(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_FUNCTION);
+    neo_dassert(target != NULL && target->type == ASTNODE_FUNCTION, "Invalid arguments");
     return target->dat.n_method.ident;
 }
 
 static astref_t sym_extract_variable(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_VARIABLE);
+    neo_dassert(target != NULL && target->type == ASTNODE_VARIABLE, "Invalid arguments");
     return target->dat.n_variable.ident;
 }
 
@@ -729,7 +729,7 @@ static void populate_symbol_tables(
     astpool_t *pool,
     sema_context_t *ctx
 ) {
-    neo_dassert(self != NULL && pool != NULL && ctx != NULL);
+    neo_dassert(self != NULL && pool != NULL && ctx != NULL, "Invalid arguments");
     if (self->len == 0) { return; }
     sema_ctx_push_block(ctx, selfref); /* Track block for later cleanup. */
     astref_t *children = astpool_resolvelist(pool, self->nodes);
@@ -883,7 +883,7 @@ static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
 }
 
 static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vector_t *errors) {
-    neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL);
+    neo_dassert(!astref_isnull(root) && pool != NULL && errors != NULL, "Invalid arguments");
     uint32_t error_count = errors->len;
     sema_context_t ctx;
     sema_ctx_init(&ctx, errors, pool);
@@ -893,7 +893,7 @@ static bool perform_semantic_analysis(astpool_t *pool, astref_t root, error_vect
 }
 
 static NEO_COLDPROC NEO_UNUSED void node_block_dump_symbols(const node_block_t *self, FILE *f) {
-    neo_dassert(self != NULL && f != NULL);
+    neo_dassert(self != NULL && f != NULL, "Invalid arguments");
     switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
         case BLOCKSCOPE_MODULE:
             symtab_print(&self->symtabs.sc_module.class_table, f, "Classes");

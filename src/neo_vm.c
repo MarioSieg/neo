@@ -6,7 +6,7 @@
 #include <math.h>
 
 void stk_alloc(opstck_t *self, size_t bsize, size_t bwarmup) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     bsize = bsize && bsize % sizeof(record_t) == 0 ? bsize : VMSTK_DEF_SIZE;
     bwarmup = bwarmup && bwarmup % sizeof(record_t) == 0 ? bwarmup : VMSTK_DEF_WARMUP;
     self->len = bsize>>3; /* Bytes to record count -> / sizeof(record_t) */
@@ -15,7 +15,7 @@ void stk_alloc(opstck_t *self, size_t bsize, size_t bwarmup) {
 }
 
 void stk_free(opstck_t *self, bool poison) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     if (poison) {
         memset(self->p, 0, self->len*sizeof(*self->p));
     }
@@ -23,7 +23,7 @@ void stk_free(opstck_t *self, bool poison) {
 }
 
 void vm_init(vm_isolate_t **self, const char *name) {
-    neo_assert(self != NULL);
+    neo_assert(self != NULL, "self must not be NULL");
     *self = neo_memalloc(NULL, sizeof(**self));
     memset(*self, 0, sizeof(**self));
     if (name) {
@@ -49,7 +49,7 @@ void vm_init(vm_isolate_t **self, const char *name) {
 }
 
 void vm_free(vm_isolate_t **self) {
-    neo_assert(self != NULL);
+    neo_assert(self != NULL, "self must not be NULL");
     stk_free(&(*self)->stack, true);
     neo_memalloc(*self, 0);
     memset(*self, 0, sizeof(**self));
@@ -157,7 +157,6 @@ neo_int_t vmop_ipow64_no_ov(register neo_int_t x, register neo_int_t k) {
     }
 
 bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
-    neo_dassert(r);
     neo_uint_t y;
     if (neo_unlikely(k == 0)) { return 1; }
     for (; (k & 1) == 0; k >>= 1) { umulov(x, x, &x) }
@@ -175,7 +174,6 @@ bool vmop_upow64(neo_uint_t x, neo_uint_t k, neo_uint_t *r) {
     return false;
 }
 bool vmop_ipow64(neo_int_t x, neo_int_t k, neo_int_t *r) { /* Exponentiation by squaring. */
-    neo_dassert(r);
     if (neo_unlikely(k == 0)) { *r = 1; return false; }
     else if (neo_unlikely(k < 0)) {
         switch (x) {
@@ -233,7 +231,7 @@ neo_float_t vmop_mod(neo_float_t x, neo_float_t y) {
 */
 
 void prng_init_seed(prng_state_t *self, uint64_t noise) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     noise = noise ? noise : neo_tid(); /* Use the noise to add thread-local entropy. */
     self->s[0] = 0xa0d277570a345b8cull ^ noise; /* Precomputed constants from prng_from_seed(0.0). */
     self->s[1] = 0x764a296c5d4aa64full ^ noise;
@@ -242,7 +240,7 @@ void prng_init_seed(prng_state_t *self, uint64_t noise) {
 }
 
 void prng_from_seed(prng_state_t *self, double seed) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     seed = seed != 0.0 ? seed : 5.249176108649e-01; /* Default seed. */
     uint32_t r = 0x11090601;  /* Four 8 bit-seeds merged into a scalar. */
     for (size_t i = 0; i < sizeof(self->s)/sizeof(*self->s); ++i) {
@@ -271,7 +269,7 @@ void prng_from_seed(prng_state_t *self, double seed) {
   tausworthe223_gen(self, z, r, 3, 47, 21,  8)  /* Index 3 */
 
 neo_int_t prng_next_i64(prng_state_t *self) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
     union { uint64_t u; int64_t i; } u = { .u = r };
@@ -279,7 +277,7 @@ neo_int_t prng_next_i64(prng_state_t *self) {
 }
 
 neo_float_t prng_next_f64(prng_state_t *self) {
-    neo_dassert(self != NULL);
+    neo_dassert(self != NULL, "self is NULL");
     uint64_t z, r = 0;
     tausworthe223_step(self, z, r);
     r = (r & 0xfffffffffffffull) | 0x3ff0000000000000ull; /* IEEE-754 binary-64 pattern in the range 1.0 <= d < 2.0. */
@@ -324,7 +322,7 @@ neo_float_t prng_next_f64(prng_state_t *self) {
 /* ---- System Calls ---- */
 
 #define impl_syscall(name) static bool syscall_##name(vm_isolate_t *self, record_t *sp)
-#define syscall_check()   neo_dassert(self != NULL && sp != NULL)
+#define syscall_check()   neo_dassert(self != NULL && sp != NULL, "self and sp must not be NULL")
 
 impl_syscall(print_int) {
     syscall_check();
@@ -388,9 +386,9 @@ neo_static_assert(sizeof(syscall_table)/sizeof(*syscall_table) == SYSCALL__LEN &
 /* ---- Core VM Impl (Hot code) ---- */
 
 NEO_HOTPROC bool vm_exec(vm_isolate_t *self, const bytecode_t *bcode) {
-    neo_assert(self && bcode && bcode->p && bcode->len && self->stack.len);
-    neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP && "(prologue) first instruction must be NOP");
-    neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT && "(epilogue) last instruction must be HLT");
+    neo_assert(self && bcode && bcode->p && bcode->len && self->stack.len, "self, bcode and stack must not be NULL and bcode and stack must not be empty");
+    neo_assert(bci_unpackopc(bcode->p[0]) == OPC_NOP, "(Prologue-Code) First instruction must be NOP, but is: %s", opc_mnemonic[bci_unpackopc(bcode->p[0])]);
+    neo_assert(bci_unpackopc(bcode->p[bcode->len-1]) == OPC_HLT, "(epilogue) last instruction must be HLT, but is: %s", opc_mnemonic[bci_unpackopc(bcode->p[0])]);
 
     if (self->pre_exec_hook) {
         (*self->pre_exec_hook)(self, bcode);
@@ -400,8 +398,8 @@ NEO_HOTPROC bool vm_exec(vm_isolate_t *self, const bytecode_t *bcode) {
     const uintptr_t spb = (uintptr_t)self->stack.p; /* Stack pointer backup for delta computation. */
 
     register const bci_instr_t *restrict ip = bcode->p; /* Current instruction pointer. */
-    register const uintptr_t sps = (uintptr_t)self->stack.p + sizeof(*self->stack.p); /* Start of stack. +1 for padding. */
-    register const uintptr_t spe = (uintptr_t)(self->stack.p + self->stack.len) - sizeof(*self->stack.p); /* End of stack (last element). */
+    register const uintptr_t sps = (uintptr_t)self->stack.p+sizeof(*self->stack.p); /* Start of stack. +1 for padding. */
+    register const uintptr_t spe = (uintptr_t)(self->stack.p+self->stack.len)-sizeof(*self->stack.p); /* End of stack (last element). */
     register record_t *restrict sp = self->stack.p; /* Current stack pointer. */
     register const record_t *restrict cp = bcode->pool.p; /* Constant pool pointer. */
     register vm_interrupt_t vif = VMINT_OK; /* VM interrupt flag. */
