@@ -59,7 +59,7 @@ typedef enum extended_isa_t {
 #define XCR0_AVX512 (7ull<<5) /* 512-bit %zmm* save/restore */
 
 static void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) { /* Query CPUID. */
-    neo_dassert(eax && ebx && ecx && edx);
+    neo_dassert(eax != NULL && ebx != NULL && ecx != NULL && edx != NULL, "Invalid arguments");
 #if NEO_COM_MSVC
     int cpu_info[4];
     __cpuidex(cpu_info, *eax, *ecx);
@@ -297,7 +297,7 @@ static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
 #include <Zydis/Zydis.h>
 
 static NEO_COLDPROC void dump_assembly(const mcode_t *p, size_t len, FILE *f) {
-    neo_dassert(p && f);
+    neo_dassert(p != NULL && f != NULL, "Invalid arguments");
     fprintf(f, "Machine Code Block @%p, Len: %zu\n", p, len);
     uintptr_t rip = (uintptr_t)p;
     size_t offset = 0;

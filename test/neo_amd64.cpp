@@ -5,7 +5,7 @@
 #include <Zydis/Zydis.h>
 
 [[nodiscard]] static std::vector<ZydisDisassembledInstruction> disassemble(const mcode_t *p, std::size_t len) {
-    neo_dassert(p);
+    neo_dassert(p != NULL, "Invalid arguments");
     auto rip = std::bit_cast<std::uintptr_t>(p);
     std::size_t offset = 0;
     ZydisDisassembledInstruction instruction {};

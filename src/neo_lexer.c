@@ -44,7 +44,7 @@ uint32_t utf8_seqlen(uint32_t x) { /* Computes the length of incoming UTF-8 sequ
 }
 
 uint32_t utf8_decode(const uint8_t **p) { /* Decodes utf-8 sequence into UTF-32 codepoint and increments needle. Assumes valid UTF-8. */
-    neo_dassert(p != NULL && *p != NULL);
+    neo_dassert(p != NULL && *p != NULL, "Invalid arguments");
     uint32_t cp = (uint32_t)**p;
     uint32_t len = utf8_seqlen(cp);
     if (neo_likely(len == 1)) { ++*p; return cp & 127; } /* ASCII and most common case. */
@@ -98,7 +98,7 @@ static NEO_AINLINE bool c32_is_whitespace(uint32_t c) {
 
 /* Decode one cycle of cached codepoints. */
 static NEO_AINLINE void decode_cache_cycle(lexer_t *self) {
-    neo_dassert(self != NULL && self->src != NULL && self->needle!= NULL );
+    neo_dassert(self != NULL && self->src != NULL && self->needle != NULL, "Invalid arguments");
     const uint8_t *tmp = self->needle;
     self->cp_curr = utf8_decode(&tmp);
     self->cp_next = utf8_decode(&tmp);
@@ -109,7 +109,7 @@ static NEO_AINLINE void decode_cache_cycle(lexer_t *self) {
 #define is_done(l) (peek(l) == 0) /* Are we done? */
 
 static void consume(lexer_t *self) { /* Consume one codepoint, update states and advance lexer. */
-    neo_dassert(self != NULL && self->src != NULL && self->needle!= NULL );
+    neo_dassert(self != NULL && self->src != NULL && self->needle != NULL, "Invalid arguments");
     if (neo_unlikely(is_done(self))) { /* We're done here. */
         self->line_end = self->src+self->src_data->len;
         return;
@@ -124,7 +124,7 @@ static void consume(lexer_t *self) { /* Consume one codepoint, update states and
     } else { /* No special event, just increment column. */
         ++self->col;
     }
-    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_data->len));
+    neo_dassert(neo_bnd_check(self->needle, self->src, self->src_data->len), "Needle out of bounds");
     self->needle += utf8_seqlen(*self->needle); /* Increment needle to next UTF-8 sequence. */
     decode_cache_cycle(self); /* Decode cached codepoints. */
 }
@@ -258,7 +258,7 @@ void lexer_init(lexer_t *self) { /* Initialize lexer. */
 }
 
 void lexer_setup_source(lexer_t *self, const source_t *src) { /* Setup lexer for source file. */
-    neo_dassert(self && src);
+    neo_dassert(self != NULL && src != NULL, "Invalid arguments");
     self->src_data = src;
     self->src = self->needle = self->tok_start = self->line_start = self->line_end = self->src_data->src;
     self->line = self->col = 1;
@@ -270,7 +270,7 @@ void lexer_setup_source(lexer_t *self, const source_t *src) { /* Setup lexer for
 }
 
 token_t lexer_scan_next(lexer_t *self) { /* Scan next token. */
-    neo_dassert(self && self->src);
+    neo_dassert(self != NULL && self->src != NULL, "Invalid arguments");
     consume_whitespace(self); /* Consume space and comments. */
     if (neo_unlikely(is_done(self))) { /* EOF? */
         return mktok(self, TOK_ME_EOF, 0);
@@ -364,7 +364,7 @@ token_t lexer_scan_next(lexer_t *self) { /* Scan next token. */
 }
 
 size_t lexer_drain(lexer_t *self, token_t **tok) { /* Drain all tokens into a heap-allocated vector. */
-    neo_dassert(self && tok);
+    neo_dassert(self != NULL && tok != NULL, "Invalid arguments");
     size_t cap = 1<<9, len = 0;
     *tok = (token_t *)neo_memalloc(NULL, cap*sizeof(**tok));
     for (;;) {

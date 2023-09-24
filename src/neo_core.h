@@ -401,15 +401,15 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
 #define NEO_SEP ,
 
 /* Assert for debug and release builds. */
-#define neo_assert(ex, msg, ...) \
-    if (neo_unlikely(!(ex))) { \
-        neo_panic("%s:%d Assertion failed: " #ex msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+#define neo_assert(expr, msg, ...) \
+    if (neo_unlikely(!(expr))) { \
+        neo_panic("%s:%d Assertion failed: " #expr msg, __FILE__, __LINE__, ## __VA_ARGS__);\
     }
 
 #if NEO_DBG
-#   define neo_dassert(ex, msg, ...) neo_assert(ex, msg, ## __VA_ARGS__) /* Assert for debug only builds. */
+#   define neo_dassert(expr, msg, ...) neo_assert(expr, msg, ## __VA_ARGS__) /* Assert for debug only builds. */
 #else
-#   define neo_dassert(ex, msg, ...) /* Disable in release builds. */
+#   define neo_dassert(expr, msg, ...) (void)(expr) /* Disable in release builds. */
 #endif
 
 /* ---- Logging ---- */

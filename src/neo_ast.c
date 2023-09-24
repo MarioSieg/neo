@@ -65,7 +65,7 @@ void symtab_free(symtab_t *self) {
 }
 
 static NEO_COLDPROC void symtab_print_visitor(const node_ident_literal_t *key, const symrecord_t *sym, void *usr) {
-    neo_dassert(key != NULL && sym != NULL && usr != NULL, "Invalid arguments");
+    neo_dassert(key != NULL && sym != NULL && usr != NULL, "Invalid arguments"); (void)sym;
     FILE *f = (FILE *)usr;
     fprintf(f, "\t%.*s\n", (int)key->span.len, key->span.p);
 }

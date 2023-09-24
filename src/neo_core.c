@@ -84,7 +84,7 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
         size_t old = self->cap;
         do {
             self->cap<<=1;
-        } while (self->cap <= total);
+        } while (self->cap<=total);
         self->top = neo_memalloc(self->top, self->cap);
         size_t delta = self->cap-old;
         memset((uint8_t *)self->top + old, 0, delta); /* Zero the new memory. */
@@ -97,14 +97,14 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
     neo_dassert(self != NULL, "self is NULL");
-    neo_dassert(align && align >= sizeof(void*) && !(align&(align-1)));
+    neo_dassert(align != 0 && align >= sizeof(void*) && !(align&(align-1)), "Invalid alignment: %zu", align);
     uintptr_t off = (uintptr_t)align-1+sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
     return (void *)(((uintptr_t)p+off) & ~(align-1));
 }
 
 size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
-    neo_dassert(self && len);
+    neo_dassert(self != NULL && len != 0, "self is NULL");
     size_t idx = self->len+base*len;
     neo_assert(idx <= lim, "Pool index limit reached. Max: %zu, Current: %zu", lim, idx);
     void *p = neo_mempool_alloc(self, len);
@@ -158,7 +158,7 @@ bool record_eq(record_t a, record_t b, rtag_t tag) {
     else { neo_panic("Invalid file mode: %d", mode); }
 
 bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
-    neo_dassert(fp && filepath && mode);
+    neo_dassert(fp != NULL && filepath != NULL && mode != 0, "Invalid arguments");
     *fp = NULL;
 #if NEO_OS_WINDOWS
     int len = MultiByteToWideChar(CP_UTF8, 0, (const CHAR *)filepath, -1, NULL, 0);
@@ -185,7 +185,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 #undef get_fmodstr
 
 neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *ppos) { /* Validates the UTF-8 string and returns an error code and error position. */
-    neo_dassert(buf && ppos);
+    neo_dassert(buf != NULL && ppos != NULL, "Invalid arguments");
     size_t pos = 0;
     uint32_t cp;
     while (pos < len) {
@@ -238,7 +238,7 @@ neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *pp
 }
 
 bool neo_utf8_is_ascii(const uint8_t *buf, size_t len) {
-    neo_dassert(buf);
+    neo_dassert(buf != NULL, "Invalid arguments");
     for (size_t i = 0; i < len; ++i) {
         if (neo_unlikely(buf[i] > 0x7f)) { return false; }
     }
@@ -608,7 +608,7 @@ static const uint8_t char_bits[257] = {
 
 /* Final conversion to double. */
 static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
-    neo_dassert(o != NULL);
+    neo_dassert(o != NULL, "Invalid arguments");
     double n;
     /* Avoid double rounding for denormals. */
     if (neo_unlikely(ex2 <= -1075 && x != 0)) {
@@ -643,7 +643,7 @@ static neo_strscan_format_t strscan_hex(
     int32_t neg,
     uint32_t dig
 ) {
-    neo_dassert(p != NULL && o != NULL);
+    neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     uint64_t x = 0;
     uint32_t i;
     for (i = dig > 16 ? 16 : dig ; i; i--, p++) {     /* Scan hex digits. */
@@ -689,7 +689,7 @@ static neo_strscan_format_t strscan_oct(
     int32_t neg,
     uint32_t dig
 ) {
-    neo_dassert(p != NULL && o != NULL);
+    neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     uint64_t x = 0;
     if (dig > 22 || (dig == 22 && *p > '1')) { return NEO_STRSCAN_ERROR; }
     while (dig-- > 0) {     /* Scan octal digits. */
@@ -724,7 +724,7 @@ static neo_strscan_format_t strscan_dec(
     int32_t neg,
     uint32_t dig
 ) {
-    neo_dassert(p != NULL && o != NULL);
+    neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     uint8_t xi[NEO_STRSCAN_DDIG], *xip = xi;
     if (dig) {
         uint32_t i = dig;
@@ -885,7 +885,7 @@ static neo_strscan_format_t strscan_bin(
     int32_t neg,
     uint32_t dig
 ) {
-    neo_dassert(p != NULL && o != NULL);
+    neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     uint64_t x = 0;
     uint32_t i;
     if (ex2 || dig > 64) { return NEO_STRSCAN_ERROR; }
@@ -925,7 +925,7 @@ neo_strscan_format_t neo_strscan_scan(
     record_t *o,
     neo_strscan_opt_t opt
 ) {
-    neo_dassert(p != NULL && o != NULL);
+    neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     if (!len || !*p) { o->ru64 = 0; return NEO_STRSCAN_EMPTY; }
     int32_t neg = 0;
     const uint8_t *pe = p + len;
@@ -1123,7 +1123,7 @@ static uint32_t ndigits_dec_threshold[11] = {
 
 #define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
 static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     uint32_t u = (uint32_t)k;
     if (k < 0) { u = ~u+1u; *p++ = '-'; }
     if (u < 10000) {
@@ -1155,7 +1155,7 @@ static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
 #undef wint_r
 
 uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x) {
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     p = fmt_i32(p, (int32_t)(x & ~(uint32_t)0));
     return (x >> 32) == 0 ? p : fmt_i32(p, (int32_t)(x >> 32));
 }
@@ -1221,7 +1221,7 @@ static size_t ndigits_dec(uint32_t x) {
 
 /* Multiply nd by 2^k and add carry_in (ndlo is assumed to be zero). */
 static uint32_t nd_mul2k(uint32_t* nd, uint32_t ndhi, uint32_t k, uint32_t carry_in, sfmt_t sf) {
-    neo_dassert(nd != NULL);
+    neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, ndlo = 0, start = 1;
     /* Performance hacks. */
     if (k > ND_MUL2K_MAX_SHIFT*2 && STRFMT_FP(sf) != STRFMT_FP(STRFMT_T_FP_F)) {
@@ -1253,7 +1253,7 @@ static uint32_t nd_mul2k(uint32_t* nd, uint32_t ndhi, uint32_t k, uint32_t carry
 
 /* Divide nd by 2^k (ndlo is assumed to be zero). */
 static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
-    neo_dassert(nd != NULL);
+    neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t ndlo = 0, stop1 = ~0u, stop2 = ~0u;
     /* Performance hacks. */
     if (!ndhi) {
@@ -1310,7 +1310,7 @@ static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
 
 /* Add m*10^e to nd (assumes ndlo <= e/9 <= ndhi and 0 <= m <= 9). */
 static uint32_t nd_add_m10e(uint32_t* nd, uint32_t ndhi, uint8_t m, int32_t e) {
-    neo_dassert(nd != NULL);
+    neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, carry;
     if (e >= 0) {
         i = (uint32_t)e/9;
@@ -1343,7 +1343,7 @@ static uint32_t nd_add_m10e(uint32_t* nd, uint32_t ndhi, uint8_t m, int32_t e) {
 #define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
 /* Write 9-digit unsigned integer to buffer. */
 static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     uint32_t v = u / 10000, w;
     u -= v * 10000;
     w = v / 10000;
@@ -1363,7 +1363,7 @@ static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
 
 /* Test whether two "nd" values are equal in their most significant digits. */
 static bool nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
-    neo_dassert(nd != NULL && ref != NULL);
+    neo_dassert(nd != NULL && ref != NULL, "Invalid arguments");
     uint8_t nd9[9], ref9[9];
     if (hilen <= prec) {
         if (neo_unlikely(nd[ndhi] != *ref)) { return 0; }
@@ -1386,7 +1386,7 @@ static bool nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen,
 }
 
 static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     size_t width = STRFMT_WIDTH(sf), prec = STRFMT_PREC(sf), len;
     record_t t;
     t.as_float = x;
@@ -1704,12 +1704,12 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
 }
 
 uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x) {
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     return fmt_f64(p, x, STRFMT_G14);
 }
 
 uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
-    neo_dassert(p != NULL);
+    neo_dassert(p != NULL, "Invalid arguments");
     ptrdiff_t x = (ptrdiff_t)v;
     size_t n = 2+2*sizeof(ptrdiff_t);
     if (!x) {
