@@ -179,8 +179,8 @@ astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node) {
     astverify(data->opcode < BINOP__COUNT, "Binary op operator is invalid");
     const astnode_t *lhs = verify_resolve(data->left_expr);
     verify_expr(lhs);
-    const astnode_t *rhs = verify_resolve(data->right_expr);
-    if (data->opcode == BINOP_CALL) { /* Call has a block of arguments. */
+    if (data->opcode == BINOP_CALL && !astref_isnull(data->right_expr)) { /* Call has a block of arguments. */
+        const astnode_t *rhs = verify_resolve(data->right_expr);
         verify_type(rhs, ASTNODE_BLOCK);
         const node_block_t *block = &rhs->dat.n_block;
         astverify(block->scope == BLOCKSCOPE_ARGLIST, "Call block is not of type BLOCKSCOPE_ARGLIST");
@@ -189,7 +189,8 @@ astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node) {
             const astnode_t *arg = verify_resolve(args[i]);
             verify_expr(arg);
         }
-    } else {
+    } else if (!astref_isnull(data->right_expr)) {
+        const astnode_t *rhs = verify_resolve(data->right_expr);
         verify_expr(rhs);
     }
 

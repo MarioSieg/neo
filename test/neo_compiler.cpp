@@ -7,12 +7,12 @@
 
 using namespace neo;
 
-#define test_typeof_expr(expr2, expected_type, var) \
-    TEST(compiler, typeof_##expected_type##_##var) { \
+#define test_typeof_expr(expr2, expected_type, var2) \
+    TEST(compiler, typeof_##expected_type##_##var2) { \
         static constexpr const char8_t *src = { \
             u8"class Test\n" \
-                u8"method f()\n" \
-                    u8##expr2 \
+                u8"func f()\n" \
+                    u8"let x: int = " u8##expr2 "\n" \
                 u8"end\n" \
             u8"end\n" \
         }; \
@@ -53,12 +53,18 @@ using namespace neo;
         \
         error_vector_t ev {}; \
         errvec_init(&ev); \
-        typeid_t type = deduce_typeof_expr(pool, &ev, expr); \
+        deduced_t type = deduce_typeof_expr(pool, &ev, expr); \
+        ASSERT_TRUE(type.is_valid); \
         errvec_print(&ev, stdout, true); \
         ASSERT_TRUE(errvec_isempty(ev)); \
-        ASSERT_EQ(type, expected_type); \
+        ASSERT_EQ(type.tid, expected_type); \
         errvec_free(&ev); \
     }
+
+test_typeof_expr("22", TYPEID_INT, int)
+test_typeof_expr("0xfefe ^ (32-1)", TYPEID_INT, int_expr)
+test_typeof_expr("-1.0", TYPEID_FLOAT, float)
+test_typeof_expr("2.5*0.5", TYPEID_FLOAT, float_expr)
 
 TEST(compiler, compile_test_file) {
     source_code source {reinterpret_cast<const std::uint8_t *>(u8"test/files/特羅洛洛.neo")};
