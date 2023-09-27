@@ -1,0 +1,6 @@
+class Human
+    let name: string = ""
+    let age: int = 0
+    let height: float = 0.0
+    let weight: float = 0.0
+end

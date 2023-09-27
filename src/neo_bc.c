@@ -4,50 +4,43 @@
 #include "neo_vm.h"
 
 #define _(_1, mnemonic, _3, _4, _5) [_1] = mnemonic
-const char *const opc_mnemonic[OPC__COUNT] = {opdef(_, NEO_SEP)};
+const char *const opc_mnemonic[OPC__LEN] = {opdef(_, NEO_SEP)};
 #undef _
-#define _(_1, _2, op, _4, _5) [_1] = (op&127)
-const uint8_t opc_stack_ops[OPC__COUNT] = {opdef(_, NEO_SEP)};
+#define _(_1, _2, ops, _4, _5) [_1] = (ops&255)
+const uint8_t opc_stack_ops[OPC__LEN] = {opdef(_, NEO_SEP)};
 #undef _
-#define _(_1, _2, _3, rtv, _5) [_1] = (rtv&127)
-const uint8_t opc_stack_rtvs[OPC__COUNT] = {opdef(_, NEO_SEP)};
+#define _(_1, _2, _3, rtv, _5) [_1] = (rtv&255)
+const uint8_t opc_stack_rtvs[OPC__LEN] = {opdef(_, NEO_SEP)};
 #undef _
-#define _(_1, _2, op, rtv, _5) [_1] = (int8_t)(-(int8_t)(op)+(int8_t)(rtv))
-const int8_t opc_depth[OPC__COUNT] = {opdef(_, NEO_SEP)};
+#define _(_1, _2, ops, rtv, _5) [_1] = (int8_t)(-(int8_t)(ops)+(int8_t)(rtv))
+const int8_t opc_depths[OPC__LEN] = {opdef(_, NEO_SEP)};
 #undef _
 #define _(_1, _2, _3, _4, imm) [_1] = imm
-const uint8_t opc_imm[OPC__COUNT] = {opdef(_, NEO_SEP)};
+const uint8_t opc_imms[OPC__LEN] = {opdef(_, NEO_SEP)};
 #undef _
 
-bool bci_validate_instr(bci_instr_t instr) {
-    int mod = bci_unpackmod(instr);
-    if (neo_likely(mod == BCI_MOD1)) {
-        opcode_t opc = bci_unpackopc(instr);
-        if (neo_unlikely(opc >= OPC__COUNT)) { /* Invalid opcode value. */
-            neo_error("invalid opcode: %" PRIx8, opc);
-            return false;
-        }
-        if (neo_unlikely(opc_imm[opc] == IMM_NONE && bci_mod1unpack_imm24(instr) != 0)) { /* Instruction does not use immediate value, but it is not zero. */
-            neo_error("instruction does not use immediate value, but it is not zero: %" PRIx32, instr);
-            return false;
-        }
-        return true;
-    } else {
-        neo_error("mode2 instructions are not supported yet: %" PRIx8, mod);
-        /* NYI */
-        return false;
-    }
-}
+#define _(_1, ops, _3, _4) [_1] = (ops&255)
+const uint8_t syscall_stack_ops[SYSCALL__LEN] = {syscalldef(_, NEO_SEP)};
+#undef _
+#define _(_1, _2, rtv, _4) [_1] = (rtv&255)
+const uint8_t syscall_stack_rtvs[SYSCALL__LEN] = {syscalldef(_, NEO_SEP)};
+#undef _
+#define _(_1, ops, rtv, _4) [_1] = (int8_t)(-(int8_t)(ops)+(int8_t)(rtv))
+const int8_t syscall_depths[SYSCALL__LEN] = {syscalldef(_, NEO_SEP)};
+#undef _
+#define _(_1, _2, _3, mnemonic) [_1] = mnemonic
+const char *const syscall_mnemonic[SYSCALL__LEN] = {syscalldef(_, NEO_SEP)};
+#undef _
 
 void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored) {
-    neo_dassert(out);
-    int mod = bci_unpackmod(instr);
+    neo_dassert(out != NULL, "out is NULL");
+    uint32_t mod = bci_unpackmod(instr);
     if (neo_likely(mod == BCI_MOD1)) {
         opcode_t opc = bci_unpackopc(instr);
         const char *cc_mnemonic = colored ? NEO_CCBLUE : "";
         const char *cc_k = colored ? NEO_CCMAGENTA : "";
         const char *cc_reset = colored ? NEO_CCRESET : "";
-        if (opc_imm[opc]) {
+        if (opc_imms[opc]) {
             imm24_t i = bci_mod1unpack_imm24(instr);
             fprintf(
                 out,
@@ -67,19 +60,8 @@ void bci_dump_instr(bci_instr_t instr, FILE *out, bool colored) {
     }
 }
 
-bool record_eq(record_t a, record_t b, rtag_t tag) {
-    switch (tag) {
-        case RT_INT: return a.as_int == b.as_int;
-        case RT_FLOAT: return a.as_float == b.as_float; /* TODO: Use ULP-based comparison? */
-        case RT_CHAR: return a.as_char == b.as_char;
-        case RT_BOOL: return a.as_bool == b.as_bool;
-        case RT_REF: return a.as_ref == b.as_ref;
-        default: return false;
-    }
-}
-
 void metaspace_init(metaspace_t *self, uint32_t cap) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
     self->cap = cap ? cap : 1<<9;
     self->p = neo_memalloc(NULL, self->cap*sizeof(*self->p));
@@ -87,8 +69,8 @@ void metaspace_init(metaspace_t *self, uint32_t cap) {
 }
 
 cpkey_t metaspace_insert_kv(metaspace_t *self, rtag_t tag, record_t value) {
-    neo_dassert(self);
-    neo_assert(self->len <= CONSTPOOL_MAX && "constant pool overflow");
+    neo_dassert(self != NULL, "self is NULL");
+    neo_assert(self->len <= CONSTPOOL_MAX, "Metaspace (constant pool) overflow. Max: %zu", CONSTPOOL_MAX);
     if (self->len >= self->cap) {
         self->cap <<= 1;
         self->p = neo_memalloc(self->p, self->cap*sizeof(*self->p));
@@ -106,12 +88,12 @@ cpkey_t metaspace_insert_kv(metaspace_t *self, rtag_t tag, record_t value) {
 }
 
 bool metaspace_contains_k(const metaspace_t *self, cpkey_t idx) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return idx < self->len;
 }
 
 bool metaspace_get(const metaspace_t *self, cpkey_t idx, record_t *value, rtag_t *tag) {
-    neo_dassert(self && value && tag);
+    neo_dassert(self != NULL && value != NULL && tag != NULL, "Invalid arguments");
     if (neo_unlikely(!metaspace_contains_k(self, idx))) {
         return false;
     }
@@ -121,13 +103,13 @@ bool metaspace_get(const metaspace_t *self, cpkey_t idx, record_t *value, rtag_t
 }
 
 void metaspace_free(metaspace_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     neo_memalloc(self->p, 0);
     neo_memalloc(self->tags, 0);
 }
 
 void bc_init(bytecode_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
     self->p = neo_memalloc(NULL, (self->cap=1<<6)*sizeof(*self->p));
     *self->p = bci_comp_mod1_no_imm(OPC_NOP); /* First instruction must be NOP. */
@@ -135,7 +117,7 @@ void bc_init(bytecode_t *self) {
 }
 
 void bc_emit(bytecode_t *self, bci_instr_t instr) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     if (self->len == self->cap) {
         self->p = neo_memalloc(self->p, (self->cap<<=1)*sizeof(*self->p));
     }
@@ -143,7 +125,7 @@ void bc_emit(bytecode_t *self, bci_instr_t instr) {
 }
 
 const bci_instr_t *bc_finalize(bytecode_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     if (bci_unpackopc(self->p[self->len-1]) != OPC_HLT) {
         bc_emit(self, bci_comp_mod1_no_imm(OPC_HLT)); /* Last instruction must be HLT. */
     }
@@ -152,20 +134,20 @@ const bci_instr_t *bc_finalize(bytecode_t *self) {
 }
 
 void bc_free(bytecode_t *self) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     metaspace_free(&self->pool);
     neo_memalloc(self->p, 0);
 }
 
 static NEO_COLDPROC void bitdump(uint8_t x, FILE *f) {
-    neo_dassert(f);
+    neo_dassert(f != NULL, "f is NULL");
     for (int i = (sizeof(x)<<3)-1; i >= 0; --i) {
         fputc((x >> i) & 1 ? '1' : '0', f);
     }
 }
 
 void bc_disassemble(const bytecode_t *self, FILE *f, bool colored) {
-    neo_dassert(self && f);
+    neo_dassert(self != NULL && f != NULL && self->p != NULL, "self, f and self->p must not be NULL.");
     for (int i = 0; i < 64; ++i) { fputc('-', f); }
     fputc('\n', f);
     fprintf(f, "NEO BYTECODE V.%d, L: %zu, S: %zub\n", self->ver, self->len, self->len*sizeof(*self->p));
@@ -213,6 +195,11 @@ void bc_disassemble(const bytecode_t *self, FILE *f, bool colored) {
                 }
                 fprintf(f, "%s", cc_reset);
             }
+        } else if (opc == OPC_SYSCALL) {
+            umm24_t syscall_idx = bci_mod1unpack_umm24(self->p[i]);
+            neo_assert(syscall_idx < SYSCALL__LEN, "Invalid syscall index: %" PRIi32, syscall_idx);
+            fprintf(f, "%s ; %s", cc_comment, syscall_mnemonic[syscall_idx]);
+            fprintf(f, "%s", cc_reset);
         }
         fputc('\n', f);
     }
@@ -220,8 +207,8 @@ void bc_disassemble(const bytecode_t *self, FILE *f, bool colored) {
     fputc('\n', f);
 }
 
-bool bc_validate(const bytecode_t *self, const vmisolate_t *isolate) {
-    neo_assert(isolate && self);
+bool bc_validate(const bytecode_t *self, const vm_isolate_t *isolate) {
+    neo_assert(self != NULL && isolate != NULL, "self and isolate must not be NULL.");
     const bci_instr_t *code = self->p;
     size_t len = self->len;
     if (neo_unlikely(!code || !len)) {
@@ -237,24 +224,30 @@ bool bc_validate(const bytecode_t *self, const vmisolate_t *isolate) {
         return false;
     }
     for (size_t i = 0; i < len; ++i) { /* Validate the encoding of all instructions. */
-        if (neo_unlikely(!bci_validate_instr(code[i]))) {
-            neo_error("invalid instruction at index: %zu", i);
-            return false;
-        }
         opcode_t opc = bci_unpackopc(code[i]);
-        if (neo_unlikely(opc == OPC_LDC)) { /* Specific instruction validation. */
-            umm24_t umm24 = bci_mod1unpack_umm24(code[i]);
-            if (neo_unlikely(umm24 >= self->pool.len)) {
-                neo_error("invalid constant pool index: %" PRIi32, umm24);
-                return false;
-            }
+        switch (opc) { /* Specific instruction validation. */
+            case OPC_SYSCALL: {
+                umm24_t syscall_idx = bci_mod1unpack_umm24(code[i]);
+                if (neo_unlikely(syscall_idx >= SYSCALL__LEN)) { /* Check if constant pool index is valid. */
+                    neo_error("invalid syscall index: %" PRIi32, syscall_idx);
+                    return false;
+                }
+            } break;
+            case OPC_LDC: {
+                umm24_t slot_idx = bci_mod1unpack_umm24(code[i]);
+                if (neo_unlikely(slot_idx >= self->pool.len)) { /* Check if constant pool index is valid. */
+                    neo_error("invalid constant pool slot index: %" PRIi32, slot_idx);
+                    return false;
+                }
+            } break;
+            default: ;
         }
     }
     return true;
 }
 
 void bc_emit_ipush(bytecode_t *self, neo_int_t x) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     switch (x) { /* Try to use optimized instructions for constant K. */
         case 0: bc_emit(self, OPC_IPUSH0); return;
         case 1: bc_emit(self, OPC_IPUSH1); return;
@@ -272,7 +265,7 @@ void bc_emit_ipush(bytecode_t *self, neo_int_t x) {
 }
 
 void bc_emit_fpush(bytecode_t *self, neo_float_t x) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     if (x == 0.0) { bc_emit(self, OPC_FPUSH0); return; }  /* Try to use optimized instructions for constant K. */
     else if (x == 1.0) { bc_emit(self, OPC_FPUSH1); return; } /* TODO: Maybe used ULP comparison? */
     else if (x == 2.0) { bc_emit(self, OPC_FPUSH2); return; }

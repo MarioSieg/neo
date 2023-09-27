@@ -5,7 +5,7 @@
 #include <Zydis/Zydis.h>
 
 [[nodiscard]] static std::vector<ZydisDisassembledInstruction> disassemble(const mcode_t *p, std::size_t len) {
-    neo_dassert(p);
+    neo_dassert(p != NULL, "Invalid arguments");
     auto rip = std::bit_cast<std::uintptr_t>(p);
     std::size_t offset = 0;
     ZydisDisassembledInstruction instruction {};
@@ -17,11 +17,11 @@
         len - offset,
         &instruction
     ))) {
-        printf("%016" PRIX64 "  %s\n", rip, instruction.text);
         result.emplace_back(instruction);
         offset += instruction.info.length;
         rip += instruction.info.length;
     }
+    dump_assembly(p, len, stdout);
     return result;
 }
 
@@ -80,6 +80,23 @@ TEST(amd64, emit_mov_reg_imm_64) {
     ASSERT_EQ(instructions[0].operands[0].reg.value, ZYDIS_REGISTER_RAX);
     ASSERT_EQ(instructions[0].operands[1].type, ZYDIS_OPERAND_TYPE_IMMEDIATE);
     ASSERT_EQ(instructions[0].operands[1].imm.value.u, 0xffffffffull<<3);
+}
+
+TEST(amd64, emit_all) {
+    constexpr auto len = 1024<<3;
+    mcode_t buf[len] {};
+    mcode_t *p = buf+len;
+    mov_ri(&p, RID_RAX, (imm_t) {
+        .u64 = 5
+    });
+    mov_ri(&p, RID_RAX, (imm_t) {
+        .u64 = 0
+    });
+    xop_rr(&p, XA_SBB, RID_RAX, RID_RAX, true);
+    xop_ri(&p, XA_ADD, RID_RAX, (imm_t) {
+        .u64 = 10
+    }, true);
+    disassemble(p, buf+len-p);
 }
 
 #if 0

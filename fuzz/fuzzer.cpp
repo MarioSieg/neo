@@ -2,6 +2,7 @@
 
 #include <neo_compiler.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 

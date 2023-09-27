@@ -1,0 +1,23 @@
+class A
+
+    func a()
+
+    end
+
+    func b() -> int
+
+    end
+
+    func c(x: float)
+
+    end
+
+    func d(x: float, y: float)
+
+    end
+
+    func e(x: float, y: float) -> float
+
+    end
+
+end

@@ -47,7 +47,7 @@ static void show_license(const char *cmd) {
 }
 
 static void load_and_execute_neo_source(const char *file) {
-    neo_assert(file != NULL && "File must not be NULL.");
+    neo_assert(file != NULL, "File must not be NULL.");
     neo_osi_init(); /* Must be called before any other neo_* function. */
     const uint8_t *filename = (const uint8_t *)file;
     source_load_error_info_t info = {0};

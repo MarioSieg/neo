@@ -10,9 +10,9 @@
 #include "neo_compiler.h"
 
 namespace neo {
-    class neo_source_code final {
+    class source_code final {
     public:
-        inline explicit neo_source_code(const uint8_t *filename) {
+        inline explicit source_code(const std::uint8_t *filename) {
             source_load_error_info_t info {};
             m_src = source_from_file(filename, &info);
             if (neo_unlikely(!m_src || info.error != SRCLOAD_OK)) {
@@ -26,9 +26,9 @@ namespace neo {
                 throw std::runtime_error("Failed to load source file: " + std::string {msg});
             }
         }
-        inline explicit neo_source_code(const std::string &filename)
-            : neo_source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str())} {}
-        inline explicit neo_source_code(const uint8_t *filename, const uint8_t *src) {
+        inline explicit source_code(const std::string &filename)
+            : source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str())} {}
+        inline explicit source_code(const std::uint8_t *filename, const std::uint8_t *src) {
             source_load_error_info_t info {};
             m_src = source_from_memory_ref(filename, src, &info);
             if (neo_unlikely(!m_src || info.error != SRCLOAD_OK)) {
@@ -42,20 +42,36 @@ namespace neo {
                 throw std::runtime_error("Failed to load source file: " + std::string {msg});
             }
         }
-        inline explicit neo_source_code(const std::string &filename, const std::string &src)
-            : neo_source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str()), reinterpret_cast<const std::uint8_t *>(src.c_str())} {}
+        inline explicit source_code(const std::string &filename, const std::string &src)
+            : source_code {reinterpret_cast<const std::uint8_t *>(filename.c_str()), reinterpret_cast<const std::uint8_t *>(src.c_str())} {}
 
-        neo_source_code(const neo_source_code &) = delete; /* No copy. */
-        neo_source_code(neo_source_code &&) = delete; /* No copy. */
-        neo_source_code &operator = (const neo_source_code &) = delete; /* No move. */
-        neo_source_code &operator = (neo_source_code &&) = delete; /* No move. */
-
-        inline ~neo_source_code() {
-            source_free(m_src);
+        source_code(const source_code &) = delete; /* No copy. */
+        inline source_code(source_code && other) noexcept {
+            m_src = other.m_src;
+            other.m_src = nullptr;
+        }
+        source_code &operator = (const source_code &) = delete; /* No move. */
+        source_code &operator = (source_code && other) noexcept {
+            if (this == &other) { return *this; }
+            if (m_src) { source_free(m_src); }
+            m_src = other.m_src;
+            other.m_src = nullptr;
+            return *this;
+        }
+        inline ~source_code() {
+            if (m_src) { source_free(m_src); }
             m_src = nullptr;
         }
-
-        [[nodiscard]] inline const source_t *operator * () const noexcept {
+        inline const uint8_t *get_file_name() const noexcept {
+            return m_src->filename;
+        }
+        inline const uint8_t *get_source() const noexcept {
+            return m_src->src;
+        }
+        inline std::uint32_t get_source_length() const noexcept {
+            return m_src->len;
+        }
+        inline const source_t *operator * () const noexcept {
             return m_src;
         }
 
@@ -63,26 +79,26 @@ namespace neo {
         const source_t *m_src {};
     };
 
-    class neo_compiler final {
+    class compiler final {
     public:
-        inline explicit neo_compiler(neo_compiler_flag_t flags = neo_compiler_flag_t::COM_FLAG_NONE) {
+        inline explicit compiler(neo_compiler_flag_t flags = neo_compiler_flag_t::COM_FLAG_NONE) {
             compiler_init(&m_compiler, flags);
         }
-        neo_compiler(const neo_compiler &) = delete; /* No copy. */
-        neo_compiler(neo_compiler &&) = delete; /* No copy. */
-        neo_compiler &operator = (const neo_compiler &) = delete; /* No move. */
-        neo_compiler &operator = (neo_compiler &&) = delete; /* No move. */
-        inline ~neo_compiler() {
+        compiler(const compiler &) = delete; /* No copy. */
+        compiler(compiler &&) = delete; /* No copy. */
+        compiler &operator = (const compiler &) = delete; /* No move. */
+        compiler &operator = (compiler &&) = delete; /* No move. */
+        inline ~compiler() {
             compiler_free(&m_compiler);
             m_compiler = nullptr;
         }
-        [[nodiscard]] inline bool operator ()(const neo_source_code &src, void *usr = nullptr) {
+        inline bool operator ()(const source_code &src, void *usr = nullptr) {
             return compiler_compile(m_compiler, *src, usr);
         }
-        [[nodiscard]] inline const error_vector_t &get_errors() const noexcept {
+        inline const error_vector_t &get_errors() const noexcept {
             return *compiler_get_errors(m_compiler);
         }
-        [[nodiscard]] inline std::vector<const compile_error_t *> get_cloned_error_vec() const {
+        inline std::vector<const compile_error_t *> get_cloned_error_vec() const {
             const auto &errors {get_errors()};
             std::vector<const compile_error_t *> result {};
             result.reserve(errors.len);
@@ -91,25 +107,25 @@ namespace neo {
             }
             return result;
         }
-        [[nodiscard]] inline const astref_t get_ast_root(const astpool_t *&pool) const noexcept {
+        inline const astref_t get_ast_root(const astpool_t *&pool) const noexcept {
             return compiler_get_ast_root(m_compiler, &pool);
         }
-        [[nodiscard]] inline neo_compiler_flag_t get_flags() const noexcept {
+        inline neo_compiler_flag_t get_flags() const noexcept {
             return compiler_get_flags(m_compiler);
         }
-        [[nodiscard]] inline bool has_flags(neo_compiler_flag_t flags) const noexcept {
+        inline bool has_flags(neo_compiler_flag_t flags) const noexcept {
             return compiler_has_flags(m_compiler, flags);
         }
-        [[nodiscard]] inline neo_compile_callback_hook_t *get_pre_compile_callback() const noexcept {
+        inline neo_compile_callback_hook_t *get_pre_compile_callback() const noexcept {
             return compiler_get_pre_compile_callback(m_compiler);
         }
-        [[nodiscard]] inline neo_compile_callback_hook_t *get_post_compile_callback() const noexcept {
+        inline neo_compile_callback_hook_t *get_post_compile_callback() const noexcept {
             return compiler_get_post_compile_callback(m_compiler);
         }
-        [[nodiscard]] inline neo_compile_callback_hook_t *get_on_warning_callback() const noexcept {
+        inline neo_compile_callback_hook_t *get_on_warning_callback() const noexcept {
             return compiler_get_on_warning_callback(m_compiler);
         }
-        [[nodiscard]] inline neo_compile_callback_hook_t *get_on_error_callback() const noexcept {
+        inline neo_compile_callback_hook_t *get_on_error_callback() const noexcept {
             return compiler_get_on_error_callback(m_compiler);
         }
         inline void set_flags(neo_compiler_flag_t flag) noexcept {
@@ -142,11 +158,11 @@ namespace neo {
         inline neo_compiler_t *operator -> () const noexcept {
             return m_compiler;
         }
-        inline neo_compiler &operator |= (neo_compiler_flag_t flags) noexcept {
+        inline compiler &operator |= (neo_compiler_flag_t flags) noexcept {
             set_flags(static_cast<neo_compiler_flag_t>(get_flags() | flags));
             return *this;
         }
-        inline neo_compiler &operator &= (neo_compiler_flag_t flags) noexcept {
+        inline compiler &operator &= (neo_compiler_flag_t flags) noexcept {
             set_flags(static_cast<neo_compiler_flag_t>(get_flags() & flags));
             return *this;
         }

@@ -1,9 +1,5 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
-
-/*
-** About this file:
-** Contains the lexer implementation.
-*/
+/* LEXER (Lexical Analyzer) also known as Tokenizer. Source Code -> Lexical Tokens */
 
 #ifndef NEO_LEXER_H
 #define NEO_LEXER_H
@@ -16,12 +12,13 @@ extern "C" {
 
 struct source_t;
 
-extern NEO_EXPORT uint32_t utf8_seqlen(uint32_t x);
-extern NEO_EXPORT uint32_t utf8_decode(const uint8_t **p);
+extern NEO_EXPORT uint32_t utf8_seqlen(uint32_t x); /* Returns the length in bytes of the UTF-8 sequence starting with x. */
+extern NEO_EXPORT uint32_t utf8_decode(const uint8_t **p); /* Decode UTF-8 sequence into UTF-32 code-point and increment p. Assumes valid UTF-8. */
 
+/* Token types. */
 #define tkdef(_, __)\
     /* Keywords */\
-    _(TOK_KW_METHOD, "method")__\
+    _(TOK_KW_FUNCTION, "func")__\
     _(TOK_KW_LET, "let")__\
     _(TOK_KW_NEW, "new")__\
     _(TOK_KW_END, "end")__\
@@ -119,24 +116,26 @@ typedef enum {
 } toktype_t;
 #undef _
 neo_static_assert(TOK__COUNT <= 255);
-#define KWR_START TOK_KW_METHOD /* First keyword token */
+#define KWR_START TOK_KW_FUNCTION /* First keyword token */
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
 neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
 extern NEO_EXPORT const char *tok_lexemes[TOK__COUNT];
 
+/* Represents a span (also known as slice in the Rust world) of UTF-8 source code. */
 typedef struct srcspan_t {
-    const uint8_t *p;
-    uint32_t len;
+    const uint8_t *p; /* Start pointer. */
+    uint32_t len; /* Length in bytes. So end would be: const uint8_t *end = p + len.  */
 } srcspan_t;
-#define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1})
-#define srcspan_eq(a, b) ((a).len == (b).len && ((a).p == (b).p || memcmp((a).p, (b).p, (a).len) == 0))
-#define srcspan_hash(span) (neo_hash_fnv1a((span).p, (span).len))
+#define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1}) /* Create source span from string literal. */
+#define srcspan_eq(a, b) ((a).len == (b).len && ((a).p == (b).p || memcmp((a).p, (b).p, (a).len) == 0)) /* Compare two source spans. */
+#define srcspan_isempty(span) ((span).len == 0 || !(span).p) /* Check if source span is empty. */
+#define srcspan_hash(span) (neo_hash_fnv1a((span).p, (span).len)) /* Hash source span. */
 #define srcspan_stack_clone(span, var) /* Create null-terminated stack copy of source span using alloca. */\
-    (var) = alloca((1+span.len)*sizeof(*(var))); /* +1 for \0. */\
+    (var) = (uint8_t *)alloca((1+span.len)*sizeof(*(var))); /* +1 for \0. */\
     memcpy((var), span.p, span.len*sizeof(*(var)));\
     (var)[span.len] = '\0'
-extern NEO_EXPORT const uint8_t *srcspan_heap_clone(srcspan_t span); /* Create null-terminated heap copy of source span. */
+extern NEO_EXPORT const uint8_t *srcspan_heap_clone(srcspan_t span); /* Create null-terminated heap copy of source span. Don't forget to free the memory :) */
 
 typedef enum radix_t {
     RADIX_BIN = 2, /* Literal Prefix: 0b */
@@ -148,38 +147,43 @@ typedef enum radix_t {
 
 /* Represents a token. */
 typedef struct token_t {
-    toktype_t type : 8;
+    toktype_t type : 8; /* Token type. */
     radix_t radix : 8; /* Only used if type == TOK_LI_INT */
     uint32_t line; /* Line number of the start of the token. 1-based. */
     uint32_t col; /* Column number of the start of the token. 1-based. */
-    srcspan_t lexeme;
-    srcspan_t lexeme_line;
-    const uint8_t *file;
+    srcspan_t lexeme; /* Source span of the token. */
+    srcspan_t lexeme_line; /* Source span of the whole line containing the token. */
+    const uint8_t *file; /* File name of the source file containing the token. */
 } token_t;
-extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self);
+extern NEO_EXPORT NEO_COLDPROC void token_dump(const token_t *self); /* Dump token to stdout. */
 
-/* Represents the lexer context for a single source file. */
+/*
+** Represents the lexer context for a single source file.
+** The lexer decodes the source file into UTF-32 code-points and scans for tokens.
+** The UTF-8 to UTF-32 decoding is done lazily on the fly and each sequence is only decoded once, which is fast.
+** Tokens are also not collected into a vector, but instead the lexer returns them one by one.
+*/
 typedef struct lexer_t {
-    const struct source_t *src_data;
-    const uint8_t *src;
-    const uint8_t *needle;
-    const uint8_t *tok_start;
-    const uint8_t *line_start;
-    const uint8_t *line_end;
-    uint32_t cp_curr;
-    uint32_t cp_next;
-    uint32_t line;
-    uint32_t col;
+    const struct source_t *src_data; /* Source file data. */
+    const uint8_t *src; /* Source file data pointer. */
+    const uint8_t *needle; /* Current position in source file data. */
+    const uint8_t *tok_start; /* Start of current token. */
+    const uint8_t *line_start; /* Start of current line. */
+    const uint8_t *line_end; /* End of current line. */
+    uint32_t cp_curr; /* Current decoded UTF-32 code-point. */
+    uint32_t cp_next; /* Next decoded UTF-32 code-point. */
+    uint32_t line; /* Current line number. 1-based. */
+    uint32_t col; /* Current column number. 1-based. */
 } lexer_t;
 
 #define KW_MAPPING_CUSTOM_N 6 /* Number of custom keyword mappings. Currently, 5: true, false, and, or, not, self. */
 extern const toktype_t KW_MAPPINGS[KW_MAPPING_CUSTOM_N];
 
-extern NEO_EXPORT void lexer_init(lexer_t *self);
-extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const struct source_t *src);
-extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self);
-extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok);
-extern NEO_EXPORT void lexer_free(lexer_t *self);
+extern NEO_EXPORT void lexer_init(lexer_t *self); /* Initialize lexer. */
+extern NEO_EXPORT void lexer_setup_source(lexer_t *self, const struct source_t *src); /* Setup internal lexer state for source file processing. */
+extern NEO_EXPORT NEO_NODISCARD token_t lexer_scan_next(lexer_t *self); /* Scan next token. */
+extern NEO_EXPORT size_t lexer_drain(lexer_t *self, token_t **tok); /* Drain all tokens into a vector. */
+extern NEO_EXPORT void lexer_free(lexer_t *self); /* Free lexer. */
 
 #ifdef __cplusplus
 }

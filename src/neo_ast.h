@@ -11,10 +11,32 @@
 extern "C" {
 #endif
 
+/*
+** ~~~~~ Some delightful words about the AST memory representation ~~~~~
+** The 'astnode_t' struct represents a single AST node.
+** It contains a tag or discriminator 'type' which is used to determine the type of the node.
+** The data of the individual node types is stored in the 'dat' union.
+** Because allocating all nodes on the heap would be slow and encourage heap fragmentation,
+** we use a memory pool 'astpool_t' to allocate them.
+** IMPORTANT:
+** 1. The pool might reallocate, so holding a pointer to a node or any data inside the node is not safe.
+**    This is the same as in C++, where you cannot store iterators to vector elements, because they might reallocate.
+**    -> So instead of storing a pointer, we store an index into the pool 'astref_t',
+**       which can be resolved into the actual node pointer using 'astref_resolve()',
+**       but this pointer should not be kept alive for long.
+**       The astref_t can also be ASTREF_NULL to indicate a null pointer. This is useful for optional nodes.
+** 2. The pool is thread local and all nodes are deallocated when the pool is freed.
+** 3. For blocks a list of astref_t is used to store the child nodes. This list is also allocated on the pool.
+**    -> To allocate and resolved lists of astref_t we use the listref_t type and the 'astref_resolve_list()' function.
+ *       This works exactly the same way as astref_t and 'astref_resolve()'.
+ *       Remember that is also not safe to store pointers to the list elements neither the list pointer itself.
+*/
+
+/* Reference to AST-node or AST-node-list as index (1-based) into the AST memory pool. */
 typedef uint32_t astref_t, listref_t;
 #define astref_decl(type) astref_t /* req = required, opt = optional. */
-#define ASTREF_NULL (0u)
-#define astref_isnull(ref) ((ref)==ASTREF_NULL)
+#define ASTREF_NULL (0u) /* Null reference yields NULL pointer when resolved. */
+#define astref_isnull(ref) ((ref)==ASTREF_NULL) /* Check if reference is null. */
 
 typedef struct astnode_t astnode_t; /* Node. */
 typedef struct astpool_t astpool_t; /* AST memory pool. */
@@ -31,29 +53,34 @@ typedef struct node_group_t {
 
 typedef struct node_int_literal_t {
     neo_int_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_int_literal_t;
 
 typedef struct node_float_literal_t {
     neo_float_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_float_literal_t;
 
 typedef struct node_char_literal_t {
     neo_char_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_char_literal_t;
 
 typedef struct node_bool_literal_t {
     neo_bool_t value;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_bool_literal_t;
 
 typedef struct node_string_literal_t {
     srcspan_t span;
     uint32_t hash;
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_string_literal_t;
 
 typedef struct node_ident_literal_t {
     srcspan_t span;
     uint32_t hash; /* Auto-generated hash from span. */
-    token_t tok; /* Contains the token for better error handling in the semantic analysis stage. */
+    token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_ident_literal_t;
 
 /* Symbol table entry data structure. */
@@ -284,7 +311,7 @@ typedef struct node_module_t {
     _(ASTNODE_GROUP, "GROUP")__\
     _(ASTNODE_UNARY_OP, "UNARY OP")__\
     _(ASTNODE_BINARY_OP, "BINARY OP")__\
-    _(ASTNODE_METHOD, "METHOD")__\
+    _(ASTNODE_FUNCTION, "FUNCTION")__\
     _(ASTNODE_BLOCK, "BLOCK")__\
     _(ASTNODE_VARIABLE, "VARIABLE")__\
     _(ASTNODE_RETURN, "RETURN")__\
@@ -341,11 +368,11 @@ struct astnode_t {
 /* AST allocation routines. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_error(astpool_t *pool, const node_error_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_group(astpool_t *pool, const node_group_t *node);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_int_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_int_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value, const token_t *tok);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcspan_t value, const token_t *tok); /* Contains the token for better error handling in the semantic analysis stage. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
@@ -374,30 +401,30 @@ extern NEO_EXPORT void astpool_reset(astpool_t *self); /* Resets the astpool_t o
 extern NEO_EXPORT NEO_NODISCARD astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type);
 extern NEO_EXPORT NEO_NODISCARD listref_t astpool_alloclist(astpool_t *self, astref_t **o, uint32_t len);
 static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidref(const astpool_t *self, astref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return neo_likely(!astref_isnull(ref) && ((size_t)ref*sizeof(astnode_t))-sizeof(astnode_t) < self->node_pool.len);
 }
 static NEO_AINLINE NEO_NODISCARD bool astpool_isvalidlistref(const astpool_t *self, listref_t ref) {
-    neo_dassert(self);
+    neo_dassert(self != NULL, "self is NULL");
     return neo_likely((size_t)ref*sizeof(astref_t) < self->list_pool.len); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 /* Resolves AST reference to node pointer! Do NOT keep the node pointer alive, it might be invalidated on reallocation.
 ** (E.g. Same rule applies to std::vector in C++ when storing iterators and then pushing elements.)
 */
 static NEO_AINLINE NEO_NODISCARD astnode_t *astpool_resolve(const astpool_t *self, astref_t ref) {
-    neo_dassert(self != NULL);
-    neo_dassert(self->node_pool.cap > self->node_pool.len);
+    neo_dassert(self != NULL, "self is NULL");
+    neo_dassert(self->node_pool.cap > self->node_pool.len, "Pool is full.");
 #if NEO_DBG
     if (!astref_isnull(ref)) {
-        neo_dassert(astpool_isvalidref(self, ref));
+        neo_dassert(astpool_isvalidref(self, ref), "Invalid AST reference.");
     }
 #endif
     return neo_unlikely(astref_isnull(ref)) ? NULL : neo_mempool_getelementptr(self->node_pool, ref-1, astnode_t); /* refs start at 1, 0 is reserved for NULL */
 }
 static NEO_AINLINE NEO_NODISCARD astref_t *astpool_resolvelist(const astpool_t *self, listref_t ref) {
-    neo_dassert(self != NULL);
-    neo_dassert(self->list_pool.cap > self->list_pool.len);
-    neo_assert(astpool_isvalidlistref(self, ref));
+    neo_dassert(self != NULL, "self is NULL");
+    neo_dassert(self->node_pool.cap > self->node_pool.len, "Pool is full.");
+    neo_assert(astpool_isvalidlistref(self, ref), "Invalid list reference.");
     return neo_mempool_getelementptr(self->list_pool, ref, astref_t); /* Remember: list refs cannot be ASTREF_NULL, as they are not required to be nullable. */
 }
 

@@ -1,7 +1,250 @@
 // (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
 #include <gtest/gtest.h>
+#include <neo_lexer.h>
 #include <neo_core.h>
+
+TEST(core, float_fmt) {
+    char buf[64] {};
+    neo_fmt_float((uint8_t *)buf, 0.0);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0.0");
+    neo_fmt_float((uint8_t *)buf, -31.322);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-31.322");
+    neo_fmt_float((uint8_t *)buf, 0.25);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0.25");
+}
+
+TEST(core, int_fmt) {
+    char buf[64] {};
+    neo_fmt_int((uint8_t *)buf, 0);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "0");
+    neo_fmt_int((uint8_t *)buf, NEO_INT_MAX);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "9223372036854775807");
+    neo_fmt_int((uint8_t *)buf, NEO_INT_MIN);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-9223372036854775808");
+    neo_fmt_int((uint8_t *)buf, -1);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "-1");
+    neo_fmt_int((uint8_t *)buf, 10);
+    std::cout << buf << std::endl;
+    ASSERT_STREQ(buf, "10");
+}
+
+TEST(core, float_parse) {
+    record_t v{};
+    neo_strscan_format_t fmt = neo_strscan_scan((const uint8_t *)"1.0", sizeof("1.0")-1, &v, NEO_STRSCAN_OPT_NONE);
+    ASSERT_EQ(fmt, NEO_STRSCAN_NUM);
+    ASSERT_DOUBLE_EQ(v.as_float, 1.0);
+}
+
+static inline bool parse_int2(srcspan_t str, neo_int_t *x) {
+    record_t o {};
+    if (srcspan_isempty(str)) {
+        *x = 0;
+        return false;
+    }
+    std::string copy {
+        reinterpret_cast<const char *>(str.p),
+        str.len
+    };
+    copy += "ll";
+    neo_strscan_format_t fmt = neo_strscan_scan(reinterpret_cast<const std::uint8_t *>(copy.c_str()), copy.length(), &o, NEO_STRSCAN_OPT_LL);
+    if (fmt == NEO_STRSCAN_ERROR || fmt == NEO_STRSCAN_IMAG || fmt == NEO_STRSCAN_NUM || fmt == NEO_STRSCAN_U64) { return false; }
+    *x = o.ri64;
+    return true;
+}
+
+TEST(core, int_invalid) {
+    neo_int_t x;
+    ASSERT_FALSE(parse_int2(srcspan_from(""), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("_+"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("_-"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+-"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-+"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0x"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+0x"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-0x"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+0c"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-0c"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("_11"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("_11_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("11_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0b"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0c"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("+0b"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0b_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0c_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("-0b_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0x_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0xfF_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0b11_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0c11_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0x_fF_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0b_11_"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0c_11_"), &x));
+    ASSERT_EQ(0, x);
+}
+
+TEST(core, int_overflow) {
+    neo_int_t x;
+    ASSERT_FALSE(parse_int2(srcspan_from("9223372036854775808"), &x));
+    ASSERT_FALSE(parse_int2(srcspan_from("+9223372036854775808"), &x));
+    ASSERT_FALSE(parse_int2(srcspan_from("0x7fffffffffffffff0"), &x));
+    ASSERT_FALSE(
+            parse_int2(srcspan_from("0b1111111111111111111111111111111111111111111111111111111111111111"),
+                       &x));
+    ASSERT_FALSE(
+            parse_int2(srcspan_from("0b1111111111111111111111111111111111111111111111111111111111111111111"), &x));
+    ASSERT_FALSE(
+            parse_int2(srcspan_from("-0b1000000000000000000000000000000000000000000000000000000000000011111101"),
+                       &x));
+}
+
+TEST(core, int_underflow) {
+    neo_int_t x;
+    ASSERT_FALSE(parse_int2(srcspan_from("-922337203_6854775810"), &x));
+    ASSERT_FALSE(parse_int2(srcspan_from("-0x8000000000000000f"), &x));
+    ASSERT_FALSE(parse_int2(srcspan_from("-0b1000000000000000000000000000000000000000000000000000000000000001"), &x));
+}
+
+TEST(core, int_dec) {
+    neo_int_t x;
+    ASSERT_TRUE(parse_int2(srcspan_from("0"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("1"), &x));
+    ASSERT_EQ(1, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-1"), &x));
+    ASSERT_EQ(-1, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("1000000000"), &x));
+    ASSERT_EQ(1000000000, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("123"), &x));
+    ASSERT_EQ(123, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("123456789"), &x));
+    ASSERT_EQ(123456789, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("+123"), &x));
+    ASSERT_EQ(123, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-8192"), &x));
+    ASSERT_EQ(-8192, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("9223372036854775807"), &x));
+    ASSERT_EQ(NEO_INT_MAX, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-9223372036854775808"), &x));
+    ASSERT_EQ(NEO_INT_MIN, x);
+}
+
+TEST(core, int_oct) {
+    neo_int_t x;
+    ASSERT_TRUE(parse_int2(srcspan_from("0c0"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0c0"), &x));
+    ASSERT_EQ(0, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c1"), &x));
+    ASSERT_EQ(1, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c10"), &x));
+    ASSERT_EQ(010, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0c1"), &x));
+    ASSERT_EQ(-1, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c7346545000"), &x));
+    ASSERT_EQ(1000000000, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c173"), &x));
+    ASSERT_EQ(123, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c726746425"), &x));
+    ASSERT_EQ(123456789, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("+0c173"), &x));
+    ASSERT_EQ(123, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0c20000"), &x));
+    ASSERT_EQ(-8192, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0c777777777777777777777"), &x));
+    ASSERT_EQ(NEO_INT_MAX, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0c1000000000000000000000"), &x));
+    ASSERT_EQ(NEO_INT_MIN, x);
+    ASSERT_FALSE(parse_int2(srcspan_from("0c8"), &x));
+    ASSERT_FALSE(parse_int2(srcspan_from("-0c9"), &x));
+}
+
+TEST(core, int_hex) {
+    neo_int_t x;
+    ASSERT_TRUE(parse_int2(srcspan_from("0xff"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0xFF"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0x0123456789"), &x));
+    ASSERT_EQ(0x0123456789, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0xabcdef"), &x));
+    ASSERT_EQ(0xabcdef, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0xABCDEF"), &x));
+    ASSERT_EQ(0xabcdef, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0xabcdef"), &x));
+    ASSERT_EQ(0xabcdef, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("+0xff"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0x7f"), &x));
+    ASSERT_EQ(-0x7f, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0x7fffffffffffffff"), &x));
+    ASSERT_EQ(NEO_INT_MAX, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0x8000000000000000"), &x));
+    ASSERT_EQ(NEO_INT_MIN, x);
+}
+
+TEST(core, int_bin) {
+    neo_int_t x;
+    ASSERT_TRUE(parse_int2(srcspan_from("0b11111111"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0B11111111"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("+0b11111111"), &x));
+    ASSERT_EQ(0xff, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0b01011101"), &x));
+    ASSERT_EQ(-0x5d, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0B01011101"), &x));
+    ASSERT_EQ(-0x5d, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("0b0111111111111111111111111111111111111111111111111111111111111111"), &x));
+    ASSERT_EQ(NEO_INT_MAX, x);
+    ASSERT_TRUE(parse_int2(srcspan_from("-0b1000000000000000000000000000000000000000000000000000000000000000"), &x));
+    ASSERT_EQ(NEO_INT_MIN, x);
+}
 
 TEST(core, x17) {
     const char* input1 = "Hello, World!";
@@ -131,7 +374,9 @@ TEST(core, neo_mempool_alloc) {
     ASSERT_EQ(pool.cap, 16);
     *j = 0x1234567890abcdef;
     ASSERT_EQ(*j, 0x1234567890abcdef);
-    ASSERT_EQ(*(int64_t *)((uint8_t *)pool.top + 4), *j);
+    int64_t x {};
+    memcpy(&x, ((uint8_t *)pool.top + 4), sizeof(int64_t));
+    ASSERT_EQ(x, *j);
 
     neo_mempool_free(&pool);
 }

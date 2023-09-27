@@ -17,18 +17,20 @@ typedef enum error_type_t {
     COMERR_INTERNAL_COMPILER_ERROR, /* Internal compiler error. */
     COMERR_SYNTAX_ERROR, /* Syntax error. */
     COMERR_SYMBOL_REDEFINITION, /* Symbol redefinition. */
+    COMERR_INVALID_EXPRESSION, /* Invalid expression. */
+    COMERR_TYPE_MISMATCH, /* Type mismatch in expression. */
     COMERR__LEN
 } error_type_t;
 
 /* Represents an error or warning emitted during static compilation from source to bytecode. */
 typedef struct compile_error_t {
-    error_type_t type;
+    error_type_t type; /* Discriminator. */
     uint32_t line;
     uint32_t col;
-    const uint8_t *lexeme;
-    const uint8_t *lexeme_line;
-    const uint8_t *file;
-    const uint8_t *msg; /* Error-specific message. */
+    const uint8_t *lexeme; /* Lexeme of source code containing the error. (Owned) */
+    const uint8_t *lexeme_line; /* Line of source code containing the lexeme. (Owned) */
+    const uint8_t *file; /* File name. (Owned) */
+    const uint8_t *msg; /* Error-specific message. (Owned) */
 } compile_error_t;
 
 /* Create error from lexer token.  */
@@ -52,7 +54,7 @@ typedef struct error_vector_t {
     uint32_t cap;
 } error_vector_t;
 
-#define errvec_isempty(self) (!!((self).len))
+#define errvec_isempty(self) ((self).len == 0)
 extern NEO_EXPORT NEO_COLDPROC void errvec_init(error_vector_t *self);
 extern NEO_EXPORT NEO_COLDPROC void errvec_push(error_vector_t *self, const compile_error_t* error);
 extern NEO_EXPORT NEO_COLDPROC void errvec_print(const error_vector_t *self, FILE *f, bool colored);

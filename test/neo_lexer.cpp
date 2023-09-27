@@ -42,7 +42,7 @@ TEST(lexer, complex_statement) {
     ++tok;
 
     ASSERT_EQ(tok->type, TOK_LI_INT);
-    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("22")));
+    ASSERT_TRUE(srcspan_eq(tok->lexeme, srcspan_from("0x22")));
     ASSERT_EQ(tok->line, 1);
     ASSERT_EQ(tok->col, 7);
     ASSERT_EQ(tok->radix, RADIX_HEX);
@@ -146,7 +146,7 @@ TEST(lexer, tok_##name) {\
     source_free(source);\
 }
 
-generic_lexer_test(method, "method", TOK_KW_METHOD)
+generic_lexer_test(method, "func", TOK_KW_FUNCTION)
 generic_lexer_test(let, "let", TOK_KW_LET)
 generic_lexer_test(new, "new", TOK_KW_NEW)
 generic_lexer_test(end, "end", TOK_KW_END)
@@ -311,8 +311,8 @@ TEST(lexer, int_literal_hex) {
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
-    ASSERT_EQ(tok.lexeme.len, sizeof("123_45678_90abcdefA_BCDEF")-1);
-    ASSERT_EQ(std::memcmp(tok.lexeme.p, "123_45678_90abcdefA_BCDEF", sizeof("123_45678_90abcdefA_BCDEF")-1), 0);
+    ASSERT_EQ(tok.lexeme.len, sizeof("0x123_45678_90abcdefA_BCDEF")-1);
+    ASSERT_EQ(std::memcmp(tok.lexeme.p, "0x123_45678_90abcdefA_BCDEF", sizeof("0x123_45678_90abcdefA_BCDEF")-1), 0);
     ASSERT_EQ(tok.radix, RADIX_HEX);
 
     ASSERT_TRUE(is_done(&lexer));
@@ -333,8 +333,8 @@ TEST(lexer, int_literal_bin) {
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
-    ASSERT_EQ(tok.lexeme.len, sizeof("111_1010")-1);
-    ASSERT_EQ(std::memcmp(tok.lexeme.p, "111_1010", sizeof("111_1010")-1), 0);
+    ASSERT_EQ(tok.lexeme.len, sizeof("0b111_1010")-1);
+    ASSERT_EQ(std::memcmp(tok.lexeme.p, "0b111_1010", sizeof("0b111_1010")-1), 0);
     ASSERT_EQ(tok.radix, RADIX_BIN);
 
     ASSERT_TRUE(is_done(&lexer));
@@ -344,7 +344,7 @@ TEST(lexer, int_literal_bin) {
 
 TEST(lexer, int_literal_octal) {
     source_t src {};
-    src.src = reinterpret_cast<const std::uint8_t*>("0o01234567");
+    src.src = reinterpret_cast<const std::uint8_t*>("0c01234567");
     src.len = std::strlen(reinterpret_cast<const char*>(src.src));
     src.filename = reinterpret_cast<const std::uint8_t*>(u8"test/neo_lexer.cpp");
 
@@ -355,8 +355,8 @@ TEST(lexer, int_literal_octal) {
     ASSERT_EQ(peek(&lexer), U'0');
     token_t tok = lexer_scan_next(&lexer);
     ASSERT_EQ(tok.type, TOK_LI_INT);
-    ASSERT_EQ(tok.lexeme.len, sizeof("01234567")-1);
-    ASSERT_EQ(std::memcmp(tok.lexeme.p, "01234567", sizeof("01234567")-1), 0);
+    ASSERT_EQ(tok.lexeme.len, sizeof("0c01234567")-1);
+    ASSERT_EQ(std::memcmp(tok.lexeme.p, "0c01234567", sizeof("0c01234567")-1), 0);
     ASSERT_EQ(tok.radix, RADIX_OCT);
 
     ASSERT_TRUE(is_done(&lexer));

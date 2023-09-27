@@ -15,6 +15,7 @@ class Program
     # Output: >>> The factorial of 5 is 120
     static method main()
         let n = 5
+        let x = 10
         let result = factorial(n)
         Console.println("The factorial of $n is $result")
     end

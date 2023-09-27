@@ -51,7 +51,7 @@ TEST(ast, allocate_node) {
     astpool_init(&pool);
 
     for (int i = 1; i < 0xffff; ++i) {
-        astref_t ref = astnode_new_int(&pool, i == 0xffff>>1 ? 42 : 11);
+        astref_t ref = astnode_new_int(&pool, i == 0xffff>>1 ? 42 : 11, NULL);
         ASSERT_EQ(ref, i);
         ASSERT_NE(ref, ASTREF_NULL);
         ASSERT_FALSE(astref_isnull(ref));
@@ -80,7 +80,7 @@ TEST(ast, allocate_node2) {
     astpool_t pool {};
     astpool_init(&pool);
 
-    astref_t ref = astnode_new_int(&pool, 3);
+    astref_t ref = astnode_new_int(&pool, 3, NULL);
     ASSERT_EQ(ref, 1);
     ASSERT_EQ(pool.node_pool.len, sizeof(astnode_t));
 
@@ -133,7 +133,7 @@ TEST(ast, int_literal) {
     astpool_t mempool {};
     astpool_init(&mempool);
 
-    astref_t ref = astnode_new_int(&mempool, 42);
+    astref_t ref = astnode_new_int(&mempool, 42, NULL);
     astnode_t *node = astpool_resolve(&mempool, ref);
     ASSERT_NE(node, nullptr);
     ASSERT_EQ(node->type, ASTNODE_INT_LIT);
@@ -146,7 +146,7 @@ TEST(ast, unary_op) {
     astpool_t mempool {};
     astpool_init(&mempool);
 
-    astref_t operand_ode = astnode_new_int(&mempool, 10);
+    astref_t operand_ode = astnode_new_int(&mempool, 10, NULL);
     node_unary_op_t unary_op_node_data;
     unary_op_node_data.opcode = UNOP_MINUS;
     unary_op_node_data.child_expr = operand_ode;
@@ -165,7 +165,7 @@ TEST(ast, group) {
     astpool_init(&mempool);
 
     node_group_t groupData;
-    astref_t childNode = astnode_new_int(&mempool, 42);
+    astref_t childNode = astnode_new_int(&mempool, 42, NULL);
     groupData.child_expr = childNode;
     astref_t groupNodeRef = astnode_new_group(&mempool, &groupData);
     const astnode_t *groupNode = astpool_resolve(&mempool, groupNodeRef);

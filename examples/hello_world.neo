@@ -1,5 +1,1 @@
-class Program
-    static method main()
-        Console.println("Hello, world!")
-    end
-end
+Console.println("Hello World!")

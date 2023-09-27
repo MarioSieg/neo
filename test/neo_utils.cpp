@@ -51,21 +51,21 @@ TEST(utils, errvec_push) {
 
     error_vector_t ev;
     errvec_init(&ev);
-    ASSERT_FALSE(errvec_isempty(ev));
+    ASSERT_TRUE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 0);
     ASSERT_EQ(ev.cap, 0);
     ASSERT_EQ(ev.p, nullptr);
 
     errvec_push(&ev, comerror_from_token(COMERR_INTERNAL_COMPILER_ERROR, &tok,
                                          reinterpret_cast<const uint8_t *>("Oh no!")));
-    ASSERT_TRUE(errvec_isempty(ev));
+    ASSERT_FALSE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 1);
     ASSERT_NE(ev.cap, 0);
     ASSERT_NE(ev.p, nullptr);
 
     errvec_push(&ev, comerror_new(COMERR_INTERNAL_COMPILER_ERROR, 0, 0, NULL, NULL, NULL,
                                   reinterpret_cast<const uint8_t *>("Helpy")));
-    ASSERT_TRUE(errvec_isempty(ev));
+    ASSERT_FALSE(errvec_isempty(ev));
     ASSERT_EQ(ev.len, 2);
 
     ASSERT_STREQ((const char *)ev.p[0]->msg, "Oh no!");

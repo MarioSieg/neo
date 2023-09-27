@@ -1,13 +1,11 @@
 # (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
-@Standard
-@Version("0.0.1")
 class Console
-    static native method print(text: string)
-    static native method println(text: string)
-    static native method readLine() -> string
-    static native method readInt() -> int
-    static native method readFloat() -> float
-    static native method readChar() -> char
-    static native method readBool() -> bool
+    static native func print(text: string)
+    static native func println(text: string)
+    static native func readLine() -> string
+    static native func readInt() -> int
+    static native func readFloat() -> float
+    static native func readChar() -> char
+    static native func readBool() -> bool
 end

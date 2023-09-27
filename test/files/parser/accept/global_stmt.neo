@@ -1,0 +1,29 @@
+let MAX: int = 100
+
+if MAX > 100 then
+    MAX = 0xff
+end
+func f(x: bool) -> int
+    if not x then
+        return 0
+    end
+    return x + 1
+end
+func f(x: int) -> int
+    return x + 1
+end
+func f(x: int) -> int
+    return x + 1
+end
+func f(x: int) -> int
+    return x + 1
+end
+func f(x: int) -> int
+    return x + 1
+end
+let r: int = 0
+while r < MAX do
+    r = f(r ** 2)
+end
+r *= 10 + (r+1)/0x8000
+print(r)

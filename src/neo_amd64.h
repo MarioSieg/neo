@@ -59,7 +59,7 @@ typedef enum extended_isa_t {
 #define XCR0_AVX512 (7ull<<5) /* 512-bit %zmm* save/restore */
 
 static void cpuid(uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx) { /* Query CPUID. */
-    neo_dassert(eax && ebx && ecx && edx);
+    neo_dassert(eax != NULL && ebx != NULL && ecx != NULL && edx != NULL, "Invalid arguments");
 #if NEO_COM_MSVC
     int cpu_info[4];
     __cpuidex(cpu_info, *eax, *ecx);
@@ -270,12 +270,12 @@ static void mov_ri(mcode_t **mxp, gpr_t reg, imm_t x) {
 
 /* OP reg, imm. OP is an ALU opcode like add, sub, xor etc. Example: addq $10, %rax. */
 static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
-    neo_assert(checku32(x.u64) && "32-bit Imm out of range");
+    neo_assert(checku32(x.u64), "32-bit Imm out of range: " PRIu64, x.u64);
     mcode_t *p = *mxp; /* Pointer to current machine code buffer. */
     if (checku8(x.u64)) { /* Small 8-bit immediate. */
-        *--p = 0x83;
-        *--p = pack_modrm(XM_DIRECT, opc, reg);
         *--p = *(mcode_t *)&x;
+        *--p = pack_modrm(XM_DIRECT, opc, reg);
+        *--p = 0x83;
         emit_rex(&p, 0, 0, reg, x64);
     } else if (reg == RID_RAX) { /* Optimize for accumulator. */
         *(uint32_t *)p = *(uint32_t *)&x;
@@ -283,10 +283,10 @@ static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
         *--p = (opc << 3) + 5;
         emit_rex(&p, 0, 0, 0, x64);
     } else { /* Full 32-bit immediate. */
-        *--p = 0x81;
-        *--p = pack_modrm(XM_DIRECT, opc, reg);
         p -= 4;
         *(uint32_t *)p = *(uint32_t *)&x;
+        *--p = pack_modrm(XM_DIRECT, opc, reg);
+        *--p = 0x81;
         emit_rex(&p, 0, 0, 0, x64);
     }
     *mxp = p; /* Update pointer to current machine code buffer. */
@@ -297,7 +297,7 @@ static void xop_ri(mcode_t **mxp, aluop_t opc, gpr_t reg, imm_t x, bool x64) {
 #include <Zydis/Zydis.h>
 
 static NEO_COLDPROC void dump_assembly(const mcode_t *p, size_t len, FILE *f) {
-    neo_dassert(p && f);
+    neo_dassert(p != NULL && f != NULL, "Invalid arguments");
     fprintf(f, "Machine Code Block @%p, Len: %zu\n", p, len);
     uintptr_t rip = (uintptr_t)p;
     size_t offset = 0;
@@ -309,7 +309,22 @@ static NEO_COLDPROC void dump_assembly(const mcode_t *p, size_t len, FILE *f) {
         len - offset,
         &instruction
     ))) {
-        fprintf(f, "%016" PRIX64 "  %s\n", rip, instruction.text);
+        fprintf(
+            f,
+            "%s%016" PRIX64 "%s %s%s%s ",
+            NEO_CCMAGENTA,
+            rip,
+            NEO_CCRESET,
+            NEO_CCBLUE,
+            instruction.text,
+            NEO_CCRESET
+        );
+        fputs(NEO_CCCYAN, f);
+        for (uint8_t i = 0; i < instruction.info.length; ++i) {
+            fprintf(f, "%02X ", p[offset + i]);
+        }
+        fputs(NEO_CCRESET, f);
+        fputc('\n', f);
         offset += instruction.info.length;
         rip += instruction.info.length;
     }

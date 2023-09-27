@@ -1,14 +1,7 @@
 # (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com
 
-@Intrinsic
-@Standard
-@Version("0.1")
-@PrimitiveType
-@Serializable
-@UUID("e28c17ba-049d-43bd-9a5d-a25a1a043245")
 class float
     # Create float from IEEE-754 binary-64 bit pattern.
-    @Intrinsic
     static native float fromBitPattern(bits: int)
 
     # The maximum value of a float - (64-bit IEEE-754 binary-64).

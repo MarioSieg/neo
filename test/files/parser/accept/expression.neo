@@ -1,0 +1,55 @@
+class Expressions
+    func bool1() -> bool
+        return true and false or true
+    end
+
+    func int1() -> int
+        return 1 + 2 - 3 * 4 ** 5 !+ 6 !- 7 !* 8 !** 9 / 10 % 11 & 12 | 13 ^ 14 << 15 >> 16 <<< 17 >>> 18 >>>> ~19
+    end
+
+    func int2() -> bool
+        return 10 < 20 and 2 <= 30 and 3 > 40 and 2 >= 50 and 60 == 60 and 2 != 70
+    end
+
+    func int3() -> int
+        let r: int = 0
+        r += 1
+        r -= 2
+        r *= 3
+        r **= 4
+        r !+= 5
+        r !-= 6
+        r !*= 7
+        r !**= 8
+        r /= 9
+        r %= 10
+        r &= 11
+        r |= 12
+        r ^= 13
+        r <<= 14
+        r >>= 15
+        r <<<= 16
+        r >>>= 17
+        r >>>>= 18
+        return r
+    end
+
+    func float1() -> float
+        return 1.0 + 2.0 - 3.0 * 4.0 ** 9.0 / 10.0 % 11.0
+    end
+
+    func float2() -> bool
+        return 10.0 < 20.0 and 2.0 <= 30.0 and 3.0 > 40.0 and 2.0 >= 50.0 and 60.0 == 60.0 and 2.0 != 70.0
+    end
+
+    func float3() -> float
+        let r: float = 0.0
+        r += 1.0
+        r -= 2.0
+        r *= 3.0
+        r **= 4.0
+        r /= 9.0
+        r %= 10.0
+        return r
+    end
+end

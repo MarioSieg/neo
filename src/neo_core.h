@@ -330,8 +330,8 @@ extern "C" {
 #   else
 #       define neo_unreachable() __builtin_unreachable()
 #   endif
-#define neo_bsf32(x) (neo_likely(x) ? __builtin_ctz((x)) : 0)
-#define neo_bsr32(x) (neo_likely(x) ? __builtin_clz((x))^31 : 0)
+#define neo_bsf32(x) (__builtin_ctz((x)))
+#define neo_bsr32(x) (__builtin_clz((x))^31)
 #   define neo_bswap32(x) __builtin_bswap32(x)
 #   define neo_bswap64(x) __builtin_bswap64(x)
 #   if NEO_CPU_AMD64
@@ -398,14 +398,18 @@ extern uint64_t _byteswap_uint64(uint64_t x);
 #define neo_assert_name(line) neo_assert_name2(_assert_, line)
 #define neo_static_assert(expr) extern void neo_assert_name(__LINE__)(bool STATIC_ASSERTION_FAILED[((expr)?1:-1)])
 extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
-extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_assert_impl(const char *expr, const char *file, int line);
 #define NEO_SEP ,
 
-#define neo_assert(ex) (void)(neo_likely(ex)||(neo_assert_impl(#ex, __FILE__, __LINE__), 0)) /* Assert for debug and release builds. */
+/* Assert for debug and release builds. */
+#define neo_assert(expr, msg, ...) \
+    if (neo_unlikely(!(expr))) { \
+        neo_panic("%s:%d Assertion failed: " #expr msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+    }
+
 #if NEO_DBG
-#   define neo_dassert(ex) neo_assert(ex) /* Assert for debug only builds. */
+#   define neo_dassert(expr, msg, ...) neo_assert(expr, msg, ## __VA_ARGS__) /* Assert for debug only builds. */
 #else
-#   define neo_dassert(ex) (void)(ex) /* Assert for debug only builds. */
+#   define neo_dassert(expr, msg, ...) (void)(expr) /* Disable in release builds. */
 #endif
 
 /* ---- Logging ---- */
@@ -667,6 +671,53 @@ static NEO_AINLINE size_t neo_tid(void) {
 #   error "Unsupported compiler"
 #endif
 
+typedef enum rtag_t { /* Record type tag. */
+    RT_INT = 0,
+    RT_FLOAT,
+    RT_CHAR,
+    RT_BOOL,
+    RT_REF,
+    RT__LEN
+} rtag_t;
+neo_static_assert(RT__LEN <= 255);
+
+/* Untagged raw record value data. */
+typedef union NEO_ALIGN(8) record_t {
+    neo_int_t as_int;
+    neo_uint_t as_uint;
+    neo_float_t as_float;
+    neo_char_t as_char;
+    neo_bool_t as_bool;
+    void *as_ref; /* Reference type. */
+    uint64_t ru64;
+    int64_t ri64;
+    uint32_t ru32;
+    int32_t ri32;
+    uint16_t ru16;
+    int16_t ri16;
+    uint8_t ru8;
+    int8_t ri8;
+    struct {
+        uint32_t lo;
+        uint32_t hi;
+    } ru32x2;
+} record_t;
+neo_static_assert(sizeof(record_t) == 8);
+#define rec_setnan(o) ((o).ru64 = 0xfff8000000000000ull) /* Set NaN. */
+#define rec_setpinf(o) ((o).ru64 = 0x7ff0000000000000ull) /* Set +Inf. */
+#define rec_setminf(o) ((o).ru64 = 0xfff0000000000000ull) /* Set -Inf. */
+#define rec_isnan(o) (((o).ru64 & 0x7ff0000000000000ull) == 0x7ff0000000000000ull) /* Check if NaN. */
+
+/* Tagged record value. */
+typedef struct NEO_ALIGN(8) tvalue_t {
+    rtag_t tag : 8;
+    uint64_t reserved : 56; /* Reserved for future use. */
+    record_t val;
+} tvalue_t;
+neo_static_assert(sizeof(tvalue_t) == 16);
+
+extern NEO_EXPORT bool record_eq(record_t a, record_t b, rtag_t tag);
+
 typedef enum neo_fmode_t {
     NEO_FMODE_R /* read */,
     NEO_FMODE_W /* write */,
@@ -706,6 +757,37 @@ extern NEO_EXPORT void neo_printutf8(FILE *f, const uint8_t *str); /* Print UTF-
 /* ---- Frozen Embedded BLOBS (contains in neo_blobs.c) ---- */
 
 extern NEO_EXPORT const char neo_blobs_license[];
+
+/* ---- String Scanning ---- */
+
+/* Options for accepted/returned formats. */
+typedef enum neo_strscan_opt_t {
+    NEO_STRSCAN_OPT_NONE = 0,
+    NEO_STRSCAN_OPT_TOINT = 1 << 0,  /* Convert to int32_t, if possible. */
+    NEO_STRSCAN_OPT_TONUM = 1 << 1,  /* Always convert to double. */
+    NEO_STRSCAN_OPT_IMAG = 1 << 2, /* Allow imaginary numbers. */
+    NEO_STRSCAN_OPT_LL = 1 << 3, /* Allow long long suffix. */
+    NEO_STRSCAN_OPT_C = 1 << 4 /* Allow complex suffix. */
+} neo_strscan_opt_t;
+
+/* Returned format. */
+typedef enum neo_strscan_format_t {
+    NEO_STRSCAN_ERROR,
+    NEO_STRSCAN_EMPTY,
+    NEO_STRSCAN_NUM, NEO_STRSCAN_IMAG,
+    NEO_STRSCAN_INT, NEO_STRSCAN_U32, NEO_STRSCAN_I64, NEO_STRSCAN_U64,
+} neo_strscan_format_t;
+
+/* Scan string containing a number. Returns format. Returns value in o. */
+/* I (IMAG), U (U32), LL (I64), ULL/LLU (U64), L (long), UL/LU (ulong). */
+/* NYI: f (float). Not needed until cp_number() handles non-integers. */
+extern NEO_EXPORT neo_strscan_format_t neo_strscan_scan(const uint8_t *p, size_t len, record_t *o, neo_strscan_opt_t opt);
+
+/* ---- String Formatting ---- */
+
+extern NEO_EXPORT uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x); /* Format int to buffer. Does NOT zero-terminate the buffer. */
+extern NEO_EXPORT uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x); /* Format float to buffer. Does NOT zero-terminate the buffer. */
+extern NEO_EXPORT uint8_t *neo_fmt_ptr(uint8_t *p, const void *v); /* Format ptr to buffer. Does NOT zero-terminate the buffer. */
 
 #ifdef __cplusplus
 }

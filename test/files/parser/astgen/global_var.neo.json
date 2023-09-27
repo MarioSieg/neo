@@ -1,0 +1,43 @@
+{
+  "type": "MODULE",
+  "ident": "",
+  "block": {
+    "type": "BLOCK",
+    "scope": "MODULE",
+    "nodes": [
+      {
+        "type": "VARIABLE",
+        "data": {
+          "ident": "x",
+          "type": "int",
+          "init_expr": {
+            "type": "INT_LITERAL",
+            "value": 10
+          }
+        }
+      },
+      {
+        "type": "VARIABLE",
+        "data": {
+          "ident": "pi",
+          "type": "float",
+          "init_expr": {
+            "type": "FLOAT_LITERAL",
+            "value": 3.1415
+          }
+        }
+      },
+      {
+        "type": "VARIABLE",
+        "data": {
+          "ident": "alive",
+          "type": "bool",
+          "init_expr": {
+            "type": "BOOL_LITERAL",
+            "value": true
+          }
+        }
+      }
+    ]
+  }
+}
