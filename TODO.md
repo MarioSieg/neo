@@ -1,10 +1,11 @@
-- Test VM Syscalls
-- Test AST Gen
-- AST JSON Dump
-- Semantic Analysis
-    * Type Checking
-    * Type Inference
-    * Casting
-- VM Subroutines
-- Constant Folding
-- Peephole Optimization
+Priority 1-3
+- 1: Test AST Gen
+- 1: Type Checking
+- 1: VM Subroutines
+- 2: Type Inference
+- 2: Test VM Syscalls
+- 2: AST JSON Dump
+- 2: Casting
+- 3: Constant Folding
+- 3: Peephole Optimization
+- 3: ML Tensor System
