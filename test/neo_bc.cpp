@@ -113,7 +113,7 @@ TEST(bytecode, i32toi24) {
 }
 
 TEST(bytecode, stack_depths) {
-    ASSERT_EQ(opc_depth[OPC_HLT], 0);
-    ASSERT_EQ(opc_depth[OPC_IPUSH], 1);
-    ASSERT_EQ(opc_depth[OPC_POP], -1);
+    ASSERT_EQ(opc_depths[OPC_HLT], 0);
+    ASSERT_EQ(opc_depths[OPC_IPUSH], 1);
+    ASSERT_EQ(opc_depths[OPC_POP], -1);
 }

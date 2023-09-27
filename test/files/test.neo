@@ -1,6 +1,6 @@
 class Test
-    # This method calculates the nth number in the Fibonacci sequence.
-    method fibonacci(n: int) -> int
+    # This func calculates the nth number in the Fibonacci sequence.
+    func fibonacci(n: int) -> int
         let a: int = 0
         let b: int = 1
         let i: int = 2
@@ -23,9 +23,9 @@ class Test
         return b
     end
 
-    # This method computes the XOR of all integers in the range [start, end]
+    # This func computes the XOR of all integers in the range [start, end]
     # and counts the number of set bits in the result.
-    method xorAndCountBitsInRange(start: int, stop: int) -> int
+    func xorAndCountBitsInRange(start: int, stop: int) -> int
         let xorResult: int = 0
 
         let i: int = start
@@ -49,9 +49,9 @@ class Test
         return count
     end
 
-    # This method calculates the sum of all Pythagorean triplets (a, b, c)
+    # This func calculates the sum of all Pythagorean triplets (a, b, c)
     # where a, b, and c are integers less than or equal to a given limit.
-    method sumOfPythagoreanTriplets(limit: int) -> int
+    func sumOfPythagoreanTriplets(limit: int) -> int
         let sum: int = 0
 
         let a: int = 1
@@ -74,8 +74,8 @@ class Test
         return sum
     end
 
-    # This method generates the first n terms of the Collatz sequence for a given starting number.
-    method collatzSequence(n: int) -> int
+    # This func generates the first n terms of the Collatz sequence for a given starting number.
+    func collatzSequence(n: int) -> int
         let sequence: int = 0
         let i: int = 1
 
@@ -100,8 +100,8 @@ class Test
         return sequence
     end
 
-    # This method calculates the sum of squares of integers from 1 to n.
-    method sumOfSquares(n: int) -> int
+    # This func calculates the sum of squares of integers from 1 to n.
+    func sumOfSquares(n: int) -> int
         let sum: int = 0
         let i: int = 1
 
@@ -114,8 +114,8 @@ class Test
         return sum
     end
 
-    # This method calculates the sum of prime numbers up to a given limit.
-    method sumOfPrimes(limit: int) -> int
+    # This func calculates the sum of prime numbers up to a given limit.
+    func sumOfPrimes(limit: int) -> int
         let sum: int = 0
         let candidate: int = 2
         while candidate <= limit do
@@ -136,7 +136,7 @@ class Test
         return sum
     end
 
-    static method fib(lim: int) -> int
+    static func fib(lim: int) -> int
         if lim == 0 then
             return 0
         end
@@ -155,7 +155,7 @@ class Test
     # Returns the unsigned quotient of dividing self by
     # the second argument, where each argument and the result is interpreted as
     # an unsigned value.
-    method divideUnsigned(divisor: int) -> int
+    func divideUnsigned(divisor: int) -> int
         if division >= 0 then
             let q: int = (self >>>> 1) / divisor << 1
             let r: int = self - q * divisor
@@ -167,7 +167,7 @@ class Test
     # Returns the unsigned remainder from dividing <self>
     # by the second argument, where each argument and the result is interpreted
     # as an unsigned value.
-    method remainderUnsigned(divisor: int) -> int
+    func remainderUnsigned(divisor: int) -> int
         if divisor >= 0 then
             let q: int = (self >>>> 1) / divisor << 1
             let r: int = self - q * divisor
@@ -177,7 +177,7 @@ class Test
     end
 
     # Returns the number of one-bits in the two's complement binary representation of <self>.
-    method popCount() -> int
+    func popCount() -> int
         let i: int = self
         i = i - ((i >>>> 1) & 0x5555555555555555)
         i = (i & 0x3333333333333333) + ((i >>>> 2) & 0x3333333333333333)
@@ -190,7 +190,7 @@ class Test
 
     # Returns the value obtained by reversing the order of the bits in the
     # two's complement binary representation of <self>.
-    method reverse() -> int
+    func reverse() -> int
         let i: int = self
         i = (i & 0x5555555555555555) << 1 | (i >>>> 1) & 0x5555555555555555
         i = (i & 0x3333333333333333) << 2 | (i >>>> 2) & 0x3333333333333333
@@ -200,14 +200,14 @@ class Test
 
     # Returns the value obtained by reversing the order of the bytes in the
     # two's complement representation of <self>.
-    method reverseBytes() -> int
+    func reverseBytes() -> int
         let i: int = self
         i = (i & 0x00ff00ff00ff00ff) << 8 | (i >>>> 8) & 0x00ff00ff00ff00ff
         return (i << 48) | ((i & 0xffff0000) << 16) | ((i >>>> 16) & 0xffff0000) | (i >>>> 48)
     end
 
-    # This method calculates the factorial of a given positive integer.
-    method factorial(n: int) -> int
+    # This func calculates the factorial of a given positive integer.
+    func factorial(n: int) -> int
         let result: int = 1
         let i: int = 1
         

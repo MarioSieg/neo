@@ -18,7 +18,7 @@ extern NEO_EXPORT uint32_t utf8_decode(const uint8_t **p); /* Decode UTF-8 seque
 /* Token types. */
 #define tkdef(_, __)\
     /* Keywords */\
-    _(TOK_KW_METHOD, "method")__\
+    _(TOK_KW_FUNCTION, "func")__\
     _(TOK_KW_LET, "let")__\
     _(TOK_KW_NEW, "new")__\
     _(TOK_KW_END, "end")__\
@@ -116,7 +116,7 @@ typedef enum {
 } toktype_t;
 #undef _
 neo_static_assert(TOK__COUNT <= 255);
-#define KWR_START TOK_KW_METHOD /* First keyword token */
+#define KWR_START TOK_KW_FUNCTION /* First keyword token */
 #define KWR_END TOK_KW_DO /* Last keyword token */
 #define KWR_LEN (KWR_END-KWR_START+1)
 neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
@@ -129,6 +129,7 @@ typedef struct srcspan_t {
 } srcspan_t;
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1}) /* Create source span from string literal. */
 #define srcspan_eq(a, b) ((a).len == (b).len && ((a).p == (b).p || memcmp((a).p, (b).p, (a).len) == 0)) /* Compare two source spans. */
+#define srcspan_isempty(span) ((span).len == 0 || !(span).p) /* Check if source span is empty. */
 #define srcspan_hash(span) (neo_hash_fnv1a((span).p, (span).len)) /* Hash source span. */
 #define srcspan_stack_clone(span, var) /* Create null-terminated stack copy of source span using alloca. */\
     (var) = (uint8_t *)alloca((1+span.len)*sizeof(*(var))); /* +1 for \0. */\

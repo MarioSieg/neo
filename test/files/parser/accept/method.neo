@@ -1,22 +1,22 @@
 class A
 
-    method a()
+    func a()
 
     end
 
-    method b() -> int
+    func b() -> int
 
     end
 
-    method c(x: float)
+    func c(x: float)
 
     end
 
-    method d(x: float, y: float)
+    func d(x: float, y: float)
 
     end
 
-    method e(x: float, y: float) -> float
+    func e(x: float, y: float) -> float
 
     end
 

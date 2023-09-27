@@ -38,7 +38,7 @@ else()
     if (${NEO_ENABLE_SSE41})
         set(COMPILE_OPTIONS ${COMPILE_OPTIONS} -msse -msse2 -msse3 -mssse3 -msse4.1 -mcx16) # Enable advanced instructions
     endif()
-    if (${NEO_ENABLE_UBSAN})
+    if (${NEO_ENABLE_UBSAN} AND ${IS_DEBUG})
         add_compile_options(-fsanitize=undefined)
         add_link_options(-fsanitize=undefined)
     endif()
@@ -63,11 +63,7 @@ if (${NEO_BUILD_TESTS} OR ${NEO_BUILD_FUZZER}) # These targets require a C++ 20 
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
-if (NOT WIN32)
-    file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c src/*.s)
-else()
-    file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
-endif()
+file(GLOB_RECURSE NEO_CORE_SOURCES src/*.h src/*.c)
 add_library(neocore STATIC ${NEO_CORE_SOURCES}) # NEO compiler.
 target_compile_options(neocore PRIVATE "${COMPILE_OPTIONS}")
 

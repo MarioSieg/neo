@@ -1,0 +1,3 @@
+let x: int = 10
+let pi: float = 3.1415
+let alive: bool = true
