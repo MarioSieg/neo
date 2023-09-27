@@ -1,9 +1,11 @@
-# NEO Programming Language (WIP)
+# NEO AI Programming Language (WIP)
 
 NEO is a small but powerful, fast, and object-oriented scripting language that draws inspiration from the best aspects of Java, Lua, and Python.<br>
-It is designed to be easily embedded into any application, making it a versatile choice for various projects.
+It is designed to be used for writing AI and ML systems, and it is easily embeddable into any application, bringing AI into various projects.
 
 ## Key Features
+
+- **AI (Tensors) & Optimized Algorithms** 🧠: NEO comes equipped with built-in AI capabilities and optimized algorithms for CPU (SSE, AVX, AVX-512, Neon) and GPU (Cuda, OpenCL, Metal) using a JIT compiler.
 
 - **Lightweight & Efficient** 🚀: NEO prioritizes efficiency for high-performance applications.
 
