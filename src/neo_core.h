@@ -375,6 +375,18 @@ extern uint64_t _byteswap_uint64(uint64_t x);
 #   define neo_bswap64(x) _byteswap_uint64(x)
 #	define neo_rol64(x, n) _rotl64(x,n)
 #	define neo_ror64(x, n) _rotr64(x, n)
+/* MSVC does not define some feature macros of implied instruction sets. */
+#if defined(__AVX2__) || defined(__AVX512F__)
+#ifndef __FMA__
+#   define __FMA__
+#endif
+#ifndef __F16C__
+#   define __F16C__
+#endif
+#ifndef __SSE3__
+#   define __SSE3__
+#endif
+#endif
 #else
 #   error "Unsupported compiler"
 #endif
@@ -393,6 +405,7 @@ extern uint64_t _byteswap_uint64(uint64_t x);
 #	define neo_rol64(x, n) (((x)<<(n))|((x)>>(-(int)(n)&((sizeof(x)<<3)-1))))
 #	define neo_ror64(x, n) (((x)<<(-(int)(n)&((sizeof(x)<<3)-1)))|((x)>>(n)))
 #endif
+#define neo_padx(x, n) (((x)+((n)-1))&(~((n)-1)))
 #define neo_bnd_check(p, o, l) neo_likely(((uintptr_t)(p)>=(uintptr_t)(o)) && ((uintptr_t)(p)<((uintptr_t)(o)+(l))))
 #define neo_assert_name2(name, line) name ## line
 #define neo_assert_name(line) neo_assert_name2(_assert_, line)
