@@ -416,7 +416,7 @@ extern NEO_EXPORT NEO_COLDPROC NEO_NORET void neo_panic(const char *msg, ...);
 /* Assert for debug and release builds. */
 #define neo_assert(expr, msg, ...) \
     if (neo_unlikely(!(expr))) { \
-        neo_panic("%s:%d Assertion failed: " #expr msg, __FILE__, __LINE__, ## __VA_ARGS__);\
+        neo_panic("%s:%d Assertion failed: " #expr " <- " msg, __FILE__, __LINE__, ## __VA_ARGS__);\
     }
 
 #if NEO_DBG
@@ -466,17 +466,58 @@ extern NEO_EXPORT uint64_t neo_hp_clock_ms(void);
 extern NEO_EXPORT uint64_t neo_hp_clock_us(void);
 
 /* ---- Memory ---- */
-#ifndef neo_alloc_malloc
-#   define neo_alloc_malloc(size) malloc(size)
+
+#if NEO_COM_GCC ^ NEO_COM_CLANG
+#   define ALLOC_ROUTINE __attribute__((malloc))
+#else
+#   define ALLOC_ROUTINE
 #endif
-#ifndef neo_alloc_realloc
-#   define neo_alloc_realloc(blk, size) realloc((blk),(size))
+
+/* Bundled memory allocator API. */
+extern NEO_EXPORT void neo_allocator_init(void); /* Initialize global memory allocator. */
+extern NEO_EXPORT void neo_allocator_shutdown(void); /* Shutdown global memory allocator. */
+extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_alloc(size_t len);
+extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_alloc_aligned(size_t len, size_t align);
+extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_realloc(void *blk, size_t len);
+extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align);
+extern NEO_EXPORT void neo_allocator_free(void *blk);
+extern NEO_EXPORT void neo_allocator_thread_enter(void); /* Setup thread-local allocator state for a new thread. */
+extern NEO_EXPORT void neo_allocator_thread_leave(void); /* Setup thread-local allocator state for a new thread. */
+extern NEO_EXPORT void neo_allocator_memthread_collect(void); /* Collect local heaps. */
+
+/* System memory allocator. */
+#ifdef NEO_USE_SYSTEM_ALLOCATOR
+static inline void *neo_memalloc_impl(void *blk, size_t len) {
+    if (!len) { /* deallocation */
+        free(blk);
+        return NULL;
+    } else if(!blk) {  /* allocation */
+        blk = malloc(len);
+        neo_assert(blk != NULL, "Memory allocation of %zub failed", len);
+        return blk;
+    } else { /* reallocation */
+        void *newblock = realloc(blk, len);
+        neo_assert(newblock != NULL, "Memory reallocation of %zub failed", len);
+        return newblock;
+    }
+}
+#else /* Use faster, bundled allocator. */
+static inline void *neo_memalloc_impl(void *blk, size_t len) {
+    if (!len) { /* deallocation */
+        neo_allocator_free(blk);
+        return NULL;
+    } else if(!blk) {  /* allocation */
+        blk = neo_allocator_alloc(len);
+        neo_assert(blk != NULL, "Memory allocation of %zub failed", len);
+        return blk;
+    } else { /* reallocation */
+        void *newblock = neo_allocator_realloc(blk, len);
+        neo_assert(newblock != NULL, "Memory reallocation of %zub failed", len);
+        return newblock;
+    }
+}
 #endif
-#ifndef neo_dealloc
-#   define neo_dealloc(blk) free(blk)
-#endif
-extern NEO_EXPORT void *neo_defmemalloc(void *blk, size_t len);
-#define neo_memalloc(blk, len) neo_defmemalloc(blk, len)
+#define neo_memalloc(blk, len) neo_memalloc_impl(blk, len)
 
 /*
 ** A simple sequential (bump) allocator.

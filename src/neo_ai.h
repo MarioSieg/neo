@@ -1,8 +1,8 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
 /* AI core - tensors and math operations on tensors. */
 
-#ifndef NEO_AST_H
-#define NEO_AST_H
+#ifndef NEO_AI_H
+#define NEO_AI_H
 
 #include "neo_core.h"
 

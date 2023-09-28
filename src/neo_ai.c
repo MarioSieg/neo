@@ -1,4 +1,5 @@
 /* (c) Copyright Mario "Neo" Sieg 2023. All rights reserved. mario.sieg.64@gmail.com */
+/* AI core - tensors and math operations on tensors. */
 
 #include "neo_ai.h"
 

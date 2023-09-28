@@ -3,6 +3,84 @@
 #include <gtest/gtest.h>
 #include <neo_lexer.h>
 #include <neo_core.h>
+#include <random>
+
+TEST(core, bundled_alloc_vs_malloc_bench) {
+    std::vector<std::size_t> block_sizes {};
+    block_sizes.reserve(1'000'000);
+    std::uniform_int_distribution<std::size_t> dist {1, 0xfffff};
+    std::mt19937_64 mt {};
+    for (std::size_t i = 0; i < 1'000'000; ++i) {
+        block_sizes.emplace_back(dist(mt));
+    }
+    std::vector<void*> sys_malloc {};
+    std::vector<void*> bundled_malloc {};
+    sys_malloc.reserve(1'000'000);
+    bundled_malloc.reserve(1'000'000);
+
+    auto clock = std::chrono::high_resolution_clock::now();
+
+    for (std::size_t i = 0; i < 1'000'000; ++i) {
+        sys_malloc.emplace_back(malloc(block_sizes[i]));
+    }
+
+    std::cout << "Sysmalloc took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock).count() << "ms" << std::endl;
+
+    clock = std::chrono::high_resolution_clock::now();
+
+    for (std::size_t i = 0; i < 1'000'000; ++i) {
+        bundled_malloc.emplace_back(neo_allocator_alloc(block_sizes[i]));
+    }
+
+    std::cout << "Bundled malloc took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock).count() << "ms" << std::endl;
+
+    for (void *p : sys_malloc) {
+        free(p);
+    }
+
+    for (void *p : bundled_malloc) {
+        neo_allocator_free(p);
+    }
+}
+
+TEST(core, neo_alloc) {
+    int *p = (int *)neo_memalloc(NULL, sizeof(int)*2);
+    p[0] = 10;
+    p[1] = 20;
+    ASSERT_EQ(p[0], 10);
+    ASSERT_EQ(p[1], 20);
+    neo_memalloc(p, 0);
+}
+
+TEST(core, neo_realloc) {
+    int *p = (int *)neo_memalloc(NULL, sizeof(int)*2);
+    p[0] = 10;
+    p[1] = 20;
+    ASSERT_EQ(p[0], 10);
+    ASSERT_EQ(p[1], 20);
+    p = (int *)neo_memalloc(p, sizeof(int)*4);
+    p[0] = 10;
+    p[1] = 20;
+    p[2] = 11;
+    p[3] = 12;
+    ASSERT_EQ(p[0], 10);
+    ASSERT_EQ(p[1], 20);
+    ASSERT_EQ(p[2], 11);
+    ASSERT_EQ(p[3], 12);
+    neo_memalloc(p, 0);
+}
+
+TEST(core, neo_allocate_aligned) {
+    void *p = neo_allocator_alloc_aligned(sizeof(int), 32);
+    ASSERT_EQ((uintptr_t)p % 32, 0);
+    neo_allocator_free(p);
+}
+
+TEST(core, neo_reallocate_aligned) {
+    void *p = neo_allocator_realloc_aligned(nullptr, sizeof(int), 32);
+    ASSERT_EQ((uintptr_t)p % 32, 0);
+    neo_allocator_free(p);
+}
 
 TEST(core, float_fmt) {
     char buf[64] {};
