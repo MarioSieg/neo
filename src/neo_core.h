@@ -462,6 +462,8 @@ typedef struct neo_osi_t {
 extern NEO_EXPORT void neo_osi_init(void);
 extern NEO_EXPORT void neo_osi_shutdown(void);
 extern NEO_EXPORT const neo_osi_t *neo_osi;
+extern NEO_EXPORT uint64_t neo_hp_clock_ms(void);
+extern NEO_EXPORT uint64_t neo_hp_clock_us(void);
 
 /* ---- Memory ---- */
 #ifndef neo_alloc_malloc

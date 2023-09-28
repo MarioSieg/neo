@@ -12,6 +12,7 @@ NEO_THREAD_LOCAL void *volatile neo_tls_proxy = NULL;
 #   include <io.h>
 #elif NEO_OS_POSIX
 #   include <unistd.h>
+#   include <time.h>
 #else
 #   error "unsupported platform"
 #endif
@@ -51,6 +52,32 @@ void neo_osi_shutdown(void) {
 }
 
 const neo_osi_t *neo_osi = &osi_data;
+
+#if NEO_OS_WINDOWS
+#error "Todo"
+uint64_t neo_hp_clock_ms(void) {
+    return 0;
+}
+
+uint64_t neo_hp_clock_us(void) {
+    return 0;
+}
+
+#else
+
+uint64_t neo_hp_clock_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec*1000ull+(uint64_t)ts.tv_nsec/1000000ull;
+}
+
+uint64_t neo_hp_clock_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec*1000000ull+(uint64_t)ts.tv_nsec/1000ull;
+}
+
+#endif
 
 void *neo_defmemalloc(void *blk, size_t len) {
     if (!len) { /* deallocation */
