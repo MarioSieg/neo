@@ -468,18 +468,85 @@ extern NEO_EXPORT uint64_t neo_hp_clock_us(void);
 /* ---- Memory ---- */
 
 #if NEO_COM_GCC ^ NEO_COM_CLANG
-#   define ALLOC_ROUTINE __attribute__((malloc))
+#   define NEO_ALLOC_ROUTINE __attribute__((malloc))
+#   define NEO_ALLOC_ROUTINE_SIZE(size) __attribute__((alloc_size(size)))
 #else
-#   define ALLOC_ROUTINE
+#   define NEO_ALLOC_ROUTINE_SIZE(size)
+#   define NEO_ALLOC_ROUTINE
 #endif
 
 /* Bundled memory allocator API. */
+#define NEO_ALLOC_HEAP_ARRAY_SIZE 47
+#define NEO_ALLOC_ENABLE_THREAD_CACHE 1
+#define NEO_ALLOC_ENABLE_GLOBAL_CACHE 1
+#define NEO_ALLOC_ENABLE_VALIDATION NEO_DBG
+#define NEO_ALLOC_ENABLE_STATS NEO_DBG
+#define NEO_ALLOC_ENABLE_ASSERTS NEO_DBG
+#define NEO_ALLOC_ENABLE_PRELOAD 0
+#define NEO_ALLOC_ENABLE_UNMAP 0
+#define NEO_ALLOC_ENABLE_UNLIMITED_CACHE 1
+#define NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE 1
+#define NEO_ALLOC_SPAN_MAP_COUNT 64
+#define NEO_ALLOC_GLOBAL_CACHE_MULTIPLIER 8
+
+typedef struct neo_alloc_global_stats_t {
+    size_t mapped;
+    size_t mapped_peak;
+    size_t cached;
+    size_t huge_alloc;
+    size_t huge_alloc_peak;
+    size_t mapped_total;
+    size_t unmapped_total;
+} neo_alloc_global_stats_t;
+
+typedef struct neo_alloc_thread_stats_t {
+    size_t sizecache;
+    size_t spancache;
+    size_t thread_to_global;
+    size_t global_to_thread;
+    struct {
+        size_t current;
+        size_t peak;
+        size_t to_global;
+        size_t from_global;
+        size_t to_cache;
+        size_t from_cache;
+        size_t to_reserved;
+        size_t from_reserved;
+        size_t map_calls;
+    } span_use[64];
+    struct {
+        size_t alloc_current;
+        size_t alloc_peak;
+        size_t alloc_total;
+        size_t free_total;
+        size_t spans_to_cache;
+        size_t spans_from_cache;
+        size_t spans_from_reserved;
+        size_t map_calls;
+    } size_use[128];
+} neo_alloc_thread_stats_t;
+
+typedef struct neo_alloc_config_t {
+    void *(*memory_map)(size_t size, size_t *offset);
+    void (*memory_unmap)(void *address, size_t size, size_t offset, size_t release);
+    void (*error_callback)(const char *message);
+    int (*map_fail_callback)(size_t size);
+    size_t page_size;
+    size_t span_size;
+    size_t span_map_count;
+    int enable_huge_pages;
+    const char *page_name;
+    const char *huge_page_name;
+} neo_alloc_config_t;
+
 extern NEO_EXPORT void neo_allocator_init(void); /* Initialize global memory allocator. */
 extern NEO_EXPORT void neo_allocator_shutdown(void); /* Shutdown global memory allocator. */
-extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_alloc(size_t len);
-extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_alloc_aligned(size_t len, size_t align);
-extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_realloc(void *blk, size_t len);
-extern NEO_EXPORT NEO_NODISCARD ALLOC_ROUTINE void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align);
+extern NEO_EXPORT NEO_NODISCARD NEO_ALLOC_ROUTINE NEO_ALLOC_ROUTINE_SIZE(1) NEO_HOTPROC void *neo_allocator_alloc(size_t len);
+extern NEO_EXPORT NEO_NODISCARD NEO_ALLOC_ROUTINE NEO_ALLOC_ROUTINE_SIZE(1) NEO_HOTPROC void *neo_allocator_alloc_aligned(size_t len, size_t align);
+extern NEO_EXPORT NEO_NODISCARD NEO_ALLOC_ROUTINE NEO_ALLOC_ROUTINE_SIZE(2) NEO_HOTPROC void *neo_allocator_realloc(void *blk, size_t len);
+extern NEO_EXPORT NEO_NODISCARD NEO_ALLOC_ROUTINE NEO_ALLOC_ROUTINE_SIZE(2) NEO_HOTPROC void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align);
+extern NEO_EXPORT NEO_NODISCARD size_t neo_allocator_bin_useable_size(void *blk);
 extern NEO_EXPORT void neo_allocator_free(void *blk);
 extern NEO_EXPORT void neo_allocator_thread_enter(void); /* Setup thread-local allocator state for a new thread. */
 extern NEO_EXPORT void neo_allocator_thread_leave(void); /* Setup thread-local allocator state for a new thread. */
