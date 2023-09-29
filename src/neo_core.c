@@ -1753,6 +1753,35 @@ uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
  *
  */
 
+#define SMALL_GRANULARITY 16
+#define SMALL_GRANULARITY_SHIFT 4
+#define SMALL_CLASS_COUNT 65
+#define SMALL_SIZE_LIMIT (SMALL_GRANULARITY*(SMALL_CLASS_COUNT-1))
+#define MEDIUM_GRANULARITY 512
+#define MEDIUM_GRANULARITY_SHIFT 9
+#define MEDIUM_CLASS_COUNT 61
+#define SIZE_CLASS_COUNT (SMALL_CLASS_COUNT+MEDIUM_CLASS_COUNT)
+#define LARGE_CLASS_COUNT 63
+#define MEDIUM_SIZE_LIMIT (SMALL_SIZE_LIMIT+(MEDIUM_GRANULARITY*MEDIUM_CLASS_COUNT))
+#define LARGE_SIZE_LIMIT ((LARGE_CLASS_COUNT*_memory_span_size)-SPAN_HEADER_SIZE)
+#define SPAN_HEADER_SIZE 128
+#define MAX_THREAD_SPAN_CACHE 400
+#define THREAD_SPAN_CACHE_TRANSFER 64
+#define MAX_THREAD_SPAN_LARGE_CACHE 100
+#define THREAD_SPAN_LARGE_CACHE_TRANSFER 6
+#define MAX_ALLOC_SIZE (((size_t)-1)-_memory_span_size)
+#define poff(ptr, ofs) (void *)((uint8_t *)(ptr)+(ptrdiff_t)(ofs))
+#define pdelta(first, second) (ptrdiff_t)((const uint8_t *)(first)-(const uint8_t *)(second))
+#define INVALID_POINTER ((void *)((uintptr_t)-1))
+#define SIZE_CLASS_LARGE SIZE_CLASS_COUNT
+#define SIZE_CLASS_HUGE ((uint32_t)-1)
+#define SPAN_FLAG_MASTER 1U
+#define SPAN_FLAG_SUBSPAN 2U
+#define SPAN_FLAG_ALIGNED_BLOCKS 4U
+#define SPAN_FLAG_UNMAPPED_MASTER 8U
+
+neo_static_assert((SMALL_GRANULARITY&(SMALL_GRANULARITY-1)) == 0 && "Small granularity must be power of two");
+neo_static_assert((SPAN_HEADER_SIZE&(SPAN_HEADER_SIZE-1)) == 0 && "Span header size must be power of two");
 
 #if defined(__clang__) || defined(__GNUC__)
 # define MEM_ALLOCATOR
@@ -1835,7 +1864,7 @@ memheap_t *memget_heap_for_ptr(void *ptr);
 #else
 #define _memmemcpy_const(x, y, s)                                            \
     do {                                                        \
-        _Static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0), "len must be a constant integer");    \
+        neo_static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0) && "Len must be a constant integer");    \
         memcpy(x, y, s);                                            \
     } while (0)
 #endif
@@ -1845,7 +1874,7 @@ memheap_t *memget_heap_for_ptr(void *ptr);
 #else
 #define _memmemset_const(x, y, s)                                            \
     do {                                                        \
-        _Static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0), "len must be a constant integer");    \
+        neo_static_assert(__builtin_choose_expr(__builtin_constant_p(s), 1, 0) && "Len must be a constant integer");    \
         memset(x, y, s);                                            \
     } while (0)
 #endif
@@ -1993,9 +2022,9 @@ extern int madvise(caddr_t, size_t, int);
 
 #if defined(_MSC_VER) && !defined(__clang__)
 
-typedef volatile long      atomic32_t;
-typedef volatile long long atomic64_t;
-typedef volatile void*     atomicptr_t;
+typedef volatile int32_t atomic32_t;
+typedef volatile int64_t atomic64_t;
+typedef volatile void *atomicptr_t;
 
 static NEO_AINLINE int32_t atomic_load32(atomic32_t* src) { return *src; }
 static NEO_AINLINE void    atomic_store32(atomic32_t* dst, int32_t val) { *dst = val; }
@@ -2048,7 +2077,6 @@ int memis_thread_initialized(void);
 void memthread_statistics(neo_alloc_thread_stats_t *stats);
 void memglobal_statistics(neo_alloc_global_stats_t *stats);
 void memdump_statistics(void *file);
-int rpposix_memalign(void **memptr, size_t alignment, size_t size);
 size_t memusable_size(void *ptr);
 void memlinker_reference(void);
 
@@ -2080,36 +2108,6 @@ void memlinker_reference(void);
 #  define _memstat_inc_free(heap, class_idx) do {} while(0)
 #endif
 
-#define SMALL_GRANULARITY         16
-#define SMALL_GRANULARITY_SHIFT   4
-#define SMALL_CLASS_COUNT         65
-#define SMALL_SIZE_LIMIT          (SMALL_GRANULARITY * (SMALL_CLASS_COUNT - 1))
-#define MEDIUM_GRANULARITY        512
-#define MEDIUM_GRANULARITY_SHIFT  9
-#define MEDIUM_CLASS_COUNT        61
-#define SIZE_CLASS_COUNT          (SMALL_CLASS_COUNT + MEDIUM_CLASS_COUNT)
-#define LARGE_CLASS_COUNT         63
-#define MEDIUM_SIZE_LIMIT         (SMALL_SIZE_LIMIT + (MEDIUM_GRANULARITY * MEDIUM_CLASS_COUNT))
-#define LARGE_SIZE_LIMIT          ((LARGE_CLASS_COUNT * _memory_span_size) - SPAN_HEADER_SIZE)
-#define SPAN_HEADER_SIZE          128
-#define MAX_THREAD_SPAN_CACHE     400
-#define THREAD_SPAN_CACHE_TRANSFER 64
-#define MAX_THREAD_SPAN_LARGE_CACHE 100
-#define THREAD_SPAN_LARGE_CACHE_TRANSFER 6
-
-_Static_assert((SMALL_GRANULARITY & (SMALL_GRANULARITY - 1)) == 0, "Small granularity must be power of two");
-_Static_assert((SPAN_HEADER_SIZE & (SPAN_HEADER_SIZE - 1)) == 0, "Span header size must be power of two");
-
-#define MAX_ALLOC_SIZE            (((size_t)-1) - _memory_span_size)
-
-#define pointer_offset(ptr, ofs) (void*)((char*)(ptr) + (ptrdiff_t)(ofs))
-#define pointer_diff(first, second) (ptrdiff_t)((const char*)(first) - (const char*)(second))
-
-#define INVALID_POINTER ((void*)((uintptr_t)-1))
-
-#define SIZE_CLASS_LARGE SIZE_CLASS_COUNT
-#define SIZE_CLASS_HUGE ((uint32_t)-1)
-
 typedef struct heap_t heap_t;
 typedef struct span_t span_t;
 typedef struct span_list_t span_list_t;
@@ -2117,24 +2115,19 @@ typedef struct span_active_t span_active_t;
 typedef struct size_class_t size_class_t;
 typedef struct global_cache_t global_cache_t;
 
-#define SPAN_FLAG_MASTER 1U
-#define SPAN_FLAG_SUBSPAN 2U
-#define SPAN_FLAG_ALIGNED_BLOCKS 4U
-#define SPAN_FLAG_UNMAPPED_MASTER 8U
-
 #if NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE || NEO_ALLOC_ENABLE_STATS
 struct span_use_t {
-        atomic32_t current;
-        atomic32_t high;
+    atomic32_t current;
+    atomic32_t high;
 #if NEO_ALLOC_ENABLE_STATS
-        atomic32_t spans_deferred;
-        atomic32_t spans_to_global;
-        atomic32_t spans_from_global;
-        atomic32_t spans_to_cache;
-        atomic32_t spans_from_cache;
-        atomic32_t spans_to_reserved;
-        atomic32_t spans_from_reserved;
-        atomic32_t spans_map_calls;
+    atomic32_t spans_deferred;
+    atomic32_t spans_to_global;
+    atomic32_t spans_from_global;
+    atomic32_t spans_to_cache;
+    atomic32_t spans_from_cache;
+    atomic32_t spans_to_reserved;
+    atomic32_t spans_from_reserved;
+    atomic32_t spans_map_calls;
 #endif
 };
 typedef struct span_use_t span_use_t;
@@ -2142,16 +2135,16 @@ typedef struct span_use_t span_use_t;
 
 #if NEO_ALLOC_ENABLE_STATS
 struct size_class_use_t {
-        atomic32_t alloc_current;
-        int32_t alloc_peak;
-        atomic32_t alloc_total;
-        atomic32_t free_total;
-        atomic32_t spans_current;
-        int32_t spans_peak;
-        atomic32_t spans_to_cache;
-        atomic32_t spans_from_cache;
-        atomic32_t spans_from_reserved;
-        atomic32_t spans_map_calls;
+    atomic32_t alloc_current;
+    int32_t alloc_peak;
+    atomic32_t alloc_total;
+    atomic32_t free_total;
+    atomic32_t spans_current;
+    int32_t spans_peak;
+    atomic32_t spans_to_cache;
+    atomic32_t spans_from_cache;
+    atomic32_t spans_from_reserved;
+    atomic32_t spans_map_calls;
     int32_t unused;
 };
 typedef struct size_class_use_t size_class_use_t;
@@ -2176,7 +2169,7 @@ struct span_t {
     span_t *next;
     span_t *prev;
 };
-_Static_assert(sizeof(span_t) <= SPAN_HEADER_SIZE, "span size mismatch");
+neo_static_assert(sizeof(span_t) <= SPAN_HEADER_SIZE && "span size mismatch");
 
 struct span_cache_t {
     size_t count;
@@ -2236,7 +2229,7 @@ struct size_class_t {
     uint16_t block_count;
     uint16_t class_idx;
 };
-_Static_assert(sizeof(size_class_t) == 8, "Size class size mismatch");
+neo_static_assert(sizeof(size_class_t) == 8 && "Size class size mismatch");
 
 struct global_cache_t {
     atomic32_t lock;
@@ -2521,7 +2514,7 @@ if (!ptr) {
         memassert(final_padding <= _memory_span_size, "Internal failure in padding");
         memassert(final_padding <= padding, "Internal failure in padding");
         memassert(!(final_padding % 8), "Internal failure in padding");
-        ptr = pointer_offset(ptr, final_padding);
+        ptr = poff(ptr, final_padding);
         *offset = final_padding >> 3;
     }
     memassert((size < _memory_span_size) || !((uintptr_t) ptr & ~_memory_span_mask), "Internal failure in padding");
@@ -2535,7 +2528,7 @@ _memunmap_os(void *address, size_t size, size_t offset, size_t release) {
     memassert(size >= _memory_page_size, "Invalid unmap size");
     if (release && offset) {
         offset <<= 3;
-        address = pointer_offset(address, -(int32_t) offset);
+        address = poff(address, -(int32_t) offset);
         if ((release >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) {
             release += _memory_span_size;
         }
@@ -2583,7 +2576,7 @@ _memglobal_get_reserved_spans(size_t span_count) {
     _memspan_mark_as_subspan_unless_master(_memory_global_reserve_master, span, span_count);
     _memory_global_reserve_count -= span_count;
     if (_memory_global_reserve_count)
-        _memory_global_reserve = (span_t *) pointer_offset(span, span_count << _memory_span_size_shift);
+        _memory_global_reserve = (span_t *) poff(span, span_count << _memory_span_size_shift);
     else
         _memory_global_reserve = 0;
     return span;
@@ -2639,7 +2632,7 @@ _memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t s
     memassert((subspan != master) || (subspan->flags & SPAN_FLAG_MASTER), "Span master pointer and/or flag mismatch");
     if (subspan != master) {
         subspan->flags = SPAN_FLAG_SUBSPAN;
-        subspan->offset_from_master = (uint32_t) ((uintptr_t) pointer_diff(subspan, master) >> _memory_span_size_shift);
+        subspan->offset_from_master = (uint32_t) ((uintptr_t) pdelta(subspan, master) >> _memory_span_size_shift);
         subspan->align_offset = 0;
     }
     subspan->span_count = (uint32_t) span_count;
@@ -2648,7 +2641,7 @@ _memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t s
 static span_t *
 _memspan_map_from_reserve(heap_t *heap, size_t span_count) {
     span_t *span = heap->span_reserve;
-    heap->span_reserve = (span_t *) pointer_offset(span, span_count * _memory_span_size);
+    heap->span_reserve = (span_t *) poff(span, span_count * _memory_span_size);
     heap->spans_reserved -= (uint32_t) span_count;
 
     _memspan_mark_as_subspan_unless_master(heap->span_reserve_master, span, span_count);
@@ -2690,7 +2683,7 @@ _memspan_map_aligned_count(heap_t *heap, size_t span_count) {
     if (span_count <= LARGE_CLASS_COUNT)
         _memstat_inc(&heap->span_use[span_count - 1].spans_map_calls);
     if (aligned_span_count > span_count) {
-        span_t *reserved_spans = (span_t *) pointer_offset(span, span_count * _memory_span_size);
+        span_t *reserved_spans = (span_t *) poff(span, span_count * _memory_span_size);
         size_t reserved_count = aligned_span_count - span_count;
         if (heap->spans_reserved) {
             _memspan_mark_as_subspan_unless_master(heap->span_reserve_master, heap->span_reserve, heap->spans_reserved);
@@ -2700,7 +2693,7 @@ _memspan_map_aligned_count(heap_t *heap, size_t span_count) {
             memassert(atomic_load32(&_memory_global_lock) == 1, "Global spin lock not held as expected");
             size_t remain_count = reserved_count - _memory_heap_reserve_count;
             reserved_count = _memory_heap_reserve_count;
-            span_t *remain_span = (span_t *) pointer_offset(reserved_spans, reserved_count * _memory_span_size);
+            span_t *remain_span = (span_t *) poff(reserved_spans, reserved_count * _memory_span_size);
             if (_memory_global_reserve) {
                 _memspan_mark_as_subspan_unless_master(_memory_global_reserve_master, _memory_global_reserve,
                                                        _memory_global_reserve_count);
@@ -2730,7 +2723,7 @@ _memspan_map(heap_t *heap, size_t span_count) {
             span = _memglobal_get_reserved_spans(reserve_count);
             if (span) {
                 if (reserve_count > span_count) {
-                    span_t *reserved_span = (span_t *) pointer_offset(span, span_count << _memory_span_size_shift);
+                    span_t *reserved_span = (span_t *) poff(span, span_count << _memory_span_size_shift);
                     _memheap_set_reserved_spans(heap, _memory_global_reserve_master, reserved_span,
                                                 reserve_count - span_count);
                 }
@@ -2751,7 +2744,7 @@ _memspan_unmap(span_t *span) {
     memassert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
 
     int is_master = !!(span->flags & SPAN_FLAG_MASTER);
-    span_t *master = is_master ? span : ((span_t *) pointer_offset(span,
+    span_t *master = is_master ? span : ((span_t *) poff(span,
                                                                    -(intptr_t) ((uintptr_t) span->offset_from_master *
                                                                                 _memory_span_size)));
     memassert(is_master || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
@@ -2805,21 +2798,21 @@ free_list_partial_init(void **list, void **first_block, void *page_start, void *
     memassert(block_count, "Internal failure");
     *first_block = block_start;
     if (block_count > 1) {
-        void *free_block = pointer_offset(block_start, block_size);
-        void *block_end = pointer_offset(block_start, (size_t) block_size * block_count);
+        void *free_block = poff(block_start, block_size);
+        void *block_end = poff(block_start, (size_t) block_size * block_count);
         if (block_size < (_memory_page_size >> 1)) {
-            void *page_end = pointer_offset(page_start, _memory_page_size);
+            void *page_end = poff(page_start, _memory_page_size);
             if (page_end < block_end)
                 block_end = page_end;
         }
         *list = free_block;
         block_count = 2;
-        void *next_block = pointer_offset(free_block, block_size);
+        void *next_block = poff(free_block, block_size);
         while (next_block < block_end) {
             *((void **) free_block) = next_block;
             free_block = next_block;
             ++block_count;
-            next_block = pointer_offset(next_block, block_size);
+            next_block = poff(next_block, block_size);
         }
         *((void **) free_block) = 0;
     } else {
@@ -2843,7 +2836,7 @@ _memspan_initialize_new(heap_t *heap, heap_size_class_t *heap_size_class, span_t
 
     void *block;
     span->free_list_limit = free_list_partial_init(&heap_size_class->free_list, &block,
-                                                   span, pointer_offset(span, SPAN_HEADER_SIZE),
+                                                   span, poff(span, SPAN_HEADER_SIZE),
                                                    size_class->block_count, size_class->block_size);
     if (span->free_list_limit < span->block_count) {
         _memspan_double_link_list_add(&heap_size_class->partial_span, span);
@@ -3401,30 +3394,30 @@ _memheap_allocate_new(void) {
     }
 
     size_t remain_size = _memory_span_size - sizeof(span_t);
-    heap_t *heap = (heap_t *) pointer_offset(span, sizeof(span_t));
+    heap_t *heap = (heap_t *) poff(span, sizeof(span_t));
     _memheap_initialize(heap);
 
     size_t num_heaps = remain_size / aligned_heap_size;
     if (num_heaps < request_heap_count)
         num_heaps = request_heap_count;
     atomic_store32(&heap->child_count, (int32_t) num_heaps - 1);
-    heap_t *extra_heap = (heap_t *) pointer_offset(heap, aligned_heap_size);
+    heap_t *extra_heap = (heap_t *) poff(heap, aligned_heap_size);
     while (num_heaps > 1) {
         _memheap_initialize(extra_heap);
         extra_heap->master_heap = heap;
         _memheap_orphan(extra_heap, 1);
-        extra_heap = (heap_t *) pointer_offset(extra_heap, aligned_heap_size);
+        extra_heap = (heap_t *) poff(extra_heap, aligned_heap_size);
         --num_heaps;
     }
 
     if (span_count > heap_span_count) {
         size_t remain_count = span_count - heap_span_count;
         size_t reserve_count = (remain_count > _memory_heap_reserve_count ? _memory_heap_reserve_count : remain_count);
-        span_t *remain_span = (span_t *) pointer_offset(span, heap_span_count * _memory_span_size);
+        span_t *remain_span = (span_t *) poff(span, heap_span_count * _memory_span_size);
         _memheap_set_reserved_spans(heap, span, remain_span, reserve_count);
 
         if (remain_count > reserve_count) {
-            remain_span = (span_t *) pointer_offset(remain_span, reserve_count * _memory_span_size);
+            remain_span = (span_t *) poff(remain_span, reserve_count * _memory_span_size);
             reserve_count = remain_count - reserve_count;
             _memglobal_set_reserved_spans(span, remain_span, reserve_count);
         }
@@ -3589,7 +3582,7 @@ _memallocate_from_heap_fallback(heap_t *heap, heap_size_class_t *heap_size_class
             heap_size_class->free_list = span->free_list;
             span->free_list = 0;
         } else {
-            void *block_start = pointer_offset(span,
+            void *block_start = poff(span,
                                                SPAN_HEADER_SIZE + ((size_t) span->free_list_limit * span->block_size));
             span->free_list_limit += free_list_partial_init(&heap_size_class->free_list, &block,
                                                             (void *) ((uintptr_t) block_start &
@@ -3667,7 +3660,7 @@ _memallocate_large(heap_t *heap, size_t size) {
 #endif
     ++heap->full_span_count;
 
-    return pointer_offset(span, SPAN_HEADER_SIZE);
+    return poff(span, SPAN_HEADER_SIZE);
 }
 
 static void *
@@ -3694,7 +3687,7 @@ _memallocate_huge(heap_t *heap, size_t size) {
 #endif
     ++heap->full_span_count;
 
-    return pointer_offset(span, SPAN_HEADER_SIZE);
+    return poff(span, SPAN_HEADER_SIZE);
 }
 
 static void *
@@ -3780,13 +3773,13 @@ _memaligned_allocate(heap_t *heap, size_t alignment, size_t size) {
         errno = ENOMEM;
         return 0;
     }
-    ptr = pointer_offset(span, SPAN_HEADER_SIZE);
+    ptr = poff(span, SPAN_HEADER_SIZE);
 
     if ((uintptr_t) ptr & align_mask)
         ptr = (void *) (((uintptr_t) ptr & ~(uintptr_t) align_mask) + alignment);
 
-    if (((size_t) pointer_diff(ptr, span) >= _memory_span_size) ||
-        (pointer_offset(ptr, size) > pointer_offset(span, mapped_size)) ||
+    if (((size_t) pdelta(ptr, span) >= _memory_span_size) ||
+        (poff(ptr, size) > poff(span, mapped_size)) ||
         (((uintptr_t) ptr & _memory_span_mask) != (uintptr_t) span)) {
         _memunmap(span, mapped_size, align_offset, mapped_size);
         ++num_pages;
@@ -3869,9 +3862,9 @@ static void
 _memdeallocate_small_or_medium(span_t *span, void *p) {
     _memstat_inc_free(span->heap, span->size_class);
     if (span->flags & SPAN_FLAG_ALIGNED_BLOCKS) {
-        void *blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
-        uint32_t block_offset = (uint32_t) pointer_diff(p, blocks_start);
-        p = pointer_offset(p, -(int32_t) (block_offset % span->block_size));
+        void *blocks_start = poff(span, SPAN_HEADER_SIZE);
+        uint32_t block_offset = (uint32_t) pdelta(p, blocks_start);
+        p = poff(p, -(int32_t) (block_offset % span->block_size));
     }
 #if MEM_FIRST_CLASS_HEAPS
     int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
@@ -3921,7 +3914,7 @@ atomic_decr32(&span->heap->span_use[idx].current);
         if (span->flags & SPAN_FLAG_MASTER) {
             heap->span_reserve_master = span;
         } else {
-            span_t *master = (span_t *) pointer_offset(span, -(intptr_t) ((size_t) span->offset_from_master *
+            span_t *master = (span_t *) poff(span, -(intptr_t) ((size_t) span->offset_from_master *
                                                                           _memory_span_size));
             heap->span_reserve_master = master;
             memassert(master->flags & SPAN_FLAG_MASTER, "Span flag corrupted");
@@ -4283,22 +4276,11 @@ memis_thread_initialized(void) {
     return (get_thread_heap_raw() != 0) ? 1 : 0;
 }
 
-const neo_alloc_config_t *
-memconfig(void) {
-    return &_memory_config;
-}
+const neo_alloc_config_t *memconfig(void) { return &_memory_config; }
+extern inline size_t memusable_size(void *ptr) { return neo_allocator_bin_useable_size(ptr); }
+extern inline void memthread_collect(void) { }
 
-extern inline size_t
-memusable_size(void *ptr) {
-    return neo_allocator_bin_useable_size(ptr);
-}
-
-extern inline void
-memthread_collect(void) {
-}
-
-void
-memthread_statistics(neo_alloc_thread_stats_t *stats) {
+void memthread_statistics(neo_alloc_thread_stats_t *stats) {
     memset(stats, 0, sizeof(neo_alloc_thread_stats_t));
     heap_t *heap = get_thread_heap_raw();
     if (!heap)
@@ -4753,12 +4735,12 @@ void *neo_allocator_alloc(size_t len) {
 void *neo_allocator_alloc_aligned(size_t len, size_t align) {
     check_allocator_online();
     neo_assert(len != 0 && len < MAX_ALLOC_SIZE && align, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
-    neo_assert(len + align >= len && (align & (align - 1)) == 0, "Allocation with invalid alignment: %zu", align);
+    neo_assert(len+align >= len && (align&(align-1)) == 0, "Allocation with invalid alignment: %zu", align);
     if (align <= SMALL_GRANULARITY) { return neo_allocator_alloc(len); }
     else if ((align <= SPAN_HEADER_SIZE) && ((len+SPAN_HEADER_SIZE) < _memory_medium_size_limit)) {
         size_t multiple_size = len ? (len+(SPAN_HEADER_SIZE-1))&~(uintptr_t)(SPAN_HEADER_SIZE-1) : SPAN_HEADER_SIZE;
         memassert(!(multiple_size % SPAN_HEADER_SIZE), "Failed alignment calculation");
-        if (multiple_size <= (len + align)) { return neo_allocator_alloc(multiple_size); }
+        if (multiple_size <= (len+align)) { return neo_allocator_alloc(multiple_size); }
     }
     void *ptr = 0;
     size_t align_mask = align-1;
@@ -4774,10 +4756,10 @@ void *neo_allocator_alloc_aligned(size_t len, size_t align) {
     neo_assert(!(align & align_mask) && align < _memory_span_size, "Invalid alignment");
     size_t extra_pages = align/_memory_page_size;
     size_t num_pages = 1+(len/_memory_page_size);
-    if (len&(_memory_page_size-1)) {  ++num_pages; }
-    if (extra_pages > num_pages) {  num_pages = 1+extra_pages; }
+    if (len&(_memory_page_size-1)) { ++num_pages; }
+    if (extra_pages > num_pages) { num_pages = 1+extra_pages; }
     size_t original_pages = num_pages;
-    size_t limit_pages = (_memory_span_size/_memory_page_size) << 1;
+    size_t limit_pages = (_memory_span_size/_memory_page_size)<<1;
     if (limit_pages < original_pages<<1) {  limit_pages = original_pages<<1; }
     size_t mapped_size;
     size_t align_offset;
@@ -4787,12 +4769,12 @@ retry:
     mapped_size = num_pages * _memory_page_size;
     span = (span_t *)_memmmap(mapped_size, &align_offset);
     neo_assert(span != NULL, "Out of memory");
-    ptr = pointer_offset(span, SPAN_HEADER_SIZE);
+    ptr = poff(span, SPAN_HEADER_SIZE);
     if ((uintptr_t)ptr&align_mask) {
         ptr = (void *)(((uintptr_t)ptr&~(uintptr_t)align_mask)+align);
     }
-    if (((size_t)pointer_diff(ptr, span) >= _memory_span_size) ||
-        (pointer_offset(ptr, len) > pointer_offset(span, mapped_size)) ||
+    if (((size_t)pdelta(ptr, span) >= _memory_span_size) ||
+        (poff(ptr, len) > poff(span, mapped_size)) ||
         (((uintptr_t)ptr&_memory_span_mask) != (uintptr_t)span)) {
         _memunmap(span, mapped_size, align_offset, mapped_size);
         ++num_pages;
@@ -4822,11 +4804,11 @@ void *neo_allocator_realloc(void *blk, size_t len) {
         span_t *span = (span_t *)((uintptr_t)blk&_memory_span_mask);
         if (neo_likely(span->size_class < SIZE_CLASS_COUNT)) {
             memassert(span->span_count == 1, "Span counter corrupted");
-            void *blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
-            uint32_t block_offset = (uint32_t)pointer_diff(blk, blocks_start);
+            void *blocks_start = poff(span, SPAN_HEADER_SIZE);
+            uint32_t block_offset = (uint32_t)pdelta(blk, blocks_start);
             uint32_t block_idx = block_offset/span->block_size;
-            void *block = pointer_offset(blocks_start, (size_t)block_idx*span->block_size);
-            if (!oldsize) { oldsize = (size_t)((ptrdiff_t)span->block_size-pointer_diff(blk, block)); }
+            void *block = poff(blocks_start, (size_t)block_idx*span->block_size);
+            if (!oldsize) { oldsize = (size_t)((ptrdiff_t)span->block_size-pdelta(blk, block)); }
             if ((size_t) span->block_size >= len) {
                 if (blk != block && !(flags&MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
@@ -4838,8 +4820,8 @@ void *neo_allocator_realloc(void *blk, size_t len) {
             size_t num_spans = total_size>>_memory_span_size_shift;
             if (total_size&(_memory_span_mask-1)) { ++num_spans; }
             size_t current_spans = span->span_count;
-            void *block = pointer_offset(span, SPAN_HEADER_SIZE);
-            if (!oldsize) { oldsize = (current_spans*_memory_span_size)-(size_t)pointer_diff(blk, block)-SPAN_HEADER_SIZE; }
+            void *block = poff(span, SPAN_HEADER_SIZE);
+            if (!oldsize) { oldsize = (current_spans*_memory_span_size)-(size_t)pdelta(blk, block)-SPAN_HEADER_SIZE; }
             if ((current_spans >= num_spans) && (total_size >= (oldsize>>1))) {
                 if (blk != block && !(flags&MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
@@ -4851,8 +4833,8 @@ void *neo_allocator_realloc(void *blk, size_t len) {
             size_t num_pages = total_size>>_memory_page_size_shift;
             if (total_size&(_memory_page_size-1)) { ++num_pages; }
             size_t current_pages = span->span_count;
-            void *block = pointer_offset(span, SPAN_HEADER_SIZE);
-            if (!oldsize) { oldsize = (current_pages*_memory_page_size)-(size_t)pointer_diff(blk, block)-SPAN_HEADER_SIZE; }
+            void *block = poff(span, SPAN_HEADER_SIZE);
+            if (!oldsize) { oldsize = (current_pages*_memory_page_size)-(size_t)pdelta(blk, block)-SPAN_HEADER_SIZE; }
             if ((current_pages >= num_pages) && (num_pages >= (current_pages>>1))) {
                 if (blk != block && !(flags&MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
@@ -4880,17 +4862,17 @@ void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align) {
     static const unsigned flags = 0;
     check_allocator_online();
     neo_assert(len < MAX_ALLOC_SIZE, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
-    neo_assert(len + align >= len && (align & (align - 1)) == 0, "Allocation with invalid alignment: %zu", align);
+    neo_assert(len+align >= len && (align&(align-1)) == 0, "Allocation with invalid alignment: %zu", align);
     size_t oldsize = 0;
     if (align <= SMALL_GRANULARITY) { return neo_allocator_realloc(blk, len); }
-    bool no_alloc = (flags & MEM_GROW_OR_FAIL) != 0;
+    bool no_alloc = (flags&MEM_GROW_OR_FAIL) != 0;
     size_t usablesize = neo_allocator_bin_useable_size(blk);
     if ((usablesize >= len) && !((uintptr_t)blk&(align-1))) {
         if (no_alloc || len >= (usablesize>>1)) {  return blk; }
     }
     void *block = (!no_alloc ? neo_allocator_alloc_aligned(len, align) : 0);
     if (neo_likely(block != 0)) {
-        if (!(flags & MEM_NO_PRESERVE) && blk) {
+        if (!(flags&MEM_NO_PRESERVE) && blk) {
             if (!oldsize) { oldsize = usablesize; }
             memcpy(block, blk, oldsize < len ? oldsize : len);
         }
@@ -4903,15 +4885,15 @@ size_t neo_allocator_bin_useable_size(void *blk) {
     if (neo_unlikely(!blk)) { return 0; }
     span_t *span = (span_t *)((uintptr_t)blk&_memory_span_mask);
     if (span->size_class < SIZE_CLASS_COUNT) {
-        void *blocks_start = pointer_offset(span, SPAN_HEADER_SIZE);
-        return span->block_size-((size_t)pointer_diff(blk, blocks_start)%span->block_size);
+        void *blocks_start = poff(span, SPAN_HEADER_SIZE);
+        return span->block_size-((size_t)pdelta(blk, blocks_start)%span->block_size);
     }
     if (span->size_class == SIZE_CLASS_LARGE) {
         size_t current_spans = span->span_count;
-        return (current_spans*_memory_span_size)-(size_t)pointer_diff(blk, span);
+        return (current_spans*_memory_span_size)-(size_t)pdelta(blk, span);
     }
     size_t current_pages = span->span_count;
-    return (current_pages*_memory_page_size)-(size_t)pointer_diff(blk, span);
+    return (current_pages*_memory_page_size)-(size_t)pdelta(blk, span);
 }
 
 void neo_allocator_free(void *blk) {
