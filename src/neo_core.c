@@ -1232,7 +1232,7 @@ static size_t ndigits_dec(uint32_t x) {
 #define ND_MUL2K_DIV1E9(val) ((uint32_t)((val)/1000000000))
 
 /* Multiply nd by 2^k and add carry_in (ndlo is assumed to be zero). */
-static uint32_t nd_mul2k(uint32_t* nd, uint32_t ndhi, uint32_t k, uint32_t carry_in, sfmt_t sf) {
+static uint32_t nd_mul2k(uint32_t *nd, uint32_t ndhi, uint32_t k, uint32_t carry_in, sfmt_t sf) {
     neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, ndlo = 0, start = 1;
     /* Performance hacks. */
@@ -1264,7 +1264,7 @@ static uint32_t nd_mul2k(uint32_t* nd, uint32_t ndhi, uint32_t k, uint32_t carry
 }
 
 /* Divide nd by 2^k (ndlo is assumed to be zero). */
-static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
+static uint32_t nd_div2k(uint32_t *nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
     neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t ndlo = 0, stop1 = ~0u, stop2 = ~0u;
     /* Performance hacks. */
@@ -1321,7 +1321,7 @@ static uint32_t nd_div2k(uint32_t* nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
 }
 
 /* Add m*10^e to nd (assumes ndlo <= e/9 <= ndhi and 0 <= m <= 9). */
-static uint32_t nd_add_m10e(uint32_t* nd, uint32_t ndhi, uint8_t m, int32_t e) {
+static uint32_t nd_add_m10e(uint32_t *nd, uint32_t ndhi, uint8_t m, int32_t e) {
     neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, carry;
     if (e >= 0) {
@@ -1374,7 +1374,7 @@ static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
 #undef wint_r
 
 /* Test whether two "nd" values are equal in their most significant digits. */
-static bool nd_similar(uint32_t* nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
+static bool nd_similar(uint32_t *nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
     neo_dassert(nd != NULL && ref != NULL, "Invalid arguments");
     uint8_t nd9[9], ref9[9];
     if (hilen <= prec) {
