@@ -4848,15 +4848,19 @@ void *neo_allocator_alloc(size_t len) {
     check_allocator_online();
     neo_assert(len != 0 && len < MAX_ALLOC_SIZE, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
     heap_t *heap = get_thread_heap();
+    void *p = NULL;
     _memstat_add64(&_allocation_counter, 1);
     if (neo_likely(len <= SMALL_SIZE_LIMIT)) {
-        return _memallocate_small(heap, len);
+        p = _memallocate_small(heap, len);
     } else if (len <= _memory_medium_size_limit) {
-        return _memallocate_medium(heap, len);
+        p = _memallocate_medium(heap, len);
     } else if (len <= LARGE_SIZE_LIMIT) {
-        return _memallocate_large(heap, len);
+        p = _memallocate_large(heap, len);
+    } else {
+        p = _memallocate_huge(heap, len);
     }
-    return _memallocate_huge(heap, len);
+    neo_assert(p != NULL, "Out of memory, allocation size: %zu", len);
+    return p;
 }
 
 void *neo_allocator_alloc_aligned(size_t len, size_t align) {
