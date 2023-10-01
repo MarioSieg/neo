@@ -1976,7 +1976,6 @@ uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
 #define SPAN_FLAG_UNMAPPED_MASTER 8U
 
 neo_static_assert((SMALL_GRANULARITY & (SMALL_GRANULARITY - 1)) == 0 && "Small granularity must be power of two");
-
 neo_static_assert((SPAN_HEADER_SIZE & (SPAN_HEADER_SIZE - 1)) == 0 && "Span header size must be power of two");
 
 #if defined(__clang__) || defined(__GNUC__)
