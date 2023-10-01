@@ -530,7 +530,6 @@ typedef struct neo_alloc_thread_stats_t {
 typedef struct neo_alloc_config_t {
     void *(*memory_map)(size_t size, size_t *offset);
     void (*memory_unmap)(void *address, size_t size, size_t offset, size_t release);
-    void (*error_callback)(const char *message);
     int (*map_fail_callback)(size_t size);
     size_t page_size;
     size_t span_size;

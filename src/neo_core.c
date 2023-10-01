@@ -11,8 +11,10 @@ NEO_THREAD_LOCAL void *volatile neo_tls_proxy = NULL;
 #   include <fcntl.h>
 #   include <io.h>
 #elif NEO_OS_POSIX
+
 #   include <unistd.h>
 #   include <time.h>
+
 #else
 #   error "unsupported platform"
 #endif
@@ -41,7 +43,7 @@ void neo_osi_init(void) {
     osi_data.page_size = info.dwPageSize ? (uint32_t)info.dwPageSize : 0x1000;
 #elif NEO_OS_LINUX || NEO_OS_BSD
     long ps = sysconf(_SC_PAGESIZE);
-    osi_data.page_size = ps > 0 ? (uint32_t)ps : 0x1000;
+    osi_data.page_size = ps > 0 ? (uint32_t) ps : 0x1000;
 #else
 #   error "unsupported platform"
 #endif
@@ -68,13 +70,13 @@ uint64_t neo_hp_clock_us(void) {
 uint64_t neo_hp_clock_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec*1000ull+(uint64_t)ts.tv_nsec/1000000ull;
+    return (uint64_t) ts.tv_sec * 1000ull + (uint64_t) ts.tv_nsec / 1000000ull;
 }
 
 uint64_t neo_hp_clock_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec*1000000ull+(uint64_t)ts.tv_nsec/1000ull;
+    return (uint64_t) ts.tv_sec * 1000000ull + (uint64_t) ts.tv_nsec / 1000ull;
 }
 
 #endif
@@ -82,7 +84,7 @@ uint64_t neo_hp_clock_us(void) {
 void neo_mempool_init(neo_mempool_t *self, size_t cap) {
     neo_dassert(self != NULL, "self is NULL");
     memset(self, 0, sizeof(*self));
-    cap = cap ? cap : 1<<9;
+    cap = cap ? cap : 1 << 9;
     self->cap = cap;
     self->top = neo_memalloc(NULL, cap);
     memset(self->top, 0, cap); /* Zero the memory. */
@@ -91,17 +93,17 @@ void neo_mempool_init(neo_mempool_t *self, size_t cap) {
 void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
     neo_dassert(self != NULL, "self is NULL");
     neo_assert(len != 0, "Allocation length must not be zero");
-    size_t total = self->len+len;
+    size_t total = self->len + len;
     if (total >= self->cap) {
         size_t old = self->cap;
         do {
-            self->cap<<=1;
-        } while (self->cap<=total);
+            self->cap <<= 1;
+        } while (self->cap <= total);
         self->top = neo_memalloc(self->top, self->cap);
-        size_t delta = self->cap-old;
-        memset((uint8_t *)self->top + old, 0, delta); /* Zero the new memory. */
+        size_t delta = self->cap - old;
+        memset((uint8_t *) self->top + old, 0, delta); /* Zero the new memory. */
     }
-    void *p = (uint8_t *)self->top + self->len;
+    void *p = (uint8_t *) self->top + self->len;
     self->len += len;
     ++self->num_allocs;
     return p;
@@ -109,15 +111,15 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
     neo_dassert(self != NULL, "self is NULL");
-    neo_dassert(align != 0 && align >= sizeof(void*) && !(align&(align-1)), "Invalid alignment: %zu", align);
-    uintptr_t off = (uintptr_t)align-1+sizeof(void *);
+    neo_dassert(align != 0 && align >= sizeof(void *) && !(align & (align - 1)), "Invalid alignment: %zu", align);
+    uintptr_t off = (uintptr_t) align - 1 + sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
-    return (void *)(((uintptr_t)p+off) & ~(align-1));
+    return (void *) (((uintptr_t) p + off) & ~(align - 1));
 }
 
 size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
     neo_dassert(self != NULL && len != 0, "self is NULL");
-    size_t idx = self->len+base*len;
+    size_t idx = self->len + base * len;
     neo_assert(idx <= lim, "Pool index limit reached. Max: %zu, Current: %zu", lim, idx);
     void *p = neo_mempool_alloc(self, len);
     if (pp) { *pp = p; }
@@ -131,7 +133,8 @@ void *neo_mempool_realloc(neo_mempool_t *self, void *blk, size_t oldlen, size_t 
     if (neo_unlikely(oldlen == newlen)) { return blk; }
     const void *prev = blk; /* We need to copy the old data into the new block. */
     blk = neo_mempool_alloc(self, newlen);
-    memcpy(blk, prev, oldlen); /* Copy the old data into the new block. This is safe because the old data is still in the self. */
+    memcpy(blk, prev,
+           oldlen); /* Copy the old data into the new block. This is safe because the old data is still in the self. */
     return blk;
 }
 
@@ -148,12 +151,18 @@ void neo_mempool_free(neo_mempool_t *self) {
 
 bool record_eq(record_t a, record_t b, rtag_t tag) {
     switch (tag) {
-        case RT_INT: return a.as_int == b.as_int;
-        case RT_FLOAT: return a.as_float == b.as_float; /* TODO: Use ULP-based comparison? */
-        case RT_CHAR: return a.as_char == b.as_char;
-        case RT_BOOL: return a.as_bool == b.as_bool;
-        case RT_REF: return a.as_ref == b.as_ref;
-        default: return false;
+        case RT_INT:
+            return a.as_int == b.as_int;
+        case RT_FLOAT:
+            return a.as_float == b.as_float; /* TODO: Use ULP-based comparison? */
+        case RT_CHAR:
+            return a.as_char == b.as_char;
+        case RT_BOOL:
+            return a.as_bool == b.as_bool;
+        case RT_REF:
+            return a.as_ref == b.as_ref;
+        default:
+            return false;
     }
 }
 
@@ -190,7 +199,7 @@ bool neo_fopen(FILE **fp, const uint8_t *filepath, int mode) {
 #else
     const char *modstr = NULL;
     get_fmodstr()
-    return (*fp = fopen((const char *)filepath, modstr)) != NULL;
+    return (*fp = fopen((const char *) filepath, modstr)) != NULL;
 #endif
 }
 
@@ -201,47 +210,98 @@ neo_unicode_error_t neo_utf8_validate(const uint8_t *buf, size_t len, size_t *pp
     size_t pos = 0;
     uint32_t cp;
     while (pos < len) {
-        size_t np = pos+16;
+        size_t np = pos + 16;
         if (np <= len) { /* If it is safe to read 8 more bytes and check that they are ASCII. */
             uint64_t v1, v2;
-            memcpy(&v1, buf+pos, sizeof(v1));
-            memcpy(&v2, buf+pos+sizeof(v1), sizeof(v2));
-            if (!((v1|v2) & UINT64_C(0x8080808080808080))) {
+            memcpy(&v1, buf + pos, sizeof(v1));
+            memcpy(&v2, buf + pos + sizeof(v1), sizeof(v2));
+            if (!((v1 | v2) & UINT64_C(0x8080808080808080))) {
                 pos = np;
                 continue;
             }
         }
         uint8_t b = buf[pos];
         while (b < 0x80) {
-            if (neo_likely(++pos == len)) { *ppos = len; return NEO_UNIERR_OK; }
+            if (neo_likely(++pos == len)) {
+                *ppos = len;
+                return NEO_UNIERR_OK;
+            }
             b = buf[pos];
         }
         if ((b & 0xe0) == 0xc0) {
-            np = pos+2;
-            if (neo_unlikely(np > len)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            cp = (b & 0x1fu)<<6u | (buf[pos+1] & 0x3fu);
-            if (neo_unlikely((cp < 0x80) || (0x7ff < cp))) { *ppos = pos; return NEO_UNIERR_OVERLONG; }
+            np = pos + 2;
+            if (neo_unlikely(np > len)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            cp = (b & 0x1fu) << 6u | (buf[pos + 1] & 0x3fu);
+            if (neo_unlikely((cp < 0x80) || (0x7ff < cp))) {
+                *ppos = pos;
+                return NEO_UNIERR_OVERLONG;
+            }
         } else if ((b & 0xf0) == 0xe0) {
-            np = pos+3;
-            if (neo_unlikely(np > len)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            cp = (b & 0xfu)<<12u | (buf[pos+1] & 0x3fu)<<6u | (buf[pos+2] & 0x3fu);
-            if (neo_unlikely((cp < 0x800) || (0xffff < cp))) { *ppos = pos; return NEO_UNIERR_OVERLONG; }
-            if (neo_unlikely(0xd7ff < cp && cp < 0xe000)) { *ppos = pos; return NEO_UNIERR_SURROGATE; }
+            np = pos + 3;
+            if (neo_unlikely(np > len)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 2] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            cp = (b & 0xfu) << 12u | (buf[pos + 1] & 0x3fu) << 6u | (buf[pos + 2] & 0x3fu);
+            if (neo_unlikely((cp < 0x800) || (0xffff < cp))) {
+                *ppos = pos;
+                return NEO_UNIERR_OVERLONG;
+            }
+            if (neo_unlikely(0xd7ff < cp && cp < 0xe000)) {
+                *ppos = pos;
+                return NEO_UNIERR_SURROGATE;
+            }
         } else if ((b & 0xf8) == 0xf0) {
-            np = pos+4;
-            if (neo_unlikely(np > len)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+1] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+2] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            if (neo_unlikely((buf[pos+3] & 0xc0) != 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_SHORT; }
-            cp = (b & 0x7u)<<18u | (buf[pos+1] & 0x3fu)<<12u | (buf[pos+2] & 0x3fu)<<6u | (buf[pos+3] & 0x3fu);
-            if (neo_unlikely(cp <= 0xffff)) { *ppos = pos; return NEO_UNIERR_OVERLONG; }
-            if (neo_unlikely(0x10ffff < cp)) { *ppos = pos; return NEO_UNIERR_TOO_LARGE; }
+            np = pos + 4;
+            if (neo_unlikely(np > len)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 1] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 2] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            if (neo_unlikely((buf[pos + 3] & 0xc0) != 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_SHORT;
+            }
+            cp = (b & 0x7u) << 18u | (buf[pos + 1] & 0x3fu) << 12u | (buf[pos + 2] & 0x3fu) << 6u |
+                 (buf[pos + 3] & 0x3fu);
+            if (neo_unlikely(cp <= 0xffff)) {
+                *ppos = pos;
+                return NEO_UNIERR_OVERLONG;
+            }
+            if (neo_unlikely(0x10ffff < cp)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_LARGE;
+            }
         } else { /* We either have too many continuation bytes or an invalid leading byte. */
-            if (neo_unlikely((b & 0xc0) == 0x80)) { *ppos = pos; return NEO_UNIERR_TOO_LONG; }
-            else { *ppos = pos; return NEO_UNIERR_HEADER_BITS; }
+            if (neo_unlikely((b & 0xc0) == 0x80)) {
+                *ppos = pos;
+                return NEO_UNIERR_TOO_LONG;
+            } else {
+                *ppos = pos;
+                return NEO_UNIERR_HEADER_BITS;
+            }
         }
         pos = np;
     }
@@ -259,17 +319,17 @@ bool neo_utf8_is_ascii(const uint8_t *buf, size_t len) {
 
 uint32_t neo_hash_x17(const void *key, size_t len) {
     uint32_t r = 0x1505;
-    const uint8_t *p = (const uint8_t*)key;
+    const uint8_t *p = (const uint8_t *) key;
     for (size_t i = 0; i < len; ++i) {
         r = 17 * r + (p[i] - ' ');
     }
-    return r^(r>>16);
+    return r ^ (r >> 16);
 }
 
 uint32_t neo_hash_fnv1a(const void *key, size_t len) {
     size_t blocks = len >> 3;
     uint64_t r = 0x811c9dc5;
-    const uint8_t *data = (const uint8_t *)key;
+    const uint8_t *data = (const uint8_t *) key;
     for (size_t i = 0; i < blocks; ++i) {
         uint64_t tmp;
         memcpy(&tmp, data, sizeof(tmp));
@@ -278,28 +338,39 @@ uint32_t neo_hash_fnv1a(const void *key, size_t len) {
         data += 8;
     }
     size_t rest = len & 255;
-    switch (len % 8)
-    {
-        case 7: rest |= (uint64_t)data[6] << 56; NEO_FALLTHROUGH; /* fallthrough */
-        case 6: rest |= (uint64_t)data[5] << 48; NEO_FALLTHROUGH; /* fallthrough */
-        case 5: rest |= (uint64_t)data[4] << 40; NEO_FALLTHROUGH; /* fallthrough */
-        case 4: rest |= (uint64_t)data[3] << 32; NEO_FALLTHROUGH; /* fallthrough */
-        case 3: rest |= (uint64_t)data[2] << 24; NEO_FALLTHROUGH; /* fallthrough */
-        case 2: rest |= (uint64_t)data[1] << 16; NEO_FALLTHROUGH; /* fallthrough */
+    switch (len % 8) {
+        case 7:
+            rest |= (uint64_t) data[6] << 56;
+                    NEO_FALLTHROUGH; /* fallthrough */
+        case 6:
+            rest |= (uint64_t) data[5] << 48;
+                    NEO_FALLTHROUGH; /* fallthrough */
+        case 5:
+            rest |= (uint64_t) data[4] << 40;
+                    NEO_FALLTHROUGH; /* fallthrough */
+        case 4:
+            rest |= (uint64_t) data[3] << 32;
+                    NEO_FALLTHROUGH; /* fallthrough */
+        case 3:
+            rest |= (uint64_t) data[2] << 24;
+                    NEO_FALLTHROUGH; /* fallthrough */
+        case 2:
+            rest |= (uint64_t) data[1] << 16;
+                    NEO_FALLTHROUGH; /* fallthrough */
         case 1:
-            rest |= (uint64_t)data[0] << 8;
+            rest |= (uint64_t) data[0] << 8;
             r ^= rest;
             r *= 0xd6e8feb86659fd93;
     }
-    return (uint32_t )(r ^ (r >> 32));
+    return (uint32_t) (r ^ (r >> 32));
 }
 
-#define	ROTL32(x, r) ((x << r) | (x >> (32 - r)))
-#define FMIX32(h) h^=h>>16; h*=0x85ebca6b; h^=h>>13; h*=0xc2b2ae35; h^=h>>16;
+#define rol32(x, r) ((x<<r)|(x>>(32-r)))
+#define fmix32(h) h^=h>>16; h*=0x85ebca6b; h^=h>>13; h*=0xc2b2ae35; h^=h>>16;
 
 uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed) {
-    const uint8_t * data = (const uint8_t*)key;
-    int64_t nblocks = (int64_t)len / 16;
+    const uint8_t *data = (const uint8_t *) key;
+    int64_t nblocks = (int64_t) len / 16;
     uint32_t h1 = seed;
     uint32_t h2 = seed;
     uint32_t h3 = seed;
@@ -308,103 +379,129 @@ uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed) {
     uint32_t c2 = 0xab0e9789;
     uint32_t c3 = 0x38b34ae5;
     uint32_t c4 = 0xa1e38b93;
-    const uint32_t * blocks = (const uint32_t *)(data + nblocks*16);
+    const uint32_t *blocks = (const uint32_t *) (data + nblocks * 16);
     for (int64_t i = -nblocks; i; ++i) {
-        uint32_t k1 = blocks[i*4+0];
-        uint32_t k2 = blocks[i*4+1];
-        uint32_t k3 = blocks[i*4+2];
-        uint32_t k4 = blocks[i*4+3];
+        uint32_t k1 = blocks[i * 4 + 0];
+        uint32_t k2 = blocks[i * 4 + 1];
+        uint32_t k3 = blocks[i * 4 + 2];
+        uint32_t k4 = blocks[i * 4 + 3];
         k1 *= c1;
-        k1 = ROTL32(k1, 15);
+        k1 = rol32(k1, 15);
         k1 *= c2;
         h1 ^= k1;
-        h1 = ROTL32(h1, 19);
+        h1 = rol32(h1, 19);
         h1 += h2;
         h1 = h1 * 5 + 0x561ccd1b;
         k2 *= c2;
-        k2 = ROTL32(k2, 16);
+        k2 = rol32(k2, 16);
         k2 *= c3;
         h2 ^= k2;
-        h2 = ROTL32(h2, 17);
+        h2 = rol32(h2, 17);
         h2 += h3;
         h2 = h2 * 5 + 0x0bcaa747;
         k3 *= c3;
-        k3 = ROTL32(k3, 17);
+        k3 = rol32(k3, 17);
         k3 *= c4;
         h3 ^= k3;
-        h3 = ROTL32(h3, 15);
+        h3 = rol32(h3, 15);
         h3 += h4;
         h3 = h3 * 5 + 0x96cd1c35;
         k4 *= c4;
-        k4 = ROTL32(k4, 18);
+        k4 = rol32(k4, 18);
         k4 *= c1;
         h4 ^= k4;
-        h4 = ROTL32(h4, 13);
+        h4 = rol32(h4, 13);
         h4 += h1;
         h4 = h4 * 5 + 0x32ac3b17;
     }
-    const uint8_t * tail = (const uint8_t*)(data + nblocks*16);
+    const uint8_t *tail = (const uint8_t *) (data + nblocks * 16);
     uint32_t k1 = 0;
     uint32_t k2 = 0;
     uint32_t k3 = 0;
     uint32_t k4 = 0;
-    switch(len & 15) {
-        case 15: k4 ^= (uint32_t)tail[14] << 16; NEO_FALLTHROUGH;
-        case 14: k4 ^= (uint32_t)tail[13] << 8; NEO_FALLTHROUGH;
-        case 13: k4 ^= (uint32_t)tail[12] << 0;
+    switch (len & 15) {
+        case 15:
+            k4 ^= (uint32_t) tail[14] << 16;
+                    NEO_FALLTHROUGH;
+        case 14:
+            k4 ^= (uint32_t) tail[13] << 8;
+                    NEO_FALLTHROUGH;
+        case 13:
+            k4 ^= (uint32_t) tail[12] << 0;
             k4 *= c4;
-            k4 = ROTL32(k4, 18);
+            k4 = rol32(k4, 18);
             k4 *= c1;
             h4 ^= k4;
-            NEO_FALLTHROUGH;
-        case 12: k3 ^= (uint32_t)tail[11] << 24; NEO_FALLTHROUGH;
-        case 11: k3 ^= (uint32_t)tail[10] << 16; NEO_FALLTHROUGH;
-        case 10: k3 ^= (uint32_t)tail[9] << 8; NEO_FALLTHROUGH;
-        case  9: k3 ^= (uint32_t)tail[8] << 0;
+                    NEO_FALLTHROUGH;
+        case 12:
+            k3 ^= (uint32_t) tail[11] << 24;
+                    NEO_FALLTHROUGH;
+        case 11:
+            k3 ^= (uint32_t) tail[10] << 16;
+                    NEO_FALLTHROUGH;
+        case 10:
+            k3 ^= (uint32_t) tail[9] << 8;
+                    NEO_FALLTHROUGH;
+        case 9:
+            k3 ^= (uint32_t) tail[8] << 0;
             k3 *= c3;
-            k3 = ROTL32(k3, 17);
+            k3 = rol32(k3, 17);
             k3 *= c4;
             h3 ^= k3;
-            NEO_FALLTHROUGH;
-        case  8: k2 ^= (uint32_t)tail[7] << 24; NEO_FALLTHROUGH;
-        case  7: k2 ^= (uint32_t)tail[6] << 16;  NEO_FALLTHROUGH;
-        case  6: k2 ^= (uint32_t)tail[5] << 8;  NEO_FALLTHROUGH;
-        case  5: k2 ^= (uint32_t)tail[4] << 0;
+                    NEO_FALLTHROUGH;
+        case 8:
+            k2 ^= (uint32_t) tail[7] << 24;
+                    NEO_FALLTHROUGH;
+        case 7:
+            k2 ^= (uint32_t) tail[6] << 16;
+                    NEO_FALLTHROUGH;
+        case 6:
+            k2 ^= (uint32_t) tail[5] << 8;
+                    NEO_FALLTHROUGH;
+        case 5:
+            k2 ^= (uint32_t) tail[4] << 0;
             k2 *= c2;
-            k2 = ROTL32(k2, 16);
+            k2 = rol32(k2, 16);
             k2 *= c3;
             h2 ^= k2;
-            NEO_FALLTHROUGH;
-        case  4: k1 ^= (uint32_t)tail[3] << 24;  NEO_FALLTHROUGH;
-        case  3: k1 ^= (uint32_t)tail[2] << 16; NEO_FALLTHROUGH;
-        case  2: k1 ^= (uint32_t)tail[1] << 8;  NEO_FALLTHROUGH;
-        case  1: k1 ^= (uint32_t)tail[0] << 0;
+                    NEO_FALLTHROUGH;
+        case 4:
+            k1 ^= (uint32_t) tail[3] << 24;
+                    NEO_FALLTHROUGH;
+        case 3:
+            k1 ^= (uint32_t) tail[2] << 16;
+                    NEO_FALLTHROUGH;
+        case 2:
+            k1 ^= (uint32_t) tail[1] << 8;
+                    NEO_FALLTHROUGH;
+        case 1:
+            k1 ^= (uint32_t) tail[0] << 0;
             k1 *= c1;
-            k1 = ROTL32(k1, 15);
+            k1 = rol32(k1, 15);
             k1 *= c2;
             h1 ^= k1;
     };
-    h1 ^= (uint32_t)len;
-    h2 ^= (uint32_t)len;
-    h3 ^= (uint32_t)len;
-    h4 ^= (uint32_t)len;
+    h1 ^= (uint32_t) len;
+    h2 ^= (uint32_t) len;
+    h3 ^= (uint32_t) len;
+    h4 ^= (uint32_t) len;
     h1 += h2;
     h1 += h3;
     h1 += h4;
     h2 += h1;
     h3 += h1;
     h4 += h1;
-    FMIX32(h1);
-    FMIX32(h2);
-    FMIX32(h3);
-    FMIX32(h4);
+    fmix32(h1);
+    fmix32(h2);
+    fmix32(h3);
+    fmix32(h4);
     h1 += h2;
     h1 += h3;
     h1 += h4;
     h2 += h1;
     h3 += h1;
     h4 += h1;
-    return (((uint64_t)h2) << 32) | h1;
+    return (((uint64_t) h2) << 32) | h1;
 }
 
 #define u8load64_le(p) \
@@ -432,9 +529,9 @@ uint64_t neo_hash_mumrmur3_86_128(const void *key, size_t len, uint32_t seed) {
       v1 ^= v2; v2 = rol64(v2, 32); }
 
 uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t seed1) {
-    const uint8_t *in = (const uint8_t *)key;
-    uint64_t k0 = u8load64_le((uint8_t *)&seed0);
-    uint64_t k1 = u8load64_le((uint8_t *)&seed1);
+    const uint8_t *in = (const uint8_t *) key;
+    uint64_t k0 = u8load64_le((uint8_t *) &seed0);
+    uint64_t k1 = u8load64_le((uint8_t *) &seed1);
     uint64_t v3 = UINT64_C(0x7465646279746573) ^ k1;
     uint64_t v2 = UINT64_C(0x6c7967656e657261) ^ k0;
     uint64_t v1 = UINT64_C(0x646f72616e646f6d) ^ k1;
@@ -447,16 +544,31 @@ uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t se
         stipround();
         v0 ^= m;
     }
-    uint64_t b = ((uint64_t)len) << 56;
+    uint64_t b = ((uint64_t) len) << 56;
     switch (len & 7) {
-        case 7: b |= ((uint64_t)in[6]) << 48; NEO_FALLTHROUGH;
-        case 6: b |= ((uint64_t)in[5]) << 40; NEO_FALLTHROUGH;
-        case 5: b |= ((uint64_t)in[4]) << 32; NEO_FALLTHROUGH;
-        case 4: b |= ((uint64_t)in[3]) << 24; NEO_FALLTHROUGH;
-        case 3: b |= ((uint64_t)in[2]) << 16; NEO_FALLTHROUGH;
-        case 2: b |= ((uint64_t)in[1]) << 8;  NEO_FALLTHROUGH;
-        case 1: b |= ((uint64_t)in[0]); break;
-        case 0: break;
+        case 7:
+            b |= ((uint64_t) in[6]) << 48;
+                    NEO_FALLTHROUGH;
+        case 6:
+            b |= ((uint64_t) in[5]) << 40;
+                    NEO_FALLTHROUGH;
+        case 5:
+            b |= ((uint64_t) in[4]) << 32;
+                    NEO_FALLTHROUGH;
+        case 4:
+            b |= ((uint64_t) in[3]) << 24;
+                    NEO_FALLTHROUGH;
+        case 3:
+            b |= ((uint64_t) in[2]) << 16;
+                    NEO_FALLTHROUGH;
+        case 2:
+            b |= ((uint64_t) in[1]) << 8;
+                    NEO_FALLTHROUGH;
+        case 1:
+            b |= ((uint64_t) in[0]);
+            break;
+        case 0:
+            break;
     }
     v3 ^= b;
     stipround();
@@ -469,7 +581,7 @@ uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t se
     stipround();
     b = v0 ^ v1 ^ v2 ^ v3;
     uint64_t out = 0;
-    u64split8_le((uint8_t*)&out, b);
+    u64split8_le((uint8_t *) &out, b);
     return out;
 }
 
@@ -480,24 +592,25 @@ uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t se
 #undef u8load64_le
 
 neo_static_assert(sizeof(char) == sizeof(uint8_t));
+
 uint8_t *neo_strdup2(const uint8_t *str) {
-   return (uint8_t *)neo_strdup((const char *)str);
+    return (uint8_t *) neo_strdup((const char *) str);
 }
 
 char *neo_strdup(const char *str) {
     neo_assert(str != NULL, "String ptr is NULL");
     size_t len = strlen(str); /* strlen also works with UTF-8 strings to find the end \0. */
-    char *dup = neo_memalloc(NULL, (len+1)*sizeof(*dup));
+    char *dup = neo_memalloc(NULL, (len + 1) * sizeof(*dup));
     memcpy(dup, str, len);
     dup[len] = '\0';
     return dup;
 }
 
 void neo_printutf8(FILE *f, const uint8_t *str) {
-     neo_assert(str != NULL, "String ptr is NULL");
+    neo_assert(str != NULL, "String ptr is NULL");
     if (neo_unlikely(!str || !*str)) { return; }
 #if NEO_OS_LINUX
-    fputs((const char *)str, f); /* Linux terminal is UTF-8 by default. */
+    fputs((const char *) str, f); /* Linux terminal is UTF-8 by default. */
 #else
 #  error "unsupported platform"
 #endif
@@ -555,68 +668,67 @@ void neo_printutf8(FILE *f, const uint8_t *str) {
 ** special treatment to prevent incorrect 'double rounding'.
 */
 
-#define CHAR_CNTRL	0x01
-#define CHAR_SPACE	0x02
-#define CHAR_PUNCT	0x04
-#define CHAR_DIGIT	0x08
-#define CHAR_XDIGIT	0x10
-#define CHAR_UPPER	0x20
-#define CHAR_LOWER	0x40
-#define CHAR_IDENT	0x80
-#define CHAR_ALPHA	(CHAR_LOWER|CHAR_UPPER)
-#define CHAR_ALNUM	(CHAR_ALPHA|CHAR_DIGIT)
-#define CHAR_GRAPH	(CHAR_ALNUM|CHAR_PUNCT)
+#define CHAR_CNTRL 0x01
+#define CHAR_SPACE 0x02
+#define CHAR_PUNCT 0x04
+#define CHAR_DIGIT 0x08
+#define CHAR_XDIGIT 0x10
+#define CHAR_UPPER 0x20
+#define CHAR_LOWER 0x40
+#define CHAR_IDENT 0x80
+#define CHAR_ALPHA (CHAR_LOWER|CHAR_UPPER)
+#define CHAR_ALNUM (CHAR_ALPHA|CHAR_DIGIT)
+#define CHAR_GRAPH (CHAR_ALNUM|CHAR_PUNCT)
 
 /* Only pass -1 or 0..255 to these macros. Never pass a signed char! */
-#define char_isa(c, t)	((char_bits+1)[(c)] & t)
-#define char_iscntrl(c)	char_isa((c), CHAR_CNTRL)
-#define char_isspace(c)	char_isa((c), CHAR_SPACE)
-#define char_ispunct(c)	char_isa((c), CHAR_PUNCT)
-#define char_isdigit(c)	char_isa((c), CHAR_DIGIT)
-#define char_isxdigit(c)	char_isa((c), CHAR_XDIGIT)
-#define char_isupper(c)	char_isa((c), CHAR_UPPER)
-#define char_islower(c)	char_isa((c), CHAR_LOWER)
-#define char_isident(c)	char_isa((c), CHAR_IDENT)
-#define char_isalpha(c)	char_isa((c), CHAR_ALPHA)
-#define char_isalnum(c)	char_isa((c), CHAR_ALNUM)
-#define char_isgraph(c)	char_isa((c), CHAR_GRAPH)
-
-#define char_toupper(c)	((c) - (char_islower(c) >> 1))
-#define char_tolower(c)	((c) + char_isupper(c))
+#define char_isa(c, t) ((char_bits+1)[(c)] & t)
+#define char_iscntrl(c) char_isa((c), CHAR_CNTRL)
+#define char_isspace(c) char_isa((c), CHAR_SPACE)
+#define char_ispunct(c) char_isa((c), CHAR_PUNCT)
+#define char_isdigit(c) char_isa((c), CHAR_DIGIT)
+#define char_isxdigit(c) char_isa((c), CHAR_XDIGIT)
+#define char_isupper(c) char_isa((c), CHAR_UPPER)
+#define char_islower(c) char_isa((c), CHAR_LOWER)
+#define char_isident(c) char_isa((c), CHAR_IDENT)
+#define char_isalpha(c) char_isa((c), CHAR_ALPHA)
+#define char_isalnum(c) char_isa((c), CHAR_ALNUM)
+#define char_isgraph(c) char_isa((c), CHAR_GRAPH)
+#define char_toupper(c) ((c)-(char_islower(c)>>1))
+#define char_tolower(c) ((c)+char_isupper(c))
 
 static const uint8_t char_bits[257] = {
     0,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  3,  3,  3,  3,  3,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    2,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
-    152,152,152,152,152,152,152,152,152,152,  4,  4,  4,  4,  4,  4,
-    4,176,176,176,176,176,176,160,160,160,160,160,160,160,160,160,
-    160,160,160,160,160,160,160,160,160,160,160,  4,  4,  4,  4,132,
-    4,208,208,208,208,208,208,192,192,192,192,192,192,192,192,192,
-    192,192,192,192,192,192,192,192,192,192,192,  4,  4,  4,  4,  1,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,
-    128,128,128,128,128,128,128,128,128,128,128,128,128,128,128,128
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+    152, 152, 152, 152, 152, 152, 152, 152, 152, 152, 4, 4, 4, 4, 4, 4,
+    4, 176, 176, 176, 176, 176, 176, 160, 160, 160, 160, 160, 160, 160, 160, 160,
+    160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 4, 4, 4, 4, 132,
+    4, 208, 208, 208, 208, 208, 208, 192, 192, 192, 192, 192, 192, 192, 192, 192,
+    192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 192, 4, 4, 4, 4, 1,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128,
+    128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128
 };
 
 
 /* Definitions for circular decimal digit buffer (base 100 = 2 digits/byte). */
-#define NEO_STRSCAN_DIG	1024
-#define NEO_STRSCAN_MAXDIG	800	 /* 772 + extra are sufficient. */
+#define NEO_STRSCAN_DIG    1024
+#define NEO_STRSCAN_MAXDIG    800     /* 772 + extra are sufficient. */
 #define NEO_STRSCAN_DDIG (NEO_STRSCAN_DIG/2)
 #define NEO_STRSCAN_DMASK (NEO_STRSCAN_DDIG-1)
-#define NEO_STRSCAN_MAXEXP	(1<<20)
+#define NEO_STRSCAN_MAXEXP    (1<<20)
 
 /* Helpers for circular buffer. */
-#define dnext(a) (((a)+1) & NEO_STRSCAN_DMASK)
-#define dprev(a) (((a)-1) & NEO_STRSCAN_DMASK)
-#define dlen(lo, hi) ((int32_t)(((lo)-(hi)) & NEO_STRSCAN_DMASK))
-#define casecmp(c, k) (((c) | 0x20) == k)
+#define dnext(a) (((a)+1)&NEO_STRSCAN_DMASK)
+#define dprev(a) (((a)-1)&NEO_STRSCAN_DMASK)
+#define dlen(lo, hi) ((int32_t)(((lo)-(hi))&NEO_STRSCAN_DMASK))
+#define casecmp(c, k) (((c)|0x20)==(k))
 
 /* Final conversion to double. */
 static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
@@ -625,21 +737,21 @@ static void strscan_double(uint64_t x, record_t *o, int32_t ex2, int32_t neg) {
     /* Avoid double rounding for denormals. */
     if (neo_unlikely(ex2 <= -1075 && x != 0)) {
 #if NEO_COM_GCC ^ NEO_COM_CLANG
-        int32_t b = (int32_t)(__builtin_clzll(x)^63);
+        int32_t b = (int32_t)(__builtin_clzll(x) ^ 63);
 #else
         int32_t b = (x>>32)
                     ? 32+(int32_t)neo_bsr32((uint32_t)(x>>32)) :
                     (int32_t)neo_bsr32((uint32_t)x);
 #endif
-        if ((int32_t)b + ex2 <= -1023 && (int32_t)b + ex2 >= -1075) {
-            uint64_t rb = (uint64_t)1 << (-1075-ex2);
-            if ((x & rb) && ((x & (rb+rb+rb-1)))) x += rb+rb;
-            x = (x & ~(rb+rb-1));
+        if ((int32_t) b + ex2 <= -1023 && (int32_t)b + ex2 >= -1075) {
+            uint64_t rb = (uint64_t) 1 << (-1075 - ex2);
+            if ((x & rb) && ((x & (rb + rb + rb - 1)))) { x += rb + rb; }
+            x = (x & ~(rb + rb - 1));
         }
     }
     /* Convert to double using a signed int64_t conversion, then rescale. */
-    neo_assert((int64_t)x >= 0, "Bad double conversion");
-    n = (double)(int64_t)x;
+    neo_assert((int64_t) x >= 0, "Bad double conversion");
+    n = (double) (int64_t) x;
     if (neg) { n = -n; }
     if (ex2) { n = ldexp(n, ex2); }
     o->as_float = n;
@@ -658,8 +770,9 @@ static neo_strscan_format_t strscan_hex(
     neo_dassert(p != NULL && o != NULL, "Invalid arguments");
     uint64_t x = 0;
     uint32_t i;
-    for (i = dig > 16 ? 16 : dig ; i; i--, p++) {     /* Scan hex digits. */
-        uint32_t d = (*p != '.' ? *p : *++p); if (d > '9') d += 9;
+    for (i = dig > 16 ? 16 : dig; i; i--, p++) {     /* Scan hex digits. */
+        uint32_t d = (*p != '.' ? *p : *++p);
+        if (d > '9') d += 9;
         x = (x << 4) + (d & 15);
     }
     for (i = 16; i < dig; i++, p++) { /* Summarize rounding-effect of excess digits. */
@@ -668,27 +781,33 @@ static neo_strscan_format_t strscan_hex(
     switch (fmt) {     /* Format-specific handling. */
         case NEO_STRSCAN_INT:
             if (!(opt & NEO_STRSCAN_OPT_TONUM)
-                && x < 0x80000000u+(uint32_t)neg
+                && x < 0x80000000u + (uint32_t) neg
                 && !(x == 0 && neg)) {
-                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
                 return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
             }
-            if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; break; }
-            NEO_FALLTHROUGH;
+            if (!(opt & NEO_STRSCAN_OPT_C)) {
+                fmt = NEO_STRSCAN_NUM;
+                break;
+            }
+                    NEO_FALLTHROUGH;
         case NEO_STRSCAN_U32:
             if (dig > 8) { return NEO_STRSCAN_ERROR; }
-            o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
             return NEO_STRSCAN_U32;
         case NEO_STRSCAN_I64:
         case NEO_STRSCAN_U64:
             if (dig > 16) { return NEO_STRSCAN_ERROR; }
-            o->ru64 = neg ? ~x+1u : x;
+            o->ru64 = neg ? ~x + 1u : x;
             return fmt;
         default:
             break;
     }
     /* Reduce range, then convert to double. */
-    if ((x & 0xc00000000000000ull)) { x = (x >> 2) | (x & 3); ex2 += 2; }
+    if ((x & 0xc00000000000000ull)) {
+        x = (x >> 2) | (x & 3);
+        ex2 += 2;
+    }
     strscan_double(x, o, ex2, neg);
     return fmt;
 }
@@ -710,17 +829,18 @@ static neo_strscan_format_t strscan_oct(
     }
     switch (fmt) {     /* Format-specific handling. */
         case NEO_STRSCAN_INT:
-            if (x >= 0x80000000u+(uint32_t)neg) {
+            if (x >= 0x80000000u + (uint32_t) neg) {
                 fmt = NEO_STRSCAN_U32;
-            } NEO_FALLTHROUGH;
+            }
+                    NEO_FALLTHROUGH;
         case NEO_STRSCAN_U32:
             if ((x >> 32)) { return NEO_STRSCAN_ERROR; }
-            o->ri32 = neg ? (int32_t)(~(uint32_t)x+1u) : (int32_t)x;
+            o->ri32 = neg ? (int32_t)(~(uint32_t) x + 1u) : (int32_t)x;
             break;
         default:
         case NEO_STRSCAN_I64:
         case NEO_STRSCAN_U64:
-            o->ru64 = neg ? ~x+1u : x;
+            o->ru64 = neg ? ~x + 1u : x;
             break;
     }
     return fmt;
@@ -744,12 +864,14 @@ static neo_strscan_format_t strscan_dec(
             ex10 += (int32_t)(i - NEO_STRSCAN_MAXDIG);
             i = NEO_STRSCAN_MAXDIG;
         }
-        if ((((uint32_t)ex10^i) & 1)) { /* Scan unaligned leading digit. */
+        if ((((uint32_t) ex10 ^ i) & 1)) { /* Scan unaligned leading digit. */
             *xip++ = ((*p != '.' ? *p : *++p) & 15), i--, p++;
         }
-        for ( ; i > 1; i -= 2) { /* Scan aligned double-digits. */
-            uint32_t d = 10 * ((*p != '.' ? *p : *++p) & 15); p++;
-            *xip++ = (uint8_t)(d + ((*p != '.' ? *p : *++p) & 15)); p++;
+        for (; i > 1; i -= 2) { /* Scan aligned double-digits. */
+            uint32_t d = 10 * ((*p != '.' ? *p : *++p) & 15);
+            p++;
+            *xip++ = (uint8_t) (d + ((*p != '.' ? *p : *++p) & 15));
+            p++;
         }
         /* Scan and realign trailing digit. */
         if (i) { *xip++ = 10 * ((*p != '.' ? *p : *++p) & 15), ex10--, dig++, p++; }
@@ -777,32 +899,35 @@ static neo_strscan_format_t strscan_dec(
         uint8_t *xis;
         uint64_t x = xi[0];
         double n;
-        for (xis = xi+1; xis < xip; xis++) x = x * 100 + *xis;
-        if (!(dig == 20 && (xi[0] > 18 || (int64_t)x >= 0))) {  /* No overflow? */
+        for (xis = xi + 1; xis < xip; xis++) x = x * 100 + *xis;
+        if (!(dig == 20 && (xi[0] > 18 || (int64_t) x >= 0))) {  /* No overflow? */
             /* Format-specific handling. */
             switch (fmt) {
                 case NEO_STRSCAN_INT:
-                    if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u+(uint32_t)neg) {
-                        o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                    if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u + (uint32_t) neg) {
+                        o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
                         return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
                     }
-                    if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; goto plainnumber; }
-                    NEO_FALLTHROUGH;
+                    if (!(opt & NEO_STRSCAN_OPT_C)) {
+                        fmt = NEO_STRSCAN_NUM;
+                        goto plainnumber;
+                    }
+                            NEO_FALLTHROUGH;
                 case NEO_STRSCAN_U32:
                     if ((x >> 32) != 0) { return NEO_STRSCAN_ERROR; }
-                    o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                    o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
                     return NEO_STRSCAN_U32;
                 case NEO_STRSCAN_I64:
                 case NEO_STRSCAN_U64:
-                    o->ru64 = neg ? ~x+1u : x;
+                    o->ru64 = neg ? ~x + 1u : x;
                     return fmt;
                 default:
                 plainnumber:  /* Fast path for plain numbers < 2^63. */
-                    if ((int64_t)x < 0) { break; }
-                    n = (double)(int64_t)x;
+                    if ((int64_t) x < 0) { break; }
+                    n = (double) (int64_t) x;
                     if (neg) n = -n;
                     o->as_float = n;
-                return fmt;
+                    return fmt;
             }
         }
     }
@@ -814,32 +939,37 @@ static neo_strscan_format_t strscan_dec(
         return NEO_STRSCAN_ERROR;
     }
     {
-        uint32_t hi = 0, lo = (uint32_t)(xip-xi);
+        uint32_t hi = 0, lo = (uint32_t) (xip - xi);
         int32_t ex2 = 0, idig = (int32_t)lo + (ex10 >> 1);
         neo_assert(lo > 0 && (ex10 & 1) == 0, "Bad lo ex10: %" PRIx32, ex10);
         /* Handle simple overflow/underflow. */
-        if (idig > 310/2) {
+        if (idig > 310 / 2) {
             if (neg) { rec_setminf(*o); }
             else { rec_setpinf(*o); }
             return fmt;
+        } else if (idig < -326 / 2) {
+            o->as_float = neg ? -0.0 : 0.0;
+            return fmt;
         }
-        else if (idig < -326/2) { o->as_float = neg ? -0.0 : 0.0; return fmt; }
         while (idig < 9 && idig < dlen(lo, hi)) { /* Scale up until we have at least 17 or 18 integer part digits. */
             uint32_t i, cy = 0;
             ex2 -= 6;
-            for (i = dprev(lo); ; i = dprev(i)) {
-                uint32_t d = (uint32_t)(xi[i] << 6) + cy;
+            for (i = dprev(lo);; i = dprev(i)) {
+                uint32_t d = (uint32_t) (xi[i] << 6) + cy;
                 cy = (((d >> 2) * 5243) >> 17);
                 d = d - cy * 100;  /* Div/mod 100. */
-                xi[i] = (uint8_t)d;
+                xi[i] = (uint8_t) d;
                 if (i == hi) { break; }
-                if (d == 0 && i == dprev(lo)){  lo = i; }
+                if (d == 0 && i == dprev(lo)) { lo = i; }
             }
             if (cy) {
                 hi = dprev(hi);
                 if (xi[dprev(lo)] == 0) { lo = dprev(lo); }
-                else if (hi == lo) { lo = dprev(lo); xi[dprev(lo)] |= xi[lo]; }
-                xi[hi] = (uint8_t)cy;
+                else if (hi == lo) {
+                    lo = dprev(lo);
+                    xi[dprev(lo)] |= xi[lo];
+                }
+                xi[hi] = (uint8_t) cy;
                 ++idig;
             }
         }
@@ -854,7 +984,10 @@ static neo_strscan_format_t strscan_dec(
                 i = dnext(i);
             } while (i != lo);
             while (cy) {
-                if (hi == lo) { xi[dprev(lo)] |= 1; break; }
+                if (hi == lo) {
+                    xi[dprev(lo)] |= 1;
+                    break;
+                }
                 xi[lo] = (cy >> 6) & 255;
                 lo = dnext(lo);
                 cy = 100 * (cy & 0x3f);
@@ -907,25 +1040,31 @@ static neo_strscan_format_t strscan_bin(
     }
     switch (fmt) {     /* Format-specific handling. */
         case NEO_STRSCAN_INT:
-            if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u+(uint32_t)neg) {
-                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            if (!(opt & NEO_STRSCAN_OPT_TONUM) && x < 0x80000000u + (uint32_t) neg) {
+                o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
                 return NEO_STRSCAN_INT;  /* Fast path for 32-bit integers. */
             }
-            if (!(opt & NEO_STRSCAN_OPT_C)) { fmt = NEO_STRSCAN_NUM; break; }
-            NEO_FALLTHROUGH;
+            if (!(opt & NEO_STRSCAN_OPT_C)) {
+                fmt = NEO_STRSCAN_NUM;
+                break;
+            }
+                    NEO_FALLTHROUGH;
         case NEO_STRSCAN_U32:
             if (dig > 32) return NEO_STRSCAN_ERROR;
-            o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
             return NEO_STRSCAN_U32;
         case NEO_STRSCAN_I64:
         case NEO_STRSCAN_U64:
-            o->ru64 = neg ? ~x+1u : x;
+            o->ru64 = neg ? ~x + 1u : x;
             return fmt;
         default:
             break;
     }
     /* Reduce range, then convert to double. */
-    if ((x & 0xc00000000000000ull)) { x = (x >> 2) | (x & 3); ex2 += 2; }
+    if ((x & 0xc00000000000000ull)) {
+        x = (x >> 2) | (x & 3);
+        ex2 += 2;
+    }
     strscan_double(x, o, ex2, neg);
     return fmt;
 }
@@ -938,7 +1077,10 @@ neo_strscan_format_t neo_strscan_scan(
     neo_strscan_opt_t opt
 ) {
     neo_dassert(p != NULL && o != NULL, "Invalid arguments");
-    if (!len || !*p) { o->ru64 = 0; return NEO_STRSCAN_EMPTY; }
+    if (!len || !*p) {
+        o->ru64 = 0;
+        return NEO_STRSCAN_EMPTY;
+    }
     int32_t neg = 0;
     const uint8_t *pe = p + len;
     /* Remove leading space, parse sign and non-numbers. */
@@ -948,16 +1090,16 @@ neo_strscan_format_t neo_strscan_scan(
         if (neo_unlikely(*p >= 'A')) {  /* Parse "inf", "infinity" or "nan". */
             record_t tmp;
             rec_setnan(tmp);
-            if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'f')) {
+            if (casecmp(p[0], 'i') && casecmp(p[1], 'n') && casecmp(p[2], 'f')) {
                 if (neg) {
                     rec_setminf(tmp);
                 } else {
                     rec_setpinf(tmp);
                 }
                 p += 3;
-                if (casecmp(p[0],'i') && casecmp(p[1],'n') && casecmp(p[2],'i') &&
-                    casecmp(p[3],'t') && casecmp(p[4],'y')) { p += 5; }
-            } else if (casecmp(p[0],'n') && casecmp(p[1],'a') && casecmp(p[2],'n')) {
+                if (casecmp(p[0], 'i') && casecmp(p[1], 'n') && casecmp(p[2], 'i') &&
+                    casecmp(p[3], 't') && casecmp(p[4], 'y')) { p += 5; }
+            } else if (casecmp(p[0], 'n') && casecmp(p[1], 'a') && casecmp(p[2], 'n')) {
                 p += 3;
             }
             while (char_isspace(*p)) { ++p; }
@@ -985,7 +1127,7 @@ neo_strscan_format_t neo_strscan_scan(
                     base = 0, p += 2;
                 }
             }
-            for ( ; ; p++) {
+            for (;; p++) {
                 if (*p == '0') {
                     hasdig = 1;
                 } else if (*p == '.') {
@@ -996,7 +1138,7 @@ neo_strscan_format_t neo_strscan_scan(
                 }
             }
         }
-        for (sp = p; ; p++) { /* Preliminary digit and decimal point scan. */
+        for (sp = p;; p++) { /* Preliminary digit and decimal point scan. */
             if (neo_likely(char_isa(*p, cmask))) {
                 x = x * 10 + (*p & 15);  /* For fast path below. */
                 ++dig;
@@ -1012,16 +1154,18 @@ neo_strscan_format_t neo_strscan_scan(
             if (base == 2) { return NEO_STRSCAN_ERROR; }
             fmt = NEO_STRSCAN_NUM;
             if (dig) {
-                ex = (int32_t)(dp-(p-1)); dp = p-1;
+                ex = (int32_t)(dp - (p - 1));
+                dp = p - 1;
                 while (ex < 0 && *dp-- == '0') { ++ex, --dig; }  /* Skip trailing zeros. */
                 if (ex <= -NEO_STRSCAN_MAXEXP) { return NEO_STRSCAN_ERROR; }
                 if (base == 16) { ex *= 4; }
             }
         }
-        if (base >= 10 && casecmp(*p, (uint32_t)(base == 16 ? 'p' : 'e'))) {  /* Parse exponent. */
+        if (base >= 10 && casecmp(*p, (uint32_t) (base == 16 ? 'p' : 'e'))) {  /* Parse exponent. */
             uint32_t xx;
             int negx = 0;
-            fmt = NEO_STRSCAN_NUM; p++;
+            fmt = NEO_STRSCAN_NUM;
+            p++;
             if (*p == '+' || *p == '-') { negx = (*p++ == '-'); }
             if (!char_isdigit(*p)) { return NEO_STRSCAN_ERROR; }
             xx = (*p++ & 15);
@@ -1030,7 +1174,7 @@ neo_strscan_format_t neo_strscan_scan(
                 if (xx >= NEO_STRSCAN_MAXEXP) { return NEO_STRSCAN_ERROR; }
                 p++;
             }
-            ex += negx ? (int32_t)(~xx+1u) : (int32_t)xx;
+            ex += negx ? (int32_t)(~xx + 1u) : (int32_t)xx;
         }
         /* Parse suffix. */
         if (*p) {
@@ -1038,13 +1182,14 @@ neo_strscan_format_t neo_strscan_scan(
             /* NYI: f (float). Not needed until cp_number() handles non-integers. */
             if (casecmp(*p, 'i')) {
                 if (!(opt & NEO_STRSCAN_OPT_IMAG)) { return NEO_STRSCAN_ERROR; }
-                ++p; fmt = NEO_STRSCAN_IMAG;
+                ++p;
+                fmt = NEO_STRSCAN_IMAG;
             } else if (fmt == NEO_STRSCAN_INT) {
                 if (casecmp(*p, 'u')) { p++, fmt = NEO_STRSCAN_U32; }
                 if (casecmp(*p, 'l')) {
                     ++p;
                     if (casecmp(*p, 'l')) { p++, fmt += NEO_STRSCAN_I64 - NEO_STRSCAN_INT; }
-                    else if (!(opt & NEO_STRSCAN_OPT_C)) {  return NEO_STRSCAN_ERROR; }
+                    else if (!(opt & NEO_STRSCAN_OPT_C)) { return NEO_STRSCAN_ERROR; }
                     else if (sizeof(long) == 8) { fmt += NEO_STRSCAN_I64 - NEO_STRSCAN_INT; }
                 }
                 if (casecmp(*p, 'u') && (fmt == NEO_STRSCAN_INT || fmt == NEO_STRSCAN_I64)) {
@@ -1060,15 +1205,15 @@ neo_strscan_format_t neo_strscan_scan(
         }
         if (p < pe) { return NEO_STRSCAN_ERROR; }
         if (fmt == NEO_STRSCAN_INT && base == 10 && /* Fast path for decimal 32-bit integers. */
-            (dig < 10 || (dig == 10 && *sp <= '2' && x < 0x80000000u+(uint32_t)neg))) {
+            (dig < 10 || (dig == 10 && *sp <= '2' && x < 0x80000000u + (uint32_t) neg))) {
             if ((opt & NEO_STRSCAN_OPT_TONUM)) {
-                o->as_float = neg ? -(double)x : (double)x;
+                o->as_float = neg ? -(double) x : (double) x;
                 return NEO_STRSCAN_NUM;
             } else if (x == 0 && neg) {
                 o->as_float = -0.0;
                 return NEO_STRSCAN_NUM;
             } else {
-                o->ri32 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                o->ri32 = neg ? (int32_t)(~x + 1u) : (int32_t)x;
                 return NEO_STRSCAN_INT;
             }
         }
@@ -1085,7 +1230,10 @@ neo_strscan_format_t neo_strscan_scan(
         if (fmt == NEO_STRSCAN_NUM && (opt & NEO_STRSCAN_OPT_TOINT) && o->ru64 != 0x8000000000000000ull) {
             double n = o->as_float;
             int32_t i = (int32_t)(n);
-            if (n == (double)i) { o->ri32 = i; return NEO_STRSCAN_INT; }
+            if (n == (double) i) {
+                o->ri32 = i;
+                return NEO_STRSCAN_INT;
+            }
         }
         return fmt;
     }
@@ -1100,8 +1248,8 @@ neo_strscan_format_t neo_strscan_scan(
 
 #define ONE_E_P(X) 1e+0 ## X
 #define ONE_E_N(X) 1e-0 ## X
-static const int16_t rescale_e[] = { RESCALE_EXPONENTS(-, +) };
-static const double rescale_n[] = { RESCALE_EXPONENTS(ONE_E_P, ONE_E_N) };
+static const int16_t rescale_e[] = {RESCALE_EXPONENTS(-, +)};
+static const double rescale_n[] = {RESCALE_EXPONENTS(ONE_E_P, ONE_E_N)};
 #undef ONE_E_N
 #undef ONE_E_P
 #undef RESCALE_EXPONENTS
@@ -1134,41 +1282,54 @@ static uint32_t ndigits_dec_threshold[11] = {
 };
 
 #define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
+
 static uint8_t *fmt_i32(uint8_t *p, int32_t k) { /* Write integer to buffer. */
     neo_dassert(p != NULL, "Invalid arguments");
-    uint32_t u = (uint32_t)k;
-    if (k < 0) { u = ~u+1u; *p++ = '-'; }
+    uint32_t u = (uint32_t) k;
+    if (k < 0) {
+        u = ~u + 1u;
+        *p++ = '-';
+    }
     if (u < 10000) {
         if (u < 10) { goto dig1; }
         if (u < 100) { goto dig2; }
         if (u < 1000) { goto dig3; }
     } else {
-        uint32_t v = u / 10000; u -= v * 10000;
+        uint32_t v = u / 10000;
+        u -= v * 10000;
         if (v < 10000) {
             if (v < 10) { goto dig5; }
             if (v < 100) { goto dig6; }
             if (v < 1000) { goto dig7; }
         } else {
-            uint32_t w = v / 10000; v -= w * 10000;
-            if (w >= 10) { wint_r(w, 10, 10) }
-            *p++ = (uint8_t)('0'+w);
+            uint32_t w = v / 10000;
+            v -= w * 10000;
+            if (w >= 10) {wint_r(w, 10, 10)}
+            *p++ = (uint8_t) ('0' + w);
         }
         wint_r(v, 23, 1000)
-        dig7: wint_r(v, 12, 100)
-        dig6: wint_r(v, 10, 10)
-        dig5: *p++ = (uint8_t)('0'+v);
+        dig7:
+        wint_r(v, 12, 100)
+        dig6:
+        wint_r(v, 10, 10)
+        dig5:
+        *p++ = (uint8_t) ('0' + v);
     }
     wint_r(u, 23, 1000)
-    dig3: wint_r(u, 12, 100)
-    dig2: wint_r(u, 10, 10)
-    dig1: *p++ = (uint8_t)('0'+u);
+    dig3:
+    wint_r(u, 12, 100)
+    dig2:
+    wint_r(u, 10, 10)
+    dig1:
+    *p++ = (uint8_t) ('0' + u);
     return p;
 }
+
 #undef wint_r
 
 uint8_t *neo_fmt_int(uint8_t *p, neo_int_t x) {
     neo_dassert(p != NULL, "Invalid arguments");
-    p = fmt_i32(p, (int32_t)(x & ~(uint32_t)0));
+    p = fmt_i32(p, (int32_t)(x & ~(uint32_t) 0));
     return (x >> 32) == 0 ? p : fmt_i32(p, (int32_t)(x >> 32));
 }
 
@@ -1182,81 +1343,80 @@ typedef uint32_t sfmt_t;
 
 /* Compute the number of digits in the decimal representation of x. */
 static size_t ndigits_dec(uint32_t x) {
-    size_t t = (size_t)((neo_bsr32(x | 1) * 77) >> 8) + 1; /* 2^8/77 is roughly log2(10) */
+    size_t t = (size_t) ((neo_bsr32(x | 1) * 77) >> 8) + 1; /* 2^8/77 is roughly log2(10) */
     return t + (x > ndigits_dec_threshold[t]);
 }
 
 /* Format subtypes (bits are reused). */
-#define STRFMT_T_HEX	0x0010	/* STRFMT_UINT */
-#define STRFMT_T_OCT	0x0020	/* STRFMT_UINT */
-#define STRFMT_T_FP_A	0x0000	/* STRFMT_NUM */
-#define STRFMT_T_FP_E	0x0010	/* STRFMT_NUM */
-#define STRFMT_T_FP_F	0x0020	/* STRFMT_NUM */
-#define STRFMT_T_FP_G	0x0030	/* STRFMT_NUM */
-#define STRFMT_T_QUOTED	0x0010	/* STRFMT_STR */
+#define STRFMT_T_HEX    0x0010    /* STRFMT_UINT */
+#define STRFMT_T_OCT    0x0020    /* STRFMT_UINT */
+#define STRFMT_T_FP_A    0x0000    /* STRFMT_NUM */
+#define STRFMT_T_FP_E    0x0010    /* STRFMT_NUM */
+#define STRFMT_T_FP_F    0x0020    /* STRFMT_NUM */
+#define STRFMT_T_FP_G    0x0030    /* STRFMT_NUM */
+#define STRFMT_T_QUOTED    0x0010    /* STRFMT_STR */
 
 /* Format flags. */
-#define STRFMT_F_LEFT	0x0100
-#define STRFMT_F_PLUS	0x0200
-#define STRFMT_F_ZERO	0x0400
-#define STRFMT_F_SPACE	0x0800
-#define STRFMT_F_ALT	0x1000
-#define STRFMT_F_UPPER	0x2000
+#define STRFMT_F_LEFT    0x0100
+#define STRFMT_F_PLUS    0x0200
+#define STRFMT_F_ZERO    0x0400
+#define STRFMT_F_SPACE    0x0800
+#define STRFMT_F_ALT    0x1000
+#define STRFMT_F_UPPER    0x2000
 
 /* Format indicator fields. */
-#define STRFMT_SH_WIDTH	16
-#define STRFMT_SH_PREC	24
-
-#define STRFMT_TYPE(sf) ((FormatType)((sf) & 15))
-#define STRFMT_WIDTH(sf) (((sf) >> STRFMT_SH_WIDTH) & 255u)
-#define STRFMT_PREC(sf)	((((sf) >> STRFMT_SH_PREC) & 255u) - 1u)
-#define STRFMT_FP(sf) (((sf) >> 4) & 3)
+#define STRFMT_SH_WIDTH    16
+#define STRFMT_SH_PREC    24
+#define strfmt_width(sf) (((sf)>>STRFMT_SH_WIDTH)&255u)
+#define strfmt_prec(sf) ((((sf)>>STRFMT_SH_PREC)&255u)-1u)
+#define strfmt_fp(sf) (((sf)>>4)&3)
 
 /* Formats for conversion characters. */
-#define STRFMT_A	(STRFMT_NUM|STRFMT_T_FP_A)
-#define STRFMT_C	(STRFMT_CHAR)
-#define STRFMT_D	(STRFMT_INT)
-#define STRFMT_E	(STRFMT_NUM|STRFMT_T_FP_E)
-#define STRFMT_F	(STRFMT_NUM|STRFMT_T_FP_F)
-#define STRFMT_G	(STRFMT_NUM|STRFMT_T_FP_G)
-#define STRFMT_I	STRFMT_D
-#define STRFMT_O	(STRFMT_UINT|STRFMT_T_OCT)
-#define STRFMT_P	(STRFMT_PTR)
-#define STRFMT_Q	(STRFMT_STR|STRFMT_T_QUOTED)
-#define STRFMT_S	(STRFMT_STR)
-#define STRFMT_U	(STRFMT_UINT)
-#define STRFMT_X	(STRFMT_UINT|STRFMT_T_HEX)
-#define STRFMT_G14	(STRFMT_G | ((14+1) << STRFMT_SH_PREC))
+#define STRFMT_A (STRFMT_NUM|STRFMT_T_FP_A)
+#define STRFMT_C (STRFMT_CHAR)
+#define STRFMT_D (STRFMT_INT)
+#define STRFMT_E (STRFMT_NUM|STRFMT_T_FP_E)
+#define STRFMT_F (STRFMT_NUM|STRFMT_T_FP_F)
+#define STRFMT_G (STRFMT_NUM|STRFMT_T_FP_G)
+#define STRFMT_I STRFMT_D
+#define STRFMT_O (STRFMT_UINT|STRFMT_T_OCT)
+#define STRFMT_P (STRFMT_PTR)
+#define STRFMT_Q (STRFMT_STR|STRFMT_T_QUOTED)
+#define STRFMT_S (STRFMT_STR)
+#define STRFMT_U (STRFMT_UINT)
+#define STRFMT_X (STRFMT_UINT|STRFMT_T_HEX)
+#define STRFMT_G14 (STRFMT_G|((14+1)<<STRFMT_SH_PREC))
 
 #define ND_MUL2K_MAX_SHIFT 29
-#define ND_MUL2K_DIV1E9(val) ((uint32_t)((val)/1000000000))
+#define nd_mul2k_div1e9(val) ((uint32_t)((val)/1000000000))
 
 /* Multiply nd by 2^k and add carry_in (ndlo is assumed to be zero). */
 static uint32_t nd_mul2k(uint32_t *nd, uint32_t ndhi, uint32_t k, uint32_t carry_in, sfmt_t sf) {
     neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, ndlo = 0, start = 1;
     /* Performance hacks. */
-    if (k > ND_MUL2K_MAX_SHIFT*2 && STRFMT_FP(sf) != STRFMT_FP(STRFMT_T_FP_F)) {
-        start = ndhi - (STRFMT_PREC(sf) + 17) / 8;
+    if (k > ND_MUL2K_MAX_SHIFT * 2 && strfmt_fp(sf) != strfmt_fp(STRFMT_T_FP_F)) {
+        start = ndhi - (strfmt_prec(sf) + 17) / 8;
     }
     /* Real logic. */
     while (k >= ND_MUL2K_MAX_SHIFT) {
         for (i = ndlo; i <= ndhi; i++) {
-            uint64_t val = ((uint64_t)nd[i] << ND_MUL2K_MAX_SHIFT) | carry_in;
-            carry_in = ND_MUL2K_DIV1E9(val);
-            nd[i] = (uint32_t)val - carry_in * 1000000000;
+            uint64_t val = ((uint64_t) nd[i] << ND_MUL2K_MAX_SHIFT) | carry_in;
+            carry_in = nd_mul2k_div1e9(val);
+            nd[i] = (uint32_t) val - carry_in * 1000000000;
         }
         if (carry_in) {
-            nd[++ndhi] = carry_in; carry_in = 0;
+            nd[++ndhi] = carry_in;
+            carry_in = 0;
             if (start++ == ndlo) { ++ndlo; }
         }
         k -= ND_MUL2K_MAX_SHIFT;
     }
     if (k) {
         for (i = ndlo; i <= ndhi; i++) {
-            uint64_t val = ((uint64_t)nd[i] << k) | carry_in;
-            carry_in = ND_MUL2K_DIV1E9(val);
-            nd[i] = (uint32_t)val - carry_in * 1000000000;
+            uint64_t val = ((uint64_t) nd[i] << k) | carry_in;
+            carry_in = nd_mul2k_div1e9(val);
+            nd[i] = (uint32_t) val - carry_in * 1000000000;
         }
         if (carry_in) { nd[++ndhi] = carry_in; }
     }
@@ -1272,19 +1432,23 @@ static uint32_t nd_div2k(uint32_t *nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
         if (!nd[0]) {
             return 0;
         } else {
-            uint32_t s = (uint32_t)neo_bsf32(nd[0]);
-            if (s >= k) { nd[0] >>= k; return 0; }
-            nd[0] >>= s; k -= s;
+            uint32_t s = (uint32_t) neo_bsf32(nd[0]);
+            if (s >= k) {
+                nd[0] >>= k;
+                return 0;
+            }
+            nd[0] >>= s;
+            k -= s;
         }
     }
     if (k > 18) {
-        if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_F)) {
-            stop1 = (uint32_t)(63 - (int32_t)STRFMT_PREC(sf) / 9);
+        if (strfmt_fp(sf) == strfmt_fp(STRFMT_T_FP_F)) {
+            stop1 = (uint32_t) (63 - (int32_t)strfmt_prec(sf) / 9);
         } else {
-            int32_t floorlog2 = (int32_t)(ndhi * 29 + (uint32_t)neo_bsr32(nd[ndhi]) - k);
+            int32_t floorlog2 = (int32_t)(ndhi * 29 + (uint32_t) neo_bsr32(nd[ndhi]) - k);
             int32_t floorlog10 = (int32_t)(floorlog2 * 0.30102999566398114);
-            stop1 = (uint32_t)(62 + (floorlog10 - (int32_t)STRFMT_PREC(sf)) / 9);
-            stop2 = (uint32_t)(61 + (int32_t)ndhi - (int32_t)STRFMT_PREC(sf) / 8);
+            stop1 = (uint32_t) (62 + (floorlog10 - (int32_t)strfmt_prec(sf)) / 9);
+            stop2 = (uint32_t) (61 + (int32_t)ndhi - (int32_t)strfmt_prec(sf) / 8);
         }
     }
     /* Real logic. */
@@ -1298,11 +1462,19 @@ static uint32_t nd_div2k(uint32_t *nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
             i = (i - 1) & 0x3f;
         }
         if (ndlo != stop1 && ndlo != stop2) {
-            if (carry) { ndlo = (ndlo - 1) & 0x3f; nd[ndlo] = carry; }
-            if (!nd[ndhi]) { ndhi = (ndhi - 1) & 0x3f; stop2--; }
+            if (carry) {
+                ndlo = (ndlo - 1) & 0x3f;
+                nd[ndlo] = carry;
+            }
+            if (!nd[ndhi]) {
+                ndhi = (ndhi - 1) & 0x3f;
+                stop2--;
+            }
         } else if (!nd[ndhi]) {
-            if (ndhi != ndlo) { ndhi = (ndhi - 1) & 0x3f; stop2--; }
-            else { return ndlo; }
+            if (ndhi != ndlo) {
+                ndhi = (ndhi - 1) & 0x3f;
+                stop2--;
+            } else { return ndlo; }
         }
         k -= 9;
     }
@@ -1315,7 +1487,10 @@ static uint32_t nd_div2k(uint32_t *nd, uint32_t ndhi, uint32_t k, sfmt_t sf) {
             if (i == ndlo) { break; }
             i = (i - 1) & 0x3f;
         }
-        if (carry) { ndlo = (ndlo - 1) & 0x3f; nd[ndlo] = carry; }
+        if (carry) {
+            ndlo = (ndlo - 1) & 0x3f;
+            nd[ndlo] = carry;
+        }
     }
     return ndlo;
 }
@@ -1325,12 +1500,12 @@ static uint32_t nd_add_m10e(uint32_t *nd, uint32_t ndhi, uint8_t m, int32_t e) {
     neo_dassert(nd != NULL, "Invalid arguments");
     uint32_t i, carry;
     if (e >= 0) {
-        i = (uint32_t)e/9;
-        carry = m * (ndigits_dec_threshold[e - (int32_t)i*9] + 1);
+        i = (uint32_t) e / 9;
+        carry = m * (ndigits_dec_threshold[e - (int32_t)i * 9] + 1);
     } else {
-        int32_t f = (e-8)/9;
-        i = (uint32_t)(64 + f);
-        carry = m * (ndigits_dec_threshold[e - f*9] + 1);
+        int32_t f = (e - 8) / 9;
+        i = (uint32_t) (64 + f);
+        carry = m * (ndigits_dec_threshold[e - f * 9] + 1);
     }
     for (;;) {
         uint32_t val = nd[i] + carry;
@@ -1353,6 +1528,7 @@ static uint32_t nd_add_m10e(uint32_t *nd, uint32_t ndhi, uint8_t m, int32_t e) {
 }
 
 #define wint_r(x, sh, sc) { uint32_t d = (x*(((1<<sh)+sc-1)/sc))>>sh; x -= d*sc; *p++ = (uint8_t)('0'+d); }
+
 /* Write 9-digit unsigned integer to buffer. */
 static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
     neo_dassert(p != NULL, "Invalid arguments");
@@ -1360,21 +1536,22 @@ static uint8_t *fmt_wuint9(uint8_t *p, uint32_t u) {
     u -= v * 10000;
     w = v / 10000;
     v -= w * 10000;
-    *p++ = (uint8_t)('0'+w);
+    *p++ = (uint8_t) ('0' + w);
     wint_r(v, 23, 1000)
     wint_r(v, 12, 100)
     wint_r(v, 10, 10)
-    *p++ = (uint8_t)('0'+v);
+    *p++ = (uint8_t) ('0' + v);
     wint_r(u, 23, 1000)
     wint_r(u, 12, 100)
     wint_r(u, 10, 10)
-    *p++ = (uint8_t)('0'+u);
+    *p++ = (uint8_t) ('0' + u);
     return p;
 }
+
 #undef wint_r
 
 /* Test whether two "nd" values are equal in their most significant digits. */
-static bool nd_similar(uint32_t *nd, uint32_t ndhi, uint32_t* ref, size_t hilen, size_t prec) {
+static bool nd_similar(uint32_t *nd, uint32_t ndhi, uint32_t *ref, size_t hilen, size_t prec) {
     neo_dassert(nd != NULL && ref != NULL, "Invalid arguments");
     uint8_t nd9[9], ref9[9];
     if (hilen <= prec) {
@@ -1399,7 +1576,7 @@ static bool nd_similar(uint32_t *nd, uint32_t ndhi, uint32_t* ref, size_t hilen,
 
 static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
     neo_dassert(p != NULL, "Invalid arguments");
-    size_t width = STRFMT_WIDTH(sf), prec = STRFMT_PREC(sf), len;
+    size_t width = strfmt_width(sf), prec = strfmt_prec(sf), len;
     record_t t;
     t.as_float = x;
     if (neo_unlikely((t.ru32x2.hi << 1) >= 0xffe00000)) {
@@ -1418,13 +1595,13 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
         if (!(sf & STRFMT_F_LEFT)) {
             while (width-- > len) { *p++ = ' '; }
         }
-        if (prefix) *p++ = (uint8_t)prefix;
-        *p++ = (uint8_t)(ch >> 16);
-        *p++ = (uint8_t)(ch >> 8);
-        *p++ = (uint8_t)ch;
-    } else if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_A)) {
+        if (prefix) *p++ = (uint8_t) prefix;
+        *p++ = (uint8_t) (ch >> 16);
+        *p++ = (uint8_t) (ch >> 8);
+        *p++ = (uint8_t) ch;
+    } else if (strfmt_fp(sf) == strfmt_fp(STRFMT_T_FP_A)) {
         /* %a */
-        const uint8_t *hexdig = (const uint8_t *)((sf & STRFMT_F_UPPER) ? "0123456789ABCDEFPX" : "0123456789abcdefpx");
+        const uint8_t *hexdig = (const uint8_t *) ((sf & STRFMT_F_UPPER) ? "0123456789ABCDEFPX" : "0123456789abcdefpx");
         int32_t e = (int32_t)(t.ru32x2.hi >> 20) & 0x7ff;
         uint8_t prefix = 0, eprefix = '+';
         if (t.ru32x2.hi & 0x80000000) { prefix = '-'; }
@@ -1436,24 +1613,26 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
             e -= 1023;
         } else if (t.ru32x2.lo | t.ru32x2.hi) {
             /* Non-zero denormal - normalise it. */
-            uint32_t shift = t.ru32x2.hi ? 20-(uint32_t)neo_bsr32(t.ru32x2.hi) : 52-(uint32_t)neo_bsr32(t.ru32x2.lo);
+            uint32_t shift = t.ru32x2.hi ? 20 - (uint32_t) neo_bsr32(t.ru32x2.hi) : 52 -
+                                                                                    (uint32_t) neo_bsr32(t.ru32x2.lo);
             e = -1022 - (int32_t)shift;
             t.ru64 <<= shift;
         }
         /* abs(n) == t.u64 * 2^(e - 52) */
         /* If n != 0, bit 52 of t.u64 is set, and is the highest set bit. */
-        if ((int32_t)prec < 0) {
+        if ((int32_t) prec < 0) {
             /* Default precision: use smallest precision giving exact result. */
-            prec = t.ru32x2.lo ? 13-(uint32_t)neo_bsf32(t.ru32x2.lo)/4 : 5-(uint32_t)neo_bsf32(t.ru32x2.hi|0x100000)/4;
+            prec = t.ru32x2.lo ? 13 - (uint32_t) neo_bsf32(t.ru32x2.lo) / 4 : 5 - (uint32_t) neo_bsf32(
+                    t.ru32x2.hi | 0x100000) / 4;
         } else if (prec < 13) {
             /* Precision is sufficiently low as to maybe require rounding. */
-            t.ru64 += (((uint64_t)1) << (51 - prec*4));
+            t.ru64 += (((uint64_t) 1) << (51 - prec * 4));
         }
         if (e < 0) {
             eprefix = '-';
             e = -e;
         }
-        len = 5 + ndigits_dec((uint32_t)e) + prec + (prefix != 0)
+        len = 5 + ndigits_dec((uint32_t) e) + prec + (prefix != 0)
               + ((prec | (sf & STRFMT_F_ALT)) != 0);
         if (!(sf & (STRFMT_F_LEFT | STRFMT_F_ZERO))) {
             while (width-- > len) { *p++ = ' '; }
@@ -1469,8 +1648,8 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
             /* Emit fractional part. */
             uint8_t *q = p + 1 + prec;
             *p = '.';
-            if (prec < 13) { t.ru64 >>= (52 - prec*4); }
-            else { while (prec > 13) { p[prec--] = '0'; } }
+            if (prec < 13) { t.ru64 >>= (52 - prec * 4); }
+            else { while (prec > 13) { p[prec--] = '0'; }}
             while (prec) {
                 p[prec--] = hexdig[t.ru64 & 15];
                 t.ru64 >>= 4;
@@ -1489,11 +1668,11 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
         if (t.ru32x2.hi & 0x80000000) { prefix = '-'; }
         else if ((sf & STRFMT_F_PLUS)) { prefix = '+'; }
         else if ((sf & STRFMT_F_SPACE)) { prefix = ' '; }
-        prec += ((int32_t)prec >> 31) & 7; /* Default precision is 6. */
-        if (STRFMT_FP(sf) == STRFMT_FP(STRFMT_T_FP_G)) {
+        prec += ((int32_t) prec >> 31) & 7; /* Default precision is 6. */
+        if (strfmt_fp(sf) == strfmt_fp(STRFMT_T_FP_G)) {
             /* %g - decrement precision if non-zero (to make it like %e). */
             prec--;
-            prec ^= (uint32_t)((int32_t)prec >> 31);
+            prec ^= (uint32_t) ((int32_t) prec >> 31);
         }
         if ((sf & STRFMT_T_FP_E) && prec < 14 && x != 0) {
             /* Precision is sufficiently low that rescaling will probably work. */
@@ -1504,8 +1683,9 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                 }
                 t.ru64 -= 2; /* Convert 2ulp below (later we convert 2ulp above). */
                 nd[0] = 0x100000 | (t.ru32x2.hi & 0xfffff);
-                e = ((int32_t)(t.ru32x2.hi >> 20) & 0x7ff) - 1075 - (ND_MUL2K_MAX_SHIFT < 29);
-                goto load_t_lo; rescale_failed:
+                e = ((int32_t) (t.ru32x2.hi >> 20) & 0x7ff) - 1075 - (ND_MUL2K_MAX_SHIFT < 29);
+                goto load_t_lo;
+                rescale_failed:
                 t.as_float = x;
                 e = (t.ru32x2.hi >> 20) & 0x7ff;
                 ndebias = 0;
@@ -1531,10 +1711,10 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
 #endif
         }
         if (e >= 0) {
-            ndhi = nd_mul2k(nd, ndhi, (uint32_t)e, 0, sf);
+            ndhi = nd_mul2k(nd, ndhi, (uint32_t) e, 0, sf);
             ndlo = 0;
         } else {
-            ndlo = nd_div2k(nd, ndhi, (uint32_t)-e, sf);
+            ndlo = nd_div2k(nd, ndhi, (uint32_t) -e, sf);
             if (ndhi && !nd[ndhi]) { --ndhi; }
         }
         /* abs(n) == nd * 10^ndebias (for slightly loose interpretation of ==) */
@@ -1560,42 +1740,45 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                 ** most significant digits, convert the +2ulp case, and compare them.
                 */
                 int32_t eidx = e
-                    + 70 + (ND_MUL2K_MAX_SHIFT < 29)
-                    + (t.ru32x2.lo >= 0xfffffffe && !(~t.ru32x2.hi << 12));
+                               + 70 + (ND_MUL2K_MAX_SHIFT < 29)
+                               + (t.ru32x2.lo >= 0xfffffffe && !(~t.ru32x2.hi << 12));
                 const int8_t *m_e = four_ulp_m_e + eidx * 2;
                 neo_assert(0 <= eidx && eidx < 128, "Bad eidx: %" PRIi32, eidx);
                 nd[33] = nd[ndhi];
                 nd[32] = nd[(ndhi - 1) & 0x3f];
                 nd[31] = nd[(ndhi - 2) & 0x3f];
-                nd_add_m10e(nd, ndhi, (uint8_t)*m_e, m_e[1]);
+                nd_add_m10e(nd, ndhi, (uint8_t) *m_e, m_e[1]);
                 if (neo_unlikely(!nd_similar(nd, ndhi, nd + 33, hilen, prec + 1))) {
                     goto rescale_failed;
                 }
             }
-            if ((int32_t)(prec - (size_t)nde) < (0x3f & -(int32_t)ndlo) * 9) {
+            if ((int32_t) (prec - (size_t) nde) < (0x3f & -(int32_t)ndlo) * 9) {
                 /* Precision is sufficiently low as to maybe require rounding. */
-                ndhi = nd_add_m10e(nd, ndhi, 5, (int32_t)((size_t)nde - prec - 1));
+                ndhi = nd_add_m10e(nd, ndhi, 5, (int32_t)((size_t) nde - prec - 1));
                 nde += (hilen != ndigits_dec(nd[ndhi]));
             }
             nde += ndebias;
             if ((sf & STRFMT_T_FP_F)) {
                 /* %g */
-                if ((int32_t)prec >= nde && nde >= -4) {
+                if ((int32_t) prec >= nde && nde >= -4) {
                     if (nde < 0) ndhi = 0;
-                    prec -= (size_t)nde;
+                    prec -= (size_t) nde;
                     goto g_format_like_f;
                 } else if (!(sf & STRFMT_F_ALT) && prec && width > 5) {
                     /* Decrease precision in order to strip trailing zeroes. */
                     uint8_t tail[9];
-                    uint32_t maxprec = (uint32_t)(hilen - 1 + ((ndhi - ndlo) & 0x3f) * 9);
+                    uint32_t maxprec = (uint32_t) (hilen - 1 + ((ndhi - ndlo) & 0x3f) * 9);
                     if (prec >= maxprec) prec = maxprec;
-                    else ndlo = (uint32_t)((ndhi - (uint32_t)(((int32_t)(prec - hilen) + 9) / 9)) & 0x3f);
-                    i = (uint32_t)(prec - hilen - (((ndhi - ndlo) & 0x3f) * 9) + 10);
+                    else ndlo = (uint32_t) ((ndhi - (uint32_t) (((int32_t) (prec - hilen) + 9) / 9)) & 0x3f);
+                    i = (uint32_t) (prec - hilen - (((ndhi - ndlo) & 0x3f) * 9) + 10);
                     fmt_wuint9(tail, nd[ndlo]);
                     while (prec && tail[--i] == '0') {
                         prec--;
                         if (!i) {
-                            if (ndlo == ndhi) { prec = 0; break; }
+                            if (ndlo == ndhi) {
+                                prec = 0;
+                                break;
+                            }
                             fmt_wuint9(tail, nd[++ndlo]);
                             i = 9;
                         }
@@ -1607,12 +1790,12 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                 eprefix = '-';
                 nde = -nde;
             }
-            len = 3 + prec + (prefix != 0) + ndigits_dec((uint32_t)nde) + (nde < 10)
+            len = 3 + prec + (prefix != 0) + ndigits_dec((uint32_t) nde) + (nde < 10)
                   + ((prec | (sf & STRFMT_F_ALT)) != 0);
             if (!(sf & (STRFMT_F_LEFT | STRFMT_F_ZERO))) {
                 while (width-- > len) { *p++ = ' '; }
             }
-            if (prefix) { *p++ = (uint8_t)prefix; }
+            if (prefix) { *p++ = (uint8_t) prefix; }
             if ((sf & (STRFMT_F_LEFT | STRFMT_F_ZERO)) == STRFMT_F_ZERO) {
                 while (width-- > len) { *p++ = '0'; }
             }
@@ -1620,8 +1803,10 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
             p[0] = p[1]; /* Put leading digit in the correct place. */
             if ((prec | (sf & STRFMT_F_ALT))) {
                 /* Emit fractional part. */
-                p[1] = '.'; p += 2;
-                prec -= (size_t)(q - p); p = q; /* Account for digits already emitted. */
+                p[1] = '.';
+                p += 2;
+                prec -= (size_t) (q - p);
+                p = q; /* Account for digits already emitted. */
                 /* Then emit chunks of 9 digits (this may emit 8 digits too many). */
                 for (i = ndhi; (int32_t)prec > 0 && i != ndlo; prec -= 9) {
                     i = (i - 1) & 0x3f;
@@ -1629,12 +1814,15 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                 }
                 if ((sf & STRFMT_T_FP_F) && !(sf & STRFMT_F_ALT)) {
                     /* %g (and not %#g) - strip trailing zeroes. */
-                    p += (int32_t)prec & ((int32_t)prec >> 31);
+                    p += (int32_t)prec & ((int32_t) prec >> 31);
                     while (p[-1] == '0') { p--; }
                     if (p[-1] == '.') p--;
                 } else {
                     /* %e (or %#g) - emit trailing zeroes. */
-                    while ((int32_t)prec > 0) { *p++ = '0'; prec--; }
+                    while ((int32_t) prec > 0) {
+                        *p++ = '0';
+                        prec--;
+                    }
                     p += (int32_t)prec;
                 }
             } else {
@@ -1646,7 +1834,7 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
             p = fmt_i32(p, nde);
         } else {
             /* %f (or, shortly, %g in %f style) */
-            if (prec < (size_t)(0x3f & -(int32_t)ndlo) * 9) {
+            if (prec < (size_t) (0x3f & -(int32_t)ndlo) * 9) {
                 /* Precision is sufficiently low as to maybe require rounding. */
                 ndhi = nd_add_m10e(nd, ndhi, 5, (int32_t)(0 - prec - 1));
             }
@@ -1658,13 +1846,16 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                     uint8_t tail[9];
                     uint32_t maxprec = (64 - ndlo) * 9;
                     if (prec >= maxprec) prec = maxprec;
-                    else ndlo = (uint32_t)(64 - (prec + 8) / 9);
-                    i = (uint32_t)(prec - ((63 - ndlo) * 9));
+                    else ndlo = (uint32_t) (64 - (prec + 8) / 9);
+                    i = (uint32_t) (prec - ((63 - ndlo) * 9));
                     fmt_wuint9(tail, nd[ndlo]);
                     while (prec && tail[--i] == '0') {
                         prec--;
                         if (!i) {
-                            if (ndlo == 63) { prec = 0; break; }
+                            if (ndlo == 63) {
+                                prec = 0;
+                                break;
+                            }
                             fmt_wuint9(tail, nd[++ndlo]);
                             i = 9;
                         }
@@ -1691,27 +1882,31 @@ static uint8_t *fmt_f64(uint8_t *p, neo_float_t x, sfmt_t sf) {
                 /* Emit fractional part. */
                 *p++ = '.';
                 /* Emit chunks of 9 digits (this may emit 8 digits too many). */
-                while ((int32_t)prec > 0 && i != ndlo) {
+                while ((int32_t) prec > 0 && i != ndlo) {
                     i = (i - 1) & 0x3f;
                     p = fmt_wuint9(p, nd[i]);
                     prec -= 9;
                 }
                 if ((sf & STRFMT_T_FP_E) && !(sf & STRFMT_F_ALT)) {
                     /* %g (and not %#g) - strip trailing zeroes. */
-                    p += (int32_t)prec & ((int32_t)prec >> 31);
+                    p += (int32_t)prec & ((int32_t) prec >> 31);
                     while (p[-1] == '0') p--;
                     if (p[-1] == '.') p--;
                 } else {
                     /* %f (or %#g) - emit trailing zeroes. */
-                    while ((int32_t)prec > 0) { *p++ = '0'; prec--; }
+                    while ((int32_t) prec > 0) {
+                        *p++ = '0';
+                        prec--;
+                    }
                     p += (int32_t)prec;
                 }
             }
         }
     }
-    if ((sf & STRFMT_F_LEFT)) while (width-- > len) {
-        *p++ = ' ';
-    }
+    if ((sf & STRFMT_F_LEFT))
+        while (width-- > len) {
+            *p++ = ' ';
+        }
     return p;
 }
 
@@ -1722,19 +1917,19 @@ uint8_t *neo_fmt_float(uint8_t *p, neo_float_t x) {
 
 uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
     neo_dassert(p != NULL, "Invalid arguments");
-    ptrdiff_t x = (ptrdiff_t)v;
-    size_t n = 2+2*sizeof(ptrdiff_t);
+    ptrdiff_t x = (ptrdiff_t) v;
+    size_t n = 2 + 2 * sizeof(ptrdiff_t);
     if (!x) {
         memcpy(p, "null", 4);
-        return p+4;
+        return p + 4;
     }
-    n = 2+2*4+((x>>32) ? 2+2*((size_t)neo_bsr32((uint32_t)(x>>32))>>3) : 0);
+    n = 2 + 2 * 4 + ((x >> 32) ? 2 + 2 * ((size_t) neo_bsr32((uint32_t) (x >> 32)) >> 3) : 0);
     p[0] = '0';
     p[1] = 'x';
-    for (size_t i = n-1; i >= 2; --i, x >>= 4) {
-        p[i] = ((const uint8_t *)"0123456789abcdef")[(x & 15)];
+    for (size_t i = n - 1; i >= 2; --i, x >>= 4) {
+        p[i] = ((const uint8_t *) "0123456789abcdef")[(x & 15)];
     }
-    return p+n;
+    return p + n;
 }
 
 /*
@@ -1780,8 +1975,9 @@ uint8_t *neo_fmt_ptr(uint8_t *p, const void *v) {
 #define SPAN_FLAG_ALIGNED_BLOCKS 4U
 #define SPAN_FLAG_UNMAPPED_MASTER 8U
 
-neo_static_assert((SMALL_GRANULARITY&(SMALL_GRANULARITY-1)) == 0 && "Small granularity must be power of two");
-neo_static_assert((SPAN_HEADER_SIZE&(SPAN_HEADER_SIZE-1)) == 0 && "Span header size must be power of two");
+neo_static_assert((SMALL_GRANULARITY & (SMALL_GRANULARITY - 1)) == 0 && "Small granularity must be power of two");
+
+neo_static_assert((SPAN_HEADER_SIZE & (SPAN_HEADER_SIZE - 1)) == 0 && "Span header size must be power of two");
 
 #if defined(__clang__) || defined(__GNUC__)
 # define MEM_ALLOCATOR
@@ -1994,28 +2190,6 @@ extern int madvise(caddr_t, size_t, int);
 
 #include <errno.h>
 
-#if NEO_ALLOC_ENABLE_ASSERTS
-#  undef NDEBUG
-#  if defined(_MSC_VER) && !defined(_DEBUG)
-#    define _DEBUG
-#  endif
-#  include <assert.h>
-#define MEM_TOSTRING_M(x) #x
-#define MEM_TOSTRING(x) MEM_TOSTRING_M(x)
-#define memassert(truth, message)                                                                      \
-    do {                                                                                                     \
-        if (!(truth)) {                                                                                      \
-            if (_memory_config.error_callback) {                                                             \
-                _memory_config.error_callback(                                                               \
-                    message " (" MEM_TOSTRING(truth) ") at " __FILE__ ":" MEM_TOSTRING(__LINE__)); \
-            } else {                                                                                         \
-                assert((truth) && message);                                                                  \
-            }                                                                                                \
-        }                                                                                                    \
-    } while (0)
-#else
-#  define memassert(truth, message) do {} while(0)
-#endif
 #if NEO_ALLOC_ENABLE_STATS
 #  include <stdio.h>
 #endif
@@ -2045,40 +2219,89 @@ static NEO_AINLINE int     atomic_cas_ptr(atomicptr_t* dst, void* val, void* ref
 
 #include <stdatomic.h>
 
-typedef volatile _Atomic(int32_t) atomic32_t;
-typedef volatile _Atomic(int64_t) atomic64_t;
-typedef volatile _Atomic(void*) atomicptr_t;
+typedef volatile _Atomic(int32_t)
+atomic32_t;
+typedef volatile _Atomic(int64_t)
+atomic64_t;
+typedef volatile _Atomic(
+void*)
+atomicptr_t;
 
 static NEO_AINLINE int32_t atomic_load32(atomic32_t *src) { return atomic_load_explicit(src, memory_order_relaxed); }
-static NEO_AINLINE void atomic_store32(atomic32_t *dst, int32_t val) { atomic_store_explicit(dst, val, memory_order_relaxed); }
-static NEO_AINLINE int32_t atomic_incr32(atomic32_t *val) { return atomic_fetch_add_explicit(val, 1, memory_order_relaxed) + 1; }
-static NEO_AINLINE int32_t atomic_decr32(atomic32_t *val) { return atomic_fetch_add_explicit(val, -1, memory_order_relaxed) - 1;}
-static NEO_AINLINE int32_t atomic_add32(atomic32_t *val, int32_t add) { return atomic_fetch_add_explicit(val, add, memory_order_relaxed) + add; }
-static NEO_AINLINE int atomic_cas32_acquire(atomic32_t *dst, int32_t val, int32_t ref) { return atomic_compare_exchange_weak_explicit(dst, &ref, val, memory_order_acquire, memory_order_relaxed); }
-static NEO_AINLINE void atomic_store32_release(atomic32_t *dst, int32_t val) { atomic_store_explicit(dst, val, memory_order_release); }
+
+static NEO_AINLINE void atomic_store32(atomic32_t *dst, int32_t val) {
+    atomic_store_explicit(dst, val, memory_order_relaxed);
+}
+
+static NEO_AINLINE int32_t atomic_incr32(atomic32_t *val) {
+    return atomic_fetch_add_explicit(val, 1, memory_order_relaxed) + 1;
+}
+
+static NEO_AINLINE int32_t atomic_decr32(atomic32_t *val) {
+    return atomic_fetch_add_explicit(val, -1, memory_order_relaxed) - 1;
+}
+
+static NEO_AINLINE int32_t atomic_add32(atomic32_t *val, int32_t add) {
+    return atomic_fetch_add_explicit(val, add, memory_order_relaxed) + add;
+}
+
+static NEO_AINLINE int atomic_cas32_acquire(atomic32_t *dst, int32_t val, int32_t ref) {
+    return atomic_compare_exchange_weak_explicit(dst, &ref, val, memory_order_acquire, memory_order_relaxed);
+}
+
+static NEO_AINLINE void atomic_store32_release(atomic32_t *dst, int32_t val) {
+    atomic_store_explicit(dst, val, memory_order_release);
+}
+
 static NEO_AINLINE int64_t atomic_load64(atomic64_t *val) { return atomic_load_explicit(val, memory_order_relaxed); }
-static NEO_AINLINE int64_t atomic_add64(atomic64_t *val, int64_t add) { return atomic_fetch_add_explicit(val, add, memory_order_relaxed) + add; }
+
+static NEO_AINLINE int64_t atomic_add64(atomic64_t *val, int64_t add) {
+    return atomic_fetch_add_explicit(val, add, memory_order_relaxed) + add;
+}
+
 static NEO_AINLINE void *atomic_load_ptr(atomicptr_t *src) { return atomic_load_explicit(src, memory_order_relaxed); }
-static NEO_AINLINE void atomic_store_ptr(atomicptr_t *dst, void *val) { atomic_store_explicit(dst, val, memory_order_relaxed); }
-static NEO_AINLINE void atomic_store_ptr_release(atomicptr_t *dst, void *val) { atomic_store_explicit(dst, val, memory_order_release); }
-static NEO_AINLINE void *atomic_exchange_ptr_acquire(atomicptr_t *dst, void *val) { return atomic_exchange_explicit(dst, val, memory_order_acquire); }
-static NEO_AINLINE int atomic_cas_ptr(atomicptr_t *dst, void *val, void *ref) { return atomic_compare_exchange_weak_explicit(dst, &ref, val, memory_order_relaxed, memory_order_relaxed); }
+
+static NEO_AINLINE void atomic_store_ptr(atomicptr_t *dst, void *val) {
+    atomic_store_explicit(dst, val, memory_order_relaxed);
+}
+
+static NEO_AINLINE void atomic_store_ptr_release(atomicptr_t *dst, void *val) {
+    atomic_store_explicit(dst, val, memory_order_release);
+}
+
+static NEO_AINLINE void *atomic_exchange_ptr_acquire(atomicptr_t *dst, void *val) {
+    return atomic_exchange_explicit(dst, val, memory_order_acquire);
+}
+
+static NEO_AINLINE int atomic_cas_ptr(atomicptr_t *dst, void *val, void *ref) {
+    return atomic_compare_exchange_weak_explicit(dst, &ref, val, memory_order_relaxed, memory_order_relaxed);
+}
 
 #endif
 
 int meminitialize(void);
+
 int meminitialize_config(const neo_alloc_config_t *config);
-const neo_alloc_config_t * memconfig(void);
+
+const neo_alloc_config_t *memconfig(void);
+
 void memfinalize(void);
+
 void memthread_initialize(void);
+
 void memthread_finalize(int release_caches);
+
 void memthread_collect(void);
+
 int memis_thread_initialized(void);
+
 void memthread_statistics(neo_alloc_thread_stats_t *stats);
+
 void memglobal_statistics(neo_alloc_global_stats_t *stats);
+
 void memdump_statistics(void *file);
+
 size_t memusable_size(void *ptr);
-void memlinker_reference(void);
 
 #if NEO_ALLOC_ENABLE_STATS
 #  define _memstat_inc(counter) atomic_incr32(counter)
@@ -2169,6 +2392,7 @@ struct span_t {
     span_t *next;
     span_t *prev;
 };
+
 neo_static_assert(sizeof(span_t) <= SPAN_HEADER_SIZE && "span size mismatch");
 
 struct span_cache_t {
@@ -2215,7 +2439,7 @@ struct heap_t {
 span_t*      large_huge_span;
 #endif
 #if NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE || NEO_ALLOC_ENABLE_STATS
-    span_use_t   span_use[LARGE_CLASS_COUNT];
+    span_use_t span_use[LARGE_CLASS_COUNT];
 #endif
 #if NEO_ALLOC_ENABLE_STATS
     size_class_use_t size_class_use[SIZE_CLASS_COUNT + 1];
@@ -2229,6 +2453,7 @@ struct size_class_t {
     uint16_t block_count;
     uint16_t class_idx;
 };
+
 neo_static_assert(sizeof(size_class_t) == 8 && "Size class size mismatch");
 
 struct global_cache_t {
@@ -2366,8 +2591,7 @@ get_thread_id(void) {
 #endif
 }
 
-static void
-set_thread_heap(heap_t *heap) {
+static void set_thread_heap(heap_t *heap) {
 #if ((defined(__APPLE__) || defined(__HAIKU__)) && NEO_ALLOC_ENABLE_PRELOAD) || defined(__TINYC__)
     pthread_setspecific(_memory_thread_heap, heap);
 #else
@@ -2377,16 +2601,13 @@ set_thread_heap(heap_t *heap) {
         heap->owner_thread = get_thread_id();
 }
 
-extern void
-memset_main_thread(void);
+extern void memset_main_thread(void);
 
-void
-memset_main_thread(void) {
+void memset_main_thread(void) {
     _memmain_thread_id = get_thread_id();
 }
 
-static void
-_memspin(void) {
+static void _memspin(void) {
 #if defined(_MSC_VER)
     _mm_pause();
 #elif defined(__x86_64__) || defined(__i386__)
@@ -2415,23 +2636,21 @@ _memthread_destructor(void* value) {
 }
 #endif
 
-static void
-_memset_name(void *address, size_t size) {
+static void _memset_name(void *address, size_t size) {
 #if defined(__linux__) || defined(__ANDROID__)
     const char *name = _memory_huge_pages ? _memory_config.huge_page_name : _memory_config.page_name;
     if (address == MAP_FAILED || !name)
         return;
-    (void) prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, (uintptr_t) address, size, (uintptr_t) name);
+    (void)prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, (uintptr_t) address, size, (uintptr_t) name);
 #else
     (void)sizeof(size);
     (void)sizeof(address);
 #endif
 }
 
-static void *
-_memmmap(size_t size, size_t *offset) {
-    memassert(!(size % _memory_page_size), "Invalid mmap size");
-    memassert(size >= _memory_page_size, "Invalid mmap size");
+static void *_memmmap(size_t size, size_t *offset) {
+    neo_assert(!(size % _memory_page_size), "Invalid mmap size");
+    neo_assert(size >= _memory_page_size, "Invalid mmap size");
     void *address = _memory_config.memory_map(size, offset);
     if (neo_likely(address != 0)) {
         _memstat_add_peak(&_mapped_pages, (size >> _memory_page_size_shift), _mapped_pages_peak);
@@ -2440,23 +2659,21 @@ _memmmap(size_t size, size_t *offset) {
     return address;
 }
 
-static void
-_memunmap(void *address, size_t size, size_t offset, size_t release) {
-    memassert(!release || (release >= size), "Invalid unmap size");
-    memassert(!release || (release >= _memory_page_size), "Invalid unmap size");
+static void _memunmap(void *address, size_t size, size_t offset, size_t release) {
+    neo_assert(!release || (release >= size), "Invalid unmap size");
+    neo_assert(!release || (release >= _memory_page_size), "Invalid unmap size");
     if (release) {
-        memassert(!(release % _memory_page_size), "Invalid unmap size");
+        neo_assert(!(release % _memory_page_size), "Invalid unmap size");
         _memstat_sub(&_mapped_pages, (release >> _memory_page_size_shift));
         _memstat_add(&_unmapped_total, (release >> _memory_page_size_shift));
     }
     _memory_config.memory_unmap(address, size, offset, release);
 }
 
-static void *
-_memmmap_os(size_t size, size_t *offset) {
+static void *_memmmap_os(size_t size, size_t *offset) {
     size_t padding = ((size >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) ? _memory_span_size
                                                                                                     : 0;
-    memassert(size >= _memory_page_size, "Invalid mmap size");
+    neo_assert(size >= _memory_page_size, "Invalid mmap size");
 #if PLATFORM_WINDOWS
     void* ptr = VirtualAlloc(0, size + padding, (_memory_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 if (!ptr) {
@@ -2464,7 +2681,7 @@ if (!ptr) {
         if (_memory_config.map_fail_callback(size + padding))
             return _memmmap_os(size, offset);
     } else {
-        memassert(ptr, "Failed to map virtual memory block");
+        neo_assert(ptr, "Failed to map virtual memory block");
     }
     return 0;
 }
@@ -2483,8 +2700,8 @@ if (!ptr) {
         ptr = mmap(0, size + padding, PROT_READ | PROT_WRITE, flags, -1, 0);
         if (ptr && ptr != MAP_FAILED) {
             int prm = madvise(ptr, size + padding, MADV_HUGEPAGE);
-            (void) prm;
-            memassert((prm == 0), "Failed to promote the page to THP");
+            (void)prm;
+            neo_assert((prm == 0), "Failed to promote the page to THP");
         }
     }
 #    endif
@@ -2503,32 +2720,31 @@ if (!ptr) {
             if (_memory_config.map_fail_callback(size + padding))
                 return _memmmap_os(size, offset);
         } else if (errno != ENOMEM) {
-            memassert((ptr != MAP_FAILED) && ptr, "Failed to map virtual memory block");
+            neo_assert((ptr != MAP_FAILED) && ptr, "Failed to map virtual memory block");
         }
         return 0;
     }
 #endif
-    _memstat_add(&_mapped_pages_os, (int32_t) ((size + padding) >> _memory_page_size_shift));
+    _memstat_add(&_mapped_pages_os, (int32_t)((size + padding) >> _memory_page_size_shift));
     if (padding) {
         size_t final_padding = padding - ((uintptr_t) ptr & ~_memory_span_mask);
-        memassert(final_padding <= _memory_span_size, "Internal failure in padding");
-        memassert(final_padding <= padding, "Internal failure in padding");
-        memassert(!(final_padding % 8), "Internal failure in padding");
+        neo_assert(final_padding <= _memory_span_size, "Internal failure in padding");
+        neo_assert(final_padding <= padding, "Internal failure in padding");
+        neo_assert(!(final_padding % 8), "Internal failure in padding");
         ptr = poff(ptr, final_padding);
         *offset = final_padding >> 3;
     }
-    memassert((size < _memory_span_size) || !((uintptr_t) ptr & ~_memory_span_mask), "Internal failure in padding");
+    neo_assert((size < _memory_span_size) || !((uintptr_t) ptr & ~_memory_span_mask), "Internal failure in padding");
     return ptr;
 }
 
-static void
-_memunmap_os(void *address, size_t size, size_t offset, size_t release) {
-    memassert(release || (offset == 0), "Invalid unmap size");
-    memassert(!release || (release >= _memory_page_size), "Invalid unmap size");
-    memassert(size >= _memory_page_size, "Invalid unmap size");
+static void _memunmap_os(void *address, size_t size, size_t offset, size_t release) {
+    neo_assert(release || (offset == 0), "Invalid unmap size");
+    neo_assert(!release || (release >= _memory_page_size), "Invalid unmap size");
+    neo_assert(size >= _memory_page_size, "Invalid unmap size");
     if (release && offset) {
         offset <<= 3;
-        address = poff(address, -(int32_t) offset);
+        address = poff(address, -(int32_t)offset);
         if ((release >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) {
             release += _memory_span_size;
         }
@@ -2536,12 +2752,12 @@ _memunmap_os(void *address, size_t size, size_t offset, size_t release) {
 #if !NEO_ALLOC_ENABLE_UNMAP
 #if PLATFORM_WINDOWS
     if (!VirtualFree(address, release ? 0 : size, release ? MEM_RELEASE : MEM_DECOMMIT)) {
-        memassert(0, "Failed to unmap virtual memory block");
+        neo_assert(0, "Failed to unmap virtual memory block");
     }
 #else
     if (release) {
         if (munmap(address, release)) {
-            memassert(0, "Failed to unmap virtual memory block");
+            neo_assert(0, "Failed to unmap virtual memory block");
         }
     } else {
 #if defined(MADV_FREE_REUSABLE)
@@ -2558,7 +2774,7 @@ _memunmap_os(void *address, size_t size, size_t offset, size_t release) {
 #else
         if (posix_madvise(address, size, POSIX_MADV_DONTNEED)) {
 #endif
-            memassert(0, "Failed to madvise virtual memory block as free");
+            neo_assert(0, "Failed to madvise virtual memory block as free");
         }
     }
 #endif
@@ -2567,11 +2783,9 @@ _memunmap_os(void *address, size_t size, size_t offset, size_t release) {
         _memstat_sub(&_mapped_pages_os, release >> _memory_page_size_shift);
 }
 
-static void
-_memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t span_count);
+static void _memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t span_count);
 
-static span_t *
-_memglobal_get_reserved_spans(size_t span_count) {
+static span_t *_memglobal_get_reserved_spans(size_t span_count) {
     span_t *span = _memory_global_reserve;
     _memspan_mark_as_subspan_unless_master(_memory_global_reserve_master, span, span_count);
     _memory_global_reserve_count -= span_count;
@@ -2582,31 +2796,27 @@ _memglobal_get_reserved_spans(size_t span_count) {
     return span;
 }
 
-static void
-_memglobal_set_reserved_spans(span_t *master, span_t *reserve, size_t reserve_span_count) {
+static void _memglobal_set_reserved_spans(span_t *master, span_t *reserve, size_t reserve_span_count) {
     _memory_global_reserve_master = master;
     _memory_global_reserve_count = reserve_span_count;
     _memory_global_reserve = reserve;
 }
 
-static void
-_memspan_double_link_list_add(span_t **head, span_t *span) {
+static void _memspan_double_link_list_add(span_t **head, span_t *span) {
     if (*head)
         (*head)->prev = span;
     span->next = *head;
     *head = span;
 }
 
-static void
-_memspan_double_link_list_pop_head(span_t **head, span_t *span) {
-    memassert(*head == span, "Linked list corrupted");
+static void _memspan_double_link_list_pop_head(span_t **head, span_t *span) {
+    neo_assert(*head == span, "Linked list corrupted");
     span = *head;
     *head = span->next;
 }
 
-static void
-_memspan_double_link_list_remove(span_t **head, span_t *span) {
-    memassert(*head, "Linked list corrupted");
+static void _memspan_double_link_list_remove(span_t **head, span_t *span) {
+    neo_assert(*head, "Linked list corrupted");
     if (*head == span) {
         *head = span->next;
     } else {
@@ -2618,18 +2828,14 @@ _memspan_double_link_list_remove(span_t **head, span_t *span) {
     }
 }
 
-static void
-_memheap_cache_insert(heap_t *heap, span_t *span);
+static void _memheap_cache_insert(heap_t *heap, span_t *span);
 
-static void
-_memheap_finalize(heap_t *heap);
+static void _memheap_finalize(heap_t *heap);
 
-static void
-_memheap_set_reserved_spans(heap_t *heap, span_t *master, span_t *reserve, size_t reserve_span_count);
+static void _memheap_set_reserved_spans(heap_t *heap, span_t *master, span_t *reserve, size_t reserve_span_count);
 
-static void
-_memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t span_count) {
-    memassert((subspan != master) || (subspan->flags & SPAN_FLAG_MASTER), "Span master pointer and/or flag mismatch");
+static void _memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t span_count) {
+    neo_assert((subspan != master) || (subspan->flags & SPAN_FLAG_MASTER), "Span master pointer and/or flag mismatch");
     if (subspan != master) {
         subspan->flags = SPAN_FLAG_SUBSPAN;
         subspan->offset_from_master = (uint32_t) ((uintptr_t) pdelta(subspan, master) >> _memory_span_size_shift);
@@ -2638,8 +2844,7 @@ _memspan_mark_as_subspan_unless_master(span_t *master, span_t *subspan, size_t s
     subspan->span_count = (uint32_t) span_count;
 }
 
-static span_t *
-_memspan_map_from_reserve(heap_t *heap, size_t span_count) {
+static span_t *_memspan_map_from_reserve(heap_t *heap, size_t span_count) {
     span_t *span = heap->span_reserve;
     heap->span_reserve = (span_t *) poff(span, span_count * _memory_span_size);
     heap->spans_reserved -= (uint32_t) span_count;
@@ -2651,28 +2856,24 @@ _memspan_map_from_reserve(heap_t *heap, size_t span_count) {
     return span;
 }
 
-static size_t
-_memspan_align_count(size_t span_count) {
+static size_t _memspan_align_count(size_t span_count) {
     size_t request_count = (span_count > _memory_span_map_count) ? span_count : _memory_span_map_count;
     if ((_memory_page_size > _memory_span_size) && ((request_count * _memory_span_size) % _memory_page_size))
         request_count += _memory_span_map_count - (request_count % _memory_span_map_count);
     return request_count;
 }
 
-static void
-_memspan_initialize(span_t *span, size_t total_span_count, size_t span_count, size_t align_offset) {
+static void _memspan_initialize(span_t *span, size_t total_span_count, size_t span_count, size_t align_offset) {
     span->total_spans = (uint32_t) total_span_count;
     span->span_count = (uint32_t) span_count;
     span->align_offset = (uint32_t) align_offset;
     span->flags = SPAN_FLAG_MASTER;
-    atomic_store32(&span->remaining_spans, (int32_t) total_span_count);
+    atomic_store32(&span->remaining_spans, (int32_t)total_span_count);
 }
 
-static void
-_memspan_unmap(span_t *span);
+static void _memspan_unmap(span_t *span);
 
-static span_t *
-_memspan_map_aligned_count(heap_t *heap, size_t span_count) {
+static span_t *_memspan_map_aligned_count(heap_t *heap, size_t span_count) {
     size_t aligned_span_count = _memspan_align_count(span_count);
     size_t align_offset = 0;
     span_t *span = (span_t *) _memmmap(aligned_span_count * _memory_span_size, &align_offset);
@@ -2690,7 +2891,7 @@ _memspan_map_aligned_count(heap_t *heap, size_t span_count) {
             _memheap_cache_insert(heap, heap->span_reserve);
         }
         if (reserved_count > _memory_heap_reserve_count) {
-            memassert(atomic_load32(&_memory_global_lock) == 1, "Global spin lock not held as expected");
+            neo_assert(atomic_load32(&_memory_global_lock) == 1, "Global spin lock not held as expected");
             size_t remain_count = reserved_count - _memory_heap_reserve_count;
             reserved_count = _memory_heap_reserve_count;
             span_t *remain_span = (span_t *) poff(reserved_spans, reserved_count * _memory_span_size);
@@ -2706,8 +2907,7 @@ _memspan_map_aligned_count(heap_t *heap, size_t span_count) {
     return span;
 }
 
-static span_t *
-_memspan_map(heap_t *heap, size_t span_count) {
+static span_t *_memspan_map(heap_t *heap, size_t span_count) {
     if (span_count <= heap->spans_reserved)
         return _memspan_map_from_reserve(heap, span_count);
     span_t *span = 0;
@@ -2738,21 +2938,20 @@ _memspan_map(heap_t *heap, size_t span_count) {
     return span;
 }
 
-static void
-_memspan_unmap(span_t *span) {
-    memassert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
-    memassert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+static void _memspan_unmap(span_t *span) {
+    neo_assert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+    neo_assert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
 
     int is_master = !!(span->flags & SPAN_FLAG_MASTER);
     span_t *master = is_master ? span : ((span_t *) poff(span,
-                                                                   -(intptr_t) ((uintptr_t) span->offset_from_master *
-                                                                                _memory_span_size)));
-    memassert(is_master || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
-    memassert(master->flags & SPAN_FLAG_MASTER, "Span flag corrupted");
+                                                         -(intptr_t) ((uintptr_t) span->offset_from_master *
+                                                                      _memory_span_size)));
+    neo_assert(is_master || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+    neo_assert(master->flags & SPAN_FLAG_MASTER, "Span flag corrupted");
 
     size_t span_count = span->span_count;
     if (!is_master) {
-        memassert(span->align_offset == 0, "Span align offset corrupted");
+        neo_assert(span->align_offset == 0, "Span align offset corrupted");
         if (_memory_span_size >= _memory_page_size)
             _memunmap(span, span_count * _memory_span_size, 0, 0);
     } else {
@@ -2760,8 +2959,8 @@ _memspan_unmap(span_t *span) {
         _memstat_add(&_unmapped_master_spans, 1);
     }
 
-    if (atomic_add32(&master->remaining_spans, -(int32_t) span_count) <= 0) {
-        memassert(!!(master->flags & SPAN_FLAG_MASTER) && !!(master->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+    if (atomic_add32(&master->remaining_spans, -(int32_t)span_count) <= 0) {
+        neo_assert(!!(master->flags & SPAN_FLAG_MASTER) && !!(master->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
         size_t unmap_count = master->span_count;
         if (_memory_span_size < _memory_page_size)
             unmap_count = master->total_spans;
@@ -2772,11 +2971,10 @@ _memspan_unmap(span_t *span) {
     }
 }
 
-static void
-_memspan_release_to_cache(heap_t *heap, span_t *span) {
-    memassert(heap == span->heap, "Span heap pointer corrupted");
-    memassert(span->size_class < SIZE_CLASS_COUNT, "Invalid span size class");
-    memassert(span->span_count == 1, "Invalid span count");
+static void _memspan_release_to_cache(heap_t *heap, span_t *span) {
+    neo_assert(heap == span->heap, "Span heap pointer corrupted");
+    neo_assert(span->size_class < SIZE_CLASS_COUNT, "Invalid span size class");
+    neo_assert(span->span_count == 1, "Invalid span count");
 #if NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE || NEO_ALLOC_ENABLE_STATS
     atomic_decr32(&heap->span_use[0].current);
 #endif
@@ -2792,10 +2990,9 @@ _memspan_release_to_cache(heap_t *heap, span_t *span) {
     }
 }
 
-static uint32_t
-free_list_partial_init(void **list, void **first_block, void *page_start, void *block_start, uint32_t block_count,
+static uint32_t free_list_partial_init(void **list, void **first_block, void *page_start, void *block_start, uint32_t block_count,
                        uint32_t block_size) {
-    memassert(block_count, "Internal failure");
+    neo_assert(block_count, "Internal failure");
     *first_block = block_start;
     if (block_count > 1) {
         void *free_block = poff(block_start, block_size);
@@ -2821,9 +3018,8 @@ free_list_partial_init(void **list, void **first_block, void *page_start, void *
     return block_count;
 }
 
-static void *
-_memspan_initialize_new(heap_t *heap, heap_size_class_t *heap_size_class, span_t *span, uint32_t class_idx) {
-    memassert(span->span_count == 1, "Internal failure");
+static void *_memspan_initialize_new(heap_t *heap, heap_size_class_t *heap_size_class, span_t *span, uint32_t class_idx) {
+    neo_assert(span->span_count == 1, "Internal failure");
     size_class_t *size_class = _memory_size_class + class_idx;
     span->size_class = class_idx;
     span->heap = heap;
@@ -2851,8 +3047,7 @@ _memspan_initialize_new(heap_t *heap, heap_size_class_t *heap_size_class, span_t
     return block;
 }
 
-static void
-_memspan_extract_free_list_deferred(span_t *span) {
+static void _memspan_extract_free_list_deferred(span_t *span) {
     do {
         span->free_list = atomic_exchange_ptr_acquire(&span->free_list_deferred, INVALID_POINTER);
     } while (span->free_list == INVALID_POINTER);
@@ -2861,14 +3056,12 @@ _memspan_extract_free_list_deferred(span_t *span) {
     atomic_store_ptr_release(&span->free_list_deferred, 0);
 }
 
-static int
-_memspan_is_fully_utilized(span_t *span) {
-    memassert(span->free_list_limit <= span->block_count, "Span free list corrupted");
+static int _memspan_is_fully_utilized(span_t *span) {
+    neo_assert(span->free_list_limit <= span->block_count, "Span free list corrupted");
     return !span->free_list && (span->free_list_limit >= span->block_count);
 }
 
-static int
-_memspan_finalize(heap_t *heap, size_t iclass, span_t *span, span_t **list_head) {
+static int _memspan_finalize(heap_t *heap, size_t iclass, span_t *span, span_t **list_head) {
     void *free_list = heap->size_class[iclass].free_list;
     span_t *class_span = (span_t *) ((uintptr_t) free_list & _memory_span_mask);
     if (span == class_span) {
@@ -2892,7 +3085,7 @@ _memspan_finalize(heap_t *heap, size_t iclass, span_t *span, span_t **list_head)
         heap->size_class[iclass].free_list = 0;
         span->used_count -= free_count;
     }
-    memassert(span->list_size == span->used_count, "Memory leak detected");
+    neo_assert(span->list_size == span->used_count, "Memory leak detected");
     if (span->list_size == span->used_count) {
         _memstat_dec(&heap->span_use[0].current);
         _memstat_dec(&heap->size_class_use[iclass].spans_current);
@@ -2906,61 +3099,54 @@ _memspan_finalize(heap_t *heap, size_t iclass, span_t *span, span_t **list_head)
 
 #if NEO_ALLOC_ENABLE_GLOBAL_CACHE
 
-static void
-_memglobal_cache_finalize(global_cache_t *cache) {
-    while (!atomic_cas32_acquire(&cache->lock, 1, 0))
+static void _memglobal_cache_finalize(global_cache_t *cache) {
+    while (!atomic_cas32_acquire(&cache->lock, 1, 0)) {
         _memspin();
-
-    for (size_t ispan = 0; ispan < cache->count; ++ispan)
+    }
+    for (size_t ispan = 0; ispan < cache->count; ++ispan) {
         _memspan_unmap(cache->span[ispan]);
+    }
     cache->count = 0;
-
     while (cache->overflow) {
         span_t *span = cache->overflow;
         cache->overflow = span->next;
         _memspan_unmap(span);
     }
-
     atomic_store32_release(&cache->lock, 0);
 }
 
-static void
-_memglobal_cache_insert_spans(span_t **span, size_t span_count, size_t count) {
+static void _memglobal_cache_insert_spans(span_t **span, size_t span_count, size_t count) {
     const size_t cache_limit = (span_count == 1) ?
                                NEO_ALLOC_GLOBAL_CACHE_MULTIPLIER * MAX_THREAD_SPAN_CACHE :
                                NEO_ALLOC_GLOBAL_CACHE_MULTIPLIER * (MAX_THREAD_SPAN_LARGE_CACHE - (span_count >> 1));
-
     global_cache_t *cache = &_memory_span_cache[span_count - 1];
-
     size_t insert_count = count;
-    while (!atomic_cas32_acquire(&cache->lock, 1, 0))
+    while (!atomic_cas32_acquire(&cache->lock, 1, 0)) {
         _memspin();
-
+    }
 #if NEO_ALLOC_ENABLE_STATS
     cache->insert_count += count;
 #endif
-    if ((cache->count + insert_count) > cache_limit)
+    if ((cache->count + insert_count) > cache_limit) {
         insert_count = cache_limit - cache->count;
-
+    }
     memcpy(cache->span + cache->count, span, sizeof(span_t *) * insert_count);
     cache->count += (uint32_t) insert_count;
-
 #if NEO_ALLOC_ENABLE_UNLIMITED_CACHE
     while (insert_count < count) {
 #else
-    while ((_memory_page_size > _memory_span_size) && (insert_count < count)) {
+        while ((_memory_page_size > _memory_span_size) && (insert_count < count)) {
 #endif
         span_t *current_span = span[insert_count++];
         current_span->next = cache->overflow;
         cache->overflow = current_span;
     }
     atomic_store32_release(&cache->lock, 0);
-
     span_t *keep = 0;
     for (size_t ispan = insert_count; ispan < count; ++ispan) {
         span_t *current_span = span[ispan];
         if ((current_span->flags & SPAN_FLAG_MASTER) &&
-            (atomic_load32(&current_span->remaining_spans) > (int32_t) current_span->span_count)) {
+            (atomic_load32(&current_span->remaining_spans) > (int32_t)current_span->span_count)) {
             current_span->next = keep;
             keep = current_span;
         } else {
@@ -2978,7 +3164,7 @@ _memglobal_cache_insert_spans(span_t **span, size_t span_count, size_t count) {
                 span_t *current_span = cache->span[islot];
                 if (!(current_span->flags & SPAN_FLAG_MASTER) || ((current_span->flags & SPAN_FLAG_MASTER) &&
                                                                   (atomic_load32(&current_span->remaining_spans) <=
-                                                                   (int32_t) current_span->span_count))) {
+                                                                   (int32_t)current_span->span_count))) {
                     _memspan_unmap(current_span);
                     cache->span[islot] = keep;
                     break;
@@ -3001,8 +3187,7 @@ _memglobal_cache_insert_spans(span_t **span, size_t span_count, size_t count) {
     }
 }
 
-static size_t
-_memglobal_cache_extract_spans(span_t **span, size_t span_count, size_t count) {
+static size_t _memglobal_cache_extract_spans(span_t **span, size_t span_count, size_t count) {
     global_cache_t *cache = &_memory_span_cache[span_count - 1];
 
     size_t extract_count = 0;
@@ -3028,7 +3213,7 @@ _memglobal_cache_extract_spans(span_t **span, size_t span_count, size_t count) {
 
 #if NEO_ALLOC_ENABLE_ASSERTS
     for (size_t ispan = 0; ispan < extract_count; ++ispan) {
-        memassert(span[ispan]->span_count == span_count, "Global cache span count mismatch");
+        neo_assert(span[ispan]->span_count == span_count, "Global cache span count mismatch");
     }
 #endif
 
@@ -3041,21 +3226,19 @@ _memglobal_cache_extract_spans(span_t **span, size_t span_count, size_t count) {
 
 static void _memdeallocate_huge(span_t *);
 
-static void
-_memheap_set_reserved_spans(heap_t *heap, span_t *master, span_t *reserve, size_t reserve_span_count) {
+static void _memheap_set_reserved_spans(heap_t *heap, span_t *master, span_t *reserve, size_t reserve_span_count) {
     heap->span_reserve_master = master;
     heap->span_reserve = reserve;
     heap->spans_reserved = (uint32_t) reserve_span_count;
 }
 
-static void
-_memheap_cache_adopt_deferred(heap_t *heap, span_t **single_span) {
+static void _memheap_cache_adopt_deferred(heap_t *heap, span_t **single_span) {
     span_t *span = (span_t *) ((void *) atomic_exchange_ptr_acquire(&heap->span_free_deferred, 0));
     while (span) {
         span_t *next_span = (span_t *) span->free_list;
-        memassert(span->heap == heap, "Span heap pointer corrupted");
+        neo_assert(span->heap == heap, "Span heap pointer corrupted");
         if (neo_likely(span->size_class < SIZE_CLASS_COUNT)) {
-            memassert(heap->full_span_count, "Heap span counter corrupted");
+            neo_assert(heap->full_span_count, "Heap span counter corrupted");
             --heap->full_span_count;
             _memstat_dec(&heap->span_use[0].spans_deferred);
 #if MEM_FIRST_CLASS_HEAPS
@@ -3071,8 +3254,8 @@ _memheap_cache_adopt_deferred(heap_t *heap, span_t **single_span) {
             if (span->size_class == SIZE_CLASS_HUGE) {
                 _memdeallocate_huge(span);
             } else {
-                memassert(span->size_class == SIZE_CLASS_LARGE, "Span size class invalid");
-                memassert(heap->full_span_count, "Heap span counter corrupted");
+                neo_assert(span->size_class == SIZE_CLASS_LARGE, "Span size class invalid");
+                neo_assert(heap->full_span_count, "Heap span counter corrupted");
                 --heap->full_span_count;
 #if MEM_FIRST_CLASS_HEAPS
                 _memspan_double_link_list_remove(&heap->large_huge_span, span);
@@ -3090,8 +3273,7 @@ _memheap_cache_adopt_deferred(heap_t *heap, span_t **single_span) {
     }
 }
 
-static void
-_memheap_unmap(heap_t *heap) {
+static void _memheap_unmap(heap_t *heap) {
     if (!heap->master_heap) {
         if ((heap->finalize > 1) && !atomic_load32(&heap->child_count)) {
             span_t *span = (span_t *) ((uintptr_t) heap & _memory_span_mask);
@@ -3104,8 +3286,7 @@ _memheap_unmap(heap_t *heap) {
     }
 }
 
-static void
-_memheap_global_finalize(heap_t *heap) {
+static void _memheap_global_finalize(heap_t *heap) {
     if (heap->finalize++ > 1) {
         --heap->finalize;
         return;
@@ -3150,8 +3331,7 @@ _memheap_global_finalize(heap_t *heap) {
     _memheap_unmap(heap);
 }
 
-static void
-_memheap_cache_insert(heap_t *heap, span_t *span) {
+static void _memheap_cache_insert(heap_t *heap, span_t *span) {
     if (neo_unlikely(heap->finalize != 0)) {
         _memspan_unmap(span);
         _memheap_global_finalize(heap);
@@ -3202,8 +3382,7 @@ _memheap_cache_insert(heap_t *heap, span_t *span) {
 #endif
 }
 
-static span_t *
-_memheap_thread_cache_extract(heap_t *heap, size_t span_count) {
+static span_t *_memheap_thread_cache_extract(heap_t *heap, size_t span_count) {
     span_t *span = 0;
 #if NEO_ALLOC_ENABLE_THREAD_CACHE
     span_cache_t *span_cache;
@@ -3219,8 +3398,7 @@ _memheap_thread_cache_extract(heap_t *heap, size_t span_count) {
     return span;
 }
 
-static span_t *
-_memheap_thread_cache_deferred_extract(heap_t *heap, size_t span_count) {
+static span_t *_memheap_thread_cache_deferred_extract(heap_t *heap, size_t span_count) {
     span_t *span = 0;
     if (span_count == 1) {
         _memheap_cache_adopt_deferred(heap, &span);
@@ -3231,15 +3409,13 @@ _memheap_thread_cache_deferred_extract(heap_t *heap, size_t span_count) {
     return span;
 }
 
-static span_t *
-_memheap_reserved_extract(heap_t *heap, size_t span_count) {
+static span_t *_memheap_reserved_extract(heap_t *heap, size_t span_count) {
     if (heap->spans_reserved >= span_count)
         return _memspan_map(heap, span_count);
     return 0;
 }
 
-static span_t *
-_memheap_global_cache_extract(heap_t *heap, size_t span_count) {
+static span_t *_memheap_global_cache_extract(heap_t *heap, size_t span_count) {
 #if NEO_ALLOC_ENABLE_GLOBAL_CACHE
 #if NEO_ALLOC_ENABLE_THREAD_CACHE
     span_cache_t *span_cache;
@@ -3267,27 +3443,25 @@ _memheap_global_cache_extract(heap_t *heap, size_t span_count) {
     }
 #endif
 #endif
-    (void) sizeof(heap);
-    (void) sizeof(span_count);
+    (void)sizeof(heap);
+    (void)sizeof(span_count);
     return 0;
 }
 
-static void
-_meminc_span_statistics(heap_t *heap, size_t span_count, uint32_t class_idx) {
-    (void) sizeof(heap);
-    (void) sizeof(span_count);
-    (void) sizeof(class_idx);
+static void _meminc_span_statistics(heap_t *heap, size_t span_count, uint32_t class_idx) {
+    (void)sizeof(heap);
+    (void)sizeof(span_count);
+    (void)sizeof(class_idx);
 #if NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE || NEO_ALLOC_ENABLE_STATS
-    uint32_t idx = (uint32_t)span_count - 1;
-    uint32_t current_count = (uint32_t)atomic_incr32(&heap->span_use[idx].current);
-    if (current_count > (uint32_t)atomic_load32(&heap->span_use[idx].high))
+    uint32_t idx = (uint32_t) span_count - 1;
+    uint32_t current_count = (uint32_t) atomic_incr32(&heap->span_use[idx].current);
+    if (current_count > (uint32_t) atomic_load32(&heap->span_use[idx].high))
         atomic_store32(&heap->span_use[idx].high, (int32_t)current_count);
     _memstat_add_peak(&heap->size_class_use[class_idx].spans_current, 1, heap->size_class_use[class_idx].spans_peak);
 #endif
 }
 
-static span_t *
-_memheap_extract_new_span(heap_t *heap, heap_size_class_t *heap_size_class, size_t span_count, uint32_t class_idx) {
+static span_t *_memheap_extract_new_span(heap_t *heap, heap_size_class_t *heap_size_class, size_t span_count, uint32_t class_idx) {
     span_t *span;
 #if NEO_ALLOC_ENABLE_THREAD_CACHE
     if (heap_size_class && heap_size_class->cache) {
@@ -3297,7 +3471,7 @@ _memheap_extract_new_span(heap_t *heap, heap_size_class_t *heap_size_class, size
         return span;
     }
 #endif
-    (void) sizeof(class_idx);
+    (void)sizeof(class_idx);
     size_t base_span_count = span_count;
     size_t limit_span_count = (span_count > 2) ? (span_count + (span_count >> 1)) : span_count;
     if (limit_span_count > LARGE_CLASS_COUNT)
@@ -3335,8 +3509,7 @@ _memheap_extract_new_span(heap_t *heap, heap_size_class_t *heap_size_class, size
     return span;
 }
 
-static void
-_memheap_initialize(heap_t *heap) {
+static void _memheap_initialize(heap_t *heap) {
     _memmemset_const(heap, 0, sizeof(heap_t));
     heap->id = 1 + atomic_incr32(&_memory_heap_id);
 
@@ -3345,13 +3518,12 @@ _memheap_initialize(heap_t *heap) {
     _memory_heaps[list_idx] = heap;
 }
 
-static void
-_memheap_orphan(heap_t *heap, int first_class) {
+static void _memheap_orphan(heap_t *heap, int first_class) {
     heap->owner_thread = (uintptr_t) -1;
 #if MEM_FIRST_CLASS_HEAPS
     heap_t** heap_list = (first_class ? &_memory_first_class_orphan_heaps : &_memory_orphan_heaps);
 #else
-    (void) sizeof(first_class);
+    (void)sizeof(first_class);
     heap_t **heap_list = &_memory_orphan_heaps;
 #endif
     heap->next_orphan = *heap_list;
@@ -3400,7 +3572,7 @@ _memheap_allocate_new(void) {
     size_t num_heaps = remain_size / aligned_heap_size;
     if (num_heaps < request_heap_count)
         num_heaps = request_heap_count;
-    atomic_store32(&heap->child_count, (int32_t) num_heaps - 1);
+    atomic_store32(&heap->child_count, (int32_t)num_heaps - 1);
     heap_t *extra_heap = (heap_t *) poff(heap, aligned_heap_size);
     while (num_heaps > 1) {
         _memheap_initialize(extra_heap);
@@ -3452,8 +3624,7 @@ _memheap_allocate(int first_class) {
     return heap;
 }
 
-static void
-_memheap_release(void *heapptr, int first_class, int release_cache) {
+static void _memheap_release(void *heapptr, int first_class, int release_cache) {
     heap_t *heap = (heap_t *) heapptr;
     if (!heap)
         return;
@@ -3491,7 +3662,7 @@ _memheap_release(void *heapptr, int first_class, int release_cache) {
 
 #if NEO_ALLOC_ENABLE_STATS
     atomic_decr32(&_memory_active_heaps);
-    memassert(atomic_load32(&_memory_active_heaps) >= 0, "Still active heaps during finalization");
+    neo_assert(atomic_load32(&_memory_active_heaps) >= 0, "Still active heaps during finalization");
 #endif
 
     if (get_thread_id() != _memmain_thread_id) {
@@ -3502,18 +3673,15 @@ _memheap_release(void *heapptr, int first_class, int release_cache) {
     atomic_store32_release(&_memory_global_lock, 0);
 }
 
-static void
-_memheap_release_raw(void *heapptr, int release_cache) {
+static void _memheap_release_raw(void *heapptr, int release_cache) {
     _memheap_release(heapptr, 0, release_cache);
 }
 
-static void
-_memheap_release_raw_fc(void *heapptr) {
+static void _memheap_release_raw_fc(void *heapptr) {
     _memheap_release_raw(heapptr, 1);
 }
 
-static void
-_memheap_finalize(heap_t *heap) {
+static void _memheap_finalize(heap_t *heap) {
     if (heap->spans_reserved) {
         span_t *span = _memspan_map(heap, heap->spans_reserved);
         _memspan_unmap(span);
@@ -3559,23 +3727,21 @@ _memheap_finalize(heap_t *heap) {
         span_cache->count = 0;
     }
 #endif
-    memassert(!atomic_load_ptr(&heap->span_free_deferred), "Heaps still active during finalization");
+    neo_assert(!atomic_load_ptr(&heap->span_free_deferred), "Heaps still active during finalization");
 }
 
-static void *
-free_list_pop(void **list) {
+static void *free_list_pop(void **list) {
     void *block = *list;
     *list = *((void **) block);
     return block;
 }
 
-static void *
-_memallocate_from_heap_fallback(heap_t *heap, heap_size_class_t *heap_size_class, uint32_t class_idx) {
+static void *_memallocate_from_heap_fallback(heap_t *heap, heap_size_class_t *heap_size_class, uint32_t class_idx) {
     span_t *span = heap_size_class->partial_span;
     memassume(heap != 0);
     if (neo_likely(span != 0)) {
-        memassert(span->block_count == _memory_size_class[span->size_class].block_count, "Span block count corrupted");
-        memassert(!_memspan_is_fully_utilized(span), "Internal failure");
+        neo_assert(span->block_count == _memory_size_class[span->size_class].block_count, "Span block count corrupted");
+        neo_assert(!_memspan_is_fully_utilized(span), "Internal failure");
         void *block;
         if (span->free_list) {
             block = free_list_pop(&span->free_list);
@@ -3583,14 +3749,14 @@ _memallocate_from_heap_fallback(heap_t *heap, heap_size_class_t *heap_size_class
             span->free_list = 0;
         } else {
             void *block_start = poff(span,
-                                               SPAN_HEADER_SIZE + ((size_t) span->free_list_limit * span->block_size));
+                                     SPAN_HEADER_SIZE + ((size_t) span->free_list_limit * span->block_size));
             span->free_list_limit += free_list_partial_init(&heap_size_class->free_list, &block,
                                                             (void *) ((uintptr_t) block_start &
                                                                       ~(_memory_page_size - 1)), block_start,
                                                             span->block_count - span->free_list_limit,
                                                             span->block_size);
         }
-        memassert(span->free_list_limit <= span->block_count, "Span block count corrupted");
+        neo_assert(span->free_list_limit <= span->block_count, "Span block count corrupted");
         span->used_count = span->free_list_limit;
 
         if (atomic_load_ptr(&span->free_list_deferred))
@@ -3615,9 +3781,8 @@ _memallocate_from_heap_fallback(heap_t *heap, heap_size_class_t *heap_size_class
     return 0;
 }
 
-static void *
-_memallocate_small(heap_t *heap, size_t size) {
-    memassert(heap, "No thread heap");
+static void *_memallocate_small(heap_t *heap, size_t size) {
+    neo_assert(heap, "No thread heap");
     const uint32_t class_idx = (uint32_t) ((size + (SMALL_GRANULARITY - 1)) >> SMALL_GRANULARITY_SHIFT);
     heap_size_class_t *heap_size_class = heap->size_class + class_idx;
     _memstat_inc_alloc(heap, class_idx);
@@ -3626,9 +3791,8 @@ _memallocate_small(heap_t *heap, size_t size) {
     return _memallocate_from_heap_fallback(heap, heap_size_class, class_idx);
 }
 
-static void *
-_memallocate_medium(heap_t *heap, size_t size) {
-    memassert(heap, "No thread heap");
+static void *_memallocate_medium(heap_t *heap, size_t size) {
+    neo_assert(heap, "No thread heap");
     const uint32_t base_idx = (uint32_t) (SMALL_CLASS_COUNT +
                                           ((size - (SMALL_SIZE_LIMIT + 1)) >> MEDIUM_GRANULARITY_SHIFT));
     const uint32_t class_idx = _memory_size_class[base_idx].class_idx;
@@ -3639,9 +3803,8 @@ _memallocate_medium(heap_t *heap, size_t size) {
     return _memallocate_from_heap_fallback(heap, heap_size_class, class_idx);
 }
 
-static void *
-_memallocate_large(heap_t *heap, size_t size) {
-    memassert(heap, "No thread heap");
+static void *_memallocate_large(heap_t *heap, size_t size) {
+    neo_assert(heap, "No thread heap");
     size += SPAN_HEADER_SIZE;
     size_t span_count = size >> _memory_span_size_shift;
     if (size & (_memory_span_size - 1))
@@ -3651,7 +3814,7 @@ _memallocate_large(heap_t *heap, size_t size) {
     if (!span)
         return span;
 
-    memassert(span->span_count >= span_count, "Internal failure");
+    neo_assert(span->span_count >= span_count, "Internal failure");
     span->size_class = SIZE_CLASS_LARGE;
     span->heap = heap;
 
@@ -3663,9 +3826,8 @@ _memallocate_large(heap_t *heap, size_t size) {
     return poff(span, SPAN_HEADER_SIZE);
 }
 
-static void *
-_memallocate_huge(heap_t *heap, size_t size) {
-    memassert(heap, "No thread heap");
+static void *_memallocate_huge(heap_t *heap, size_t size) {
+    neo_assert(heap, "No thread heap");
     _memheap_cache_adopt_deferred(heap, 0);
     size += SPAN_HEADER_SIZE;
     size_t num_pages = size >> _memory_page_size_shift;
@@ -3690,8 +3852,7 @@ _memallocate_huge(heap_t *heap, size_t size) {
     return poff(span, SPAN_HEADER_SIZE);
 }
 
-static void *
-_memallocate(heap_t *heap, size_t size) {
+static void *_memallocate(heap_t *heap, size_t size) {
     _memstat_add64(&_allocation_counter, 1);
     if (neo_likely(size <= SMALL_SIZE_LIMIT))
         return _memallocate_small(heap, size);
@@ -3702,8 +3863,7 @@ _memallocate(heap_t *heap, size_t size) {
     return _memallocate_huge(heap, size);
 }
 
-static void *
-_memaligned_allocate(heap_t *heap, size_t alignment, size_t size) {
+static void *_memaligned_allocate(heap_t *heap, size_t alignment, size_t size) {
     if (alignment <= SMALL_GRANULARITY)
         return _memallocate(heap, size);
 
@@ -3721,7 +3881,7 @@ _memaligned_allocate(heap_t *heap, size_t alignment, size_t size) {
     if ((alignment <= SPAN_HEADER_SIZE) && ((size + SPAN_HEADER_SIZE) < _memory_medium_size_limit)) {
         size_t multiple_size = size ? (size + (SPAN_HEADER_SIZE - 1)) & ~(uintptr_t) (SPAN_HEADER_SIZE - 1)
                                     : SPAN_HEADER_SIZE;
-        memassert(!(multiple_size % SPAN_HEADER_SIZE), "Failed alignment calculation");
+        neo_assert(!(multiple_size % SPAN_HEADER_SIZE), "Failed alignment calculation");
         if (multiple_size <= (size + alignment))
             return _memallocate(heap, multiple_size);
     }
@@ -3806,10 +3966,9 @@ _memaligned_allocate(heap_t *heap, size_t alignment, size_t size) {
     return ptr;
 }
 
-static void
-_memdeallocate_direct_small_or_medium(span_t *span, void *block) {
+static void _memdeallocate_direct_small_or_medium(span_t *span, void *block) {
     heap_t *heap = span->heap;
-    memassert(heap->owner_thread == get_thread_id() || !heap->owner_thread || heap->finalize, "Internal failure");
+    neo_assert(heap->owner_thread == get_thread_id() || !heap->owner_thread || heap->finalize, "Internal failure");
     if (neo_unlikely(_memspan_is_fully_utilized(span))) {
         span->used_count = span->block_count;
 #if MEM_FIRST_CLASS_HEAPS
@@ -3834,8 +3993,7 @@ _memdeallocate_direct_small_or_medium(span_t *span, void *block) {
     }
 }
 
-static void
-_memdeallocate_defer_free_span(heap_t *heap, span_t *span) {
+static void _memdeallocate_defer_free_span(heap_t *heap, span_t *span) {
     if (span->size_class != SIZE_CLASS_HUGE)
         _memstat_inc(&heap->span_use[span->span_count - 1].spans_deferred);
     do {
@@ -3843,8 +4001,7 @@ _memdeallocate_defer_free_span(heap_t *heap, span_t *span) {
     } while (!atomic_cas_ptr(&heap->span_free_deferred, span, span->free_list));
 }
 
-static void
-_memdeallocate_defer_small_or_medium(span_t *span, void *block) {
+static void _memdeallocate_defer_small_or_medium(span_t *span, void *block) {
     void *free_list;
     do {
         free_list = atomic_exchange_ptr_acquire(&span->free_list_deferred, INVALID_POINTER);
@@ -3858,13 +4015,12 @@ _memdeallocate_defer_small_or_medium(span_t *span, void *block) {
     }
 }
 
-static void
-_memdeallocate_small_or_medium(span_t *span, void *p) {
+static void _memdeallocate_small_or_medium(span_t *span, void *p) {
     _memstat_inc_free(span->heap, span->size_class);
     if (span->flags & SPAN_FLAG_ALIGNED_BLOCKS) {
         void *blocks_start = poff(span, SPAN_HEADER_SIZE);
         uint32_t block_offset = (uint32_t) pdelta(p, blocks_start);
-        p = poff(p, -(int32_t) (block_offset % span->block_size));
+        p = poff(p, -(int32_t)(block_offset % span->block_size));
     }
 #if MEM_FIRST_CLASS_HEAPS
     int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
@@ -3877,11 +4033,10 @@ _memdeallocate_small_or_medium(span_t *span, void *p) {
         _memdeallocate_defer_small_or_medium(span, p);
 }
 
-static void
-_memdeallocate_large(span_t *span) {
-    memassert(span->size_class == SIZE_CLASS_LARGE, "Bad span size class");
-    memassert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
-    memassert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+static void _memdeallocate_large(span_t *span) {
+    neo_assert(span->size_class == SIZE_CLASS_LARGE, "Bad span size class");
+    neo_assert(!(span->flags & SPAN_FLAG_MASTER) || !(span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
+    neo_assert((span->flags & SPAN_FLAG_MASTER) || (span->flags & SPAN_FLAG_SUBSPAN), "Span flag corrupted");
 #if MEM_FIRST_CLASS_HEAPS
     int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
 #else
@@ -3891,17 +4046,17 @@ _memdeallocate_large(span_t *span) {
         _memdeallocate_defer_free_span(span->heap, span);
         return;
     }
-    memassert(span->heap->full_span_count, "Heap span counter corrupted");
+    neo_assert(span->heap->full_span_count, "Heap span counter corrupted");
     --span->heap->full_span_count;
 #if MEM_FIRST_CLASS_HEAPS
     _memspan_double_link_list_remove(&span->heap->large_huge_span, span);
 #endif
 #if NEO_ALLOC_ENABLE_ADAPTIVE_THREAD_CACHE || NEO_ALLOC_ENABLE_STATS
     size_t idx = span->span_count - 1;
-atomic_decr32(&span->heap->span_use[idx].current);
+    atomic_decr32(&span->heap->span_use[idx].current);
 #endif
     heap_t *heap = span->heap;
-    memassert(heap, "No thread heap");
+    neo_assert(heap, "No thread heap");
 #if NEO_ALLOC_ENABLE_THREAD_CACHE
     const int set_as_reserved = ((span->span_count > 1) && (heap->span_cache.count == 0) && !heap->finalize &&
                                  !heap->spans_reserved);
@@ -3915,10 +4070,10 @@ atomic_decr32(&span->heap->span_use[idx].current);
             heap->span_reserve_master = span;
         } else {
             span_t *master = (span_t *) poff(span, -(intptr_t) ((size_t) span->offset_from_master *
-                                                                          _memory_span_size));
+                                                                _memory_span_size));
             heap->span_reserve_master = master;
-            memassert(master->flags & SPAN_FLAG_MASTER, "Span flag corrupted");
-            memassert(atomic_load32(&master->remaining_spans) >= (int32_t) span->span_count,
+            neo_assert(master->flags & SPAN_FLAG_MASTER, "Span flag corrupted");
+            neo_assert(atomic_load32(&master->remaining_spans) >= (int32_t)span->span_count,
                       "Master span count corrupted");
         }
         _memstat_inc(&heap->span_use[idx].spans_to_reserved);
@@ -3927,9 +4082,8 @@ atomic_decr32(&span->heap->span_use[idx].current);
     }
 }
 
-static void
-_memdeallocate_huge(span_t *span) {
-    memassert(span->heap, "No span heap");
+static void _memdeallocate_huge(span_t *span) {
+    neo_assert(span->heap, "No span heap");
 #if MEM_FIRST_CLASS_HEAPS
     int defer = (span->heap->owner_thread && (span->heap->owner_thread != get_thread_id()) && !span->heap->finalize);
 #else
@@ -3939,7 +4093,7 @@ _memdeallocate_huge(span_t *span) {
         _memdeallocate_defer_free_span(span->heap, span);
         return;
     }
-    memassert(span->heap->full_span_count, "Heap span counter corrupted");
+    neo_assert(span->heap->full_span_count, "Heap span counter corrupted");
     --span->heap->full_span_count;
 #if MEM_FIRST_CLASS_HEAPS
     _memspan_double_link_list_remove(&span->heap->large_huge_span, span);
@@ -3950,8 +4104,7 @@ _memdeallocate_huge(span_t *span) {
     _memstat_sub(&_huge_pages_current, num_pages);
 }
 
-static void
-_memadjust_size_class(size_t iclass) {
+static void _memadjust_size_class(size_t iclass) {
     size_t block_size = _memory_size_class[iclass].block_size;
     size_t block_count = (_memory_span_size - SPAN_HEADER_SIZE) / block_size;
 
@@ -3971,8 +4124,7 @@ _memadjust_size_class(size_t iclass) {
     }
 }
 
-extern inline int
-meminitialize(void) {
+extern inline int meminitialize(void) {
     if (_meminitialized) {
         memthread_initialize();
         return 0;
@@ -3980,8 +4132,7 @@ meminitialize(void) {
     return meminitialize_config(0);
 }
 
-int
-meminitialize_config(const neo_alloc_config_t *config) {
+int meminitialize_config(const neo_alloc_config_t *config) {
     if (_meminitialized) {
         memthread_initialize();
         return 0;
@@ -4049,7 +4200,7 @@ meminitialize_config(const neo_alloc_config_t *config) {
                 if ((nsize = getpagesizes(sizes, 4)) >= 2) {
                     nsize --;
                     for (size_t csize = sizes[nsize]; nsize >= 0 && csize; --nsize, csize = sizes[nsize]) {
-                                                memassert(!(csize & (csize -1)) && !(csize % 1024), "Invalid page size");
+                                                neo_assert(!(csize & (csize -1)) && !(csize % 1024), "Invalid page size");
                         if (defsize < csize) {
                             _memory_page_size = csize;
                             break;
@@ -4144,7 +4295,7 @@ meminitialize_config(const neo_alloc_config_t *config) {
     if ((_memory_page_size >= _memory_span_size) && ((_memory_span_map_count * _memory_span_size) % _memory_page_size))
         _memory_span_map_count = (_memory_page_size / _memory_span_size);
     _memory_heap_reserve_count = (_memory_span_map_count > NEO_ALLOC_SPAN_MAP_COUNT) ? NEO_ALLOC_SPAN_MAP_COUNT
-                                                                                   : _memory_span_map_count;
+                                                                                     : _memory_span_map_count;
 
     _memory_config.page_size = _memory_page_size;
     _memory_config.span_size = _memory_span_size;
@@ -4198,18 +4349,15 @@ meminitialize_config(const neo_alloc_config_t *config) {
     memset(_memory_heaps, 0, sizeof(_memory_heaps));
     atomic_store32_release(&_memory_global_lock, 0);
 
-    memlinker_reference();
-
     memthread_initialize();
     return 0;
 }
 
-void
-memfinalize(void) {
+void memfinalize(void) {
     memthread_finalize(1);
 
     if (_memory_global_reserve) {
-        atomic_add32(&_memory_global_reserve_master->remaining_spans, -(int32_t) _memory_global_reserve_count);
+        atomic_add32(&_memory_global_reserve_master->remaining_spans, -(int32_t)_memory_global_reserve_count);
         _memory_global_reserve_master = 0;
         _memory_global_reserve_count = 0;
         _memory_global_reserve = 0;
@@ -4239,15 +4387,14 @@ memfinalize(void) {
     fls_key = 0;
 #endif
 #if NEO_ALLOC_ENABLE_STATS
-    memassert(atomic_load32(&_mapped_pages) == 0, "Memory leak detected");
-memassert(atomic_load32(&_mapped_pages_os) == 0, "Memory leak detected");
+    neo_assert(atomic_load32(&_mapped_pages) == 0, "Memory leak detected");
+neo_assert(atomic_load32(&_mapped_pages_os) == 0, "Memory leak detected");
 #endif
 
     _meminitialized = 0;
 }
 
-extern inline void
-memthread_initialize(void) {
+extern inline void memthread_initialize(void) {
     if (!get_thread_heap_raw()) {
         heap_t *heap = _memheap_allocate(0);
         if (heap) {
@@ -4260,8 +4407,7 @@ memthread_initialize(void) {
     }
 }
 
-void
-memthread_finalize(int release_caches) {
+void memthread_finalize(int release_caches) {
     heap_t *heap = get_thread_heap_raw();
     if (heap)
         _memheap_release_raw(heap, release_caches);
@@ -4271,14 +4417,15 @@ memthread_finalize(int release_caches) {
 #endif
 }
 
-int
-memis_thread_initialized(void) {
+int memis_thread_initialized(void) {
     return (get_thread_heap_raw() != 0) ? 1 : 0;
 }
 
 const neo_alloc_config_t *memconfig(void) { return &_memory_config; }
+
 extern inline size_t memusable_size(void *ptr) { return neo_allocator_bin_useable_size(ptr); }
-extern inline void memthread_collect(void) { }
+
+extern inline void memthread_collect(void) {}
 
 void memthread_statistics(neo_alloc_thread_stats_t *stats) {
     memset(stats, 0, sizeof(neo_alloc_thread_stats_t));
@@ -4346,8 +4493,7 @@ void memthread_statistics(neo_alloc_thread_stats_t *stats) {
 #endif
 }
 
-void
-memglobal_statistics(neo_alloc_global_stats_t *stats) {
+void memglobal_statistics(neo_alloc_global_stats_t *stats) {
     memset(stats, 0, sizeof(neo_alloc_global_stats_t));
 #if NEO_ALLOC_ENABLE_STATS
     stats->mapped = (size_t)atomic_load32(&_mapped_pages) * _memory_page_size;
@@ -4364,7 +4510,7 @@ memglobal_statistics(neo_alloc_global_stats_t *stats) {
             _memspin();
         uint32_t count = cache->count;
 #if NEO_ALLOC_ENABLE_UNLIMITED_CACHE
-        span_t* current_span = cache->overflow;
+        span_t *current_span = cache->overflow;
         while (current_span) {
             ++count;
             current_span = current_span->next;
@@ -4378,8 +4524,7 @@ memglobal_statistics(neo_alloc_global_stats_t *stats) {
 
 #if NEO_ALLOC_ENABLE_STATS
 
-static void
-_memory_heap_dump_statistics(heap_t* heap, void* file) {
+static void _memory_heap_dump_statistics(heap_t* heap, void* file) {
     fprintf(file, "Heap %d stats:\n", heap->id);
     fprintf(file, "Class   CurAlloc  PeakAlloc   TotAlloc    TotFree  BlkSize BlkCount SpansCur SpansPeak  PeakAllocMiB  ToCacheMiB FromCacheMiB FromReserveMiB MmapCalls\n");
     for (size_t iclass = 0; iclass < SIZE_CLASS_COUNT; ++iclass) {
@@ -4429,8 +4574,7 @@ _memory_heap_dump_statistics(heap_t* heap, void* file) {
 
 #endif
 
-void
-memdump_statistics(void *file) {
+void memdump_statistics(void *file) {
 #if NEO_ALLOC_ENABLE_STATS
     for (size_t list_idx = 0; list_idx < NEO_ALLOC_HEAP_ARRAY_SIZE; ++list_idx) {
         heap_t* heap = _memory_heaps[list_idx];
@@ -4438,8 +4582,8 @@ memdump_statistics(void *file) {
             int need_dump = 0;
             for (size_t iclass = 0; !need_dump && (iclass < SIZE_CLASS_COUNT); ++iclass) {
                 if (!atomic_load32(&heap->size_class_use[iclass].alloc_total)) {
-                    memassert(!atomic_load32(&heap->size_class_use[iclass].free_total), "Heap statistics counter mismatch");
-                    memassert(!atomic_load32(&heap->size_class_use[iclass].spans_map_calls), "Heap statistics counter mismatch");
+                    neo_assert(!atomic_load32(&heap->size_class_use[iclass].free_total), "Heap statistics counter mismatch");
+                    neo_assert(!atomic_load32(&heap->size_class_use[iclass].spans_map_calls), "Heap statistics counter mismatch");
                     continue;
                 }
                 need_dump = 1;
@@ -4501,7 +4645,7 @@ memdump_statistics(void *file) {
     fprintf(file, "Dangling master spans: %d\n", atomic_load32(&_unmapped_master_spans));
 #endif
 #endif
-    (void) sizeof(file);
+    (void)sizeof(file);
 }
 
 #if MEM_FIRST_CLASS_HEAPS
@@ -4515,8 +4659,7 @@ memheap_acquire(void) {
     return heap;
 }
 
-extern inline void
-memheap_release(memheap_t* heap) {
+extern inline void memheap_release(memheap_t* heap) {
     if (heap)
         _memheap_release(heap, 1, 1);
 }
@@ -4596,14 +4739,12 @@ memheap_aligned_realloc(memheap_t* heap, void* ptr, size_t alignment, size_t siz
     return _memaligned_reallocate(heap, ptr, alignment, size, 0, flags);
 }
 
-extern inline void
-memheap_free(memheap_t* heap, void* ptr) {
+extern inline void memheap_free(memheap_t* heap, void* ptr) {
     (void)sizeof(heap);
     _memdeallocate(ptr);
 }
 
-extern inline void
-memheap_free_all(memheap_t* heap) {
+extern inline void memheap_free_all(memheap_t* heap) {
     span_t* span;
     span_t* next_span;
 
@@ -4671,8 +4812,7 @@ memheap_free_all(memheap_t* heap) {
 #endif
 }
 
-extern inline void
-memheap_thread_set_current(memheap_t* heap) {
+extern inline void memheap_thread_set_current(memheap_t* heap) {
     heap_t* prev_heap = get_thread_heap_raw();
     if (prev_heap != heap) {
         set_thread_heap(heap);
@@ -4693,11 +4833,6 @@ memget_heap_for_ptr(void* ptr)
 }
 
 #endif
-
-void
-memlinker_reference(void) {
-    (void) sizeof(_meminitialized);
-}
 
 static volatile int64_t alloc_init = 0;
 
@@ -4734,48 +4869,50 @@ void *neo_allocator_alloc(size_t len) {
 
 void *neo_allocator_alloc_aligned(size_t len, size_t align) {
     check_allocator_online();
-    neo_assert(len != 0 && len < MAX_ALLOC_SIZE && align, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
-    neo_assert(len+align >= len && (align&(align-1)) == 0, "Allocation with invalid alignment: %zu", align);
+    neo_assert(len != 0 && len < MAX_ALLOC_SIZE && align, "Allocation with invalid size: %zub, max: %zub", len,
+               MAX_ALLOC_SIZE);
+    neo_assert(len + align >= len && (align & (align - 1)) == 0, "Allocation with invalid alignment: %zu", align);
     if (align <= SMALL_GRANULARITY) { return neo_allocator_alloc(len); }
-    else if ((align <= SPAN_HEADER_SIZE) && ((len+SPAN_HEADER_SIZE) < _memory_medium_size_limit)) {
-        size_t multiple_size = len ? (len+(SPAN_HEADER_SIZE-1))&~(uintptr_t)(SPAN_HEADER_SIZE-1) : SPAN_HEADER_SIZE;
-        memassert(!(multiple_size % SPAN_HEADER_SIZE), "Failed alignment calculation");
-        if (multiple_size <= (len+align)) { return neo_allocator_alloc(multiple_size); }
+    else if ((align <= SPAN_HEADER_SIZE) && ((len + SPAN_HEADER_SIZE) < _memory_medium_size_limit)) {
+        size_t multiple_size = len ? (len + (SPAN_HEADER_SIZE - 1)) & ~(uintptr_t) (SPAN_HEADER_SIZE - 1)
+                                   : SPAN_HEADER_SIZE;
+        neo_assert(!(multiple_size % SPAN_HEADER_SIZE), "Failed alignment calculation");
+        if (multiple_size <= (len + align)) { return neo_allocator_alloc(multiple_size); }
     }
     void *ptr = 0;
-    size_t align_mask = align-1;
+    size_t align_mask = align - 1;
     if (align <= _memory_page_size) {
         ptr = neo_allocator_alloc(len + align);
-        if ((uintptr_t)ptr&align_mask) {
-            ptr = (void *)(((uintptr_t)ptr&~(uintptr_t)align_mask)+align);
-            span_t *span = (span_t *)((uintptr_t)ptr&_memory_span_mask);
-            span->flags|=SPAN_FLAG_ALIGNED_BLOCKS;
+        if ((uintptr_t) ptr & align_mask) {
+            ptr = (void *) (((uintptr_t) ptr & ~(uintptr_t) align_mask) + align);
+            span_t *span = (span_t *) ((uintptr_t) ptr & _memory_span_mask);
+            span->flags |= SPAN_FLAG_ALIGNED_BLOCKS;
         }
         return ptr;
     }
     neo_assert(!(align & align_mask) && align < _memory_span_size, "Invalid alignment");
-    size_t extra_pages = align/_memory_page_size;
-    size_t num_pages = 1+(len/_memory_page_size);
-    if (len&(_memory_page_size-1)) { ++num_pages; }
-    if (extra_pages > num_pages) { num_pages = 1+extra_pages; }
+    size_t extra_pages = align / _memory_page_size;
+    size_t num_pages = 1 + (len / _memory_page_size);
+    if (len & (_memory_page_size - 1)) { ++num_pages; }
+    if (extra_pages > num_pages) { num_pages = 1 + extra_pages; }
     size_t original_pages = num_pages;
-    size_t limit_pages = (_memory_span_size/_memory_page_size)<<1;
-    if (limit_pages < original_pages<<1) {  limit_pages = original_pages<<1; }
+    size_t limit_pages = (_memory_span_size / _memory_page_size) << 1;
+    if (limit_pages < original_pages << 1) { limit_pages = original_pages << 1; }
     size_t mapped_size;
     size_t align_offset;
     span_t *span;
-retry:
+    retry:
     align_offset = 0;
     mapped_size = num_pages * _memory_page_size;
-    span = (span_t *)_memmmap(mapped_size, &align_offset);
+    span = (span_t *) _memmmap(mapped_size, &align_offset);
     neo_assert(span != NULL, "Out of memory");
     ptr = poff(span, SPAN_HEADER_SIZE);
-    if ((uintptr_t)ptr&align_mask) {
-        ptr = (void *)(((uintptr_t)ptr&~(uintptr_t)align_mask)+align);
+    if ((uintptr_t) ptr & align_mask) {
+        ptr = (void *) (((uintptr_t) ptr & ~(uintptr_t) align_mask) + align);
     }
-    if (((size_t)pdelta(ptr, span) >= _memory_span_size) ||
+    if (((size_t) pdelta(ptr, span) >= _memory_span_size) ||
         (poff(ptr, len) > poff(span, mapped_size)) ||
-        (((uintptr_t)ptr&_memory_span_mask) != (uintptr_t)span)) {
+        (((uintptr_t) ptr & _memory_span_mask) != (uintptr_t) span)) {
         _memunmap(span, mapped_size, align_offset, mapped_size);
         ++num_pages;
         neo_assert(num_pages <= limit_pages, "Page limit reached: %zu", limit_pages);
@@ -4801,42 +4938,46 @@ void *neo_allocator_realloc(void *blk, size_t len) {
     neo_assert(len < MAX_ALLOC_SIZE, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
     size_t oldsize = 0;
     if (blk) {
-        span_t *span = (span_t *)((uintptr_t)blk&_memory_span_mask);
+        span_t *span = (span_t *) ((uintptr_t) blk & _memory_span_mask);
         if (neo_likely(span->size_class < SIZE_CLASS_COUNT)) {
-            memassert(span->span_count == 1, "Span counter corrupted");
+            neo_assert(span->span_count == 1, "Span counter corrupted");
             void *blocks_start = poff(span, SPAN_HEADER_SIZE);
-            uint32_t block_offset = (uint32_t)pdelta(blk, blocks_start);
-            uint32_t block_idx = block_offset/span->block_size;
-            void *block = poff(blocks_start, (size_t)block_idx*span->block_size);
-            if (!oldsize) { oldsize = (size_t)((ptrdiff_t)span->block_size-pdelta(blk, block)); }
+            uint32_t block_offset = (uint32_t) pdelta(blk, blocks_start);
+            uint32_t block_idx = block_offset / span->block_size;
+            void *block = poff(blocks_start, (size_t) block_idx * span->block_size);
+            if (!oldsize) { oldsize = (size_t) ((ptrdiff_t) span->block_size - pdelta(blk, block)); }
             if ((size_t) span->block_size >= len) {
-                if (blk != block && !(flags&MEM_NO_PRESERVE)) {
+                if (blk != block && !(flags & MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
                 }
                 return block;
             }
         } else if (span->size_class == SIZE_CLASS_LARGE) {
-            size_t total_size = len+SPAN_HEADER_SIZE;
-            size_t num_spans = total_size>>_memory_span_size_shift;
-            if (total_size&(_memory_span_mask-1)) { ++num_spans; }
+            size_t total_size = len + SPAN_HEADER_SIZE;
+            size_t num_spans = total_size >> _memory_span_size_shift;
+            if (total_size & (_memory_span_mask - 1)) { ++num_spans; }
             size_t current_spans = span->span_count;
             void *block = poff(span, SPAN_HEADER_SIZE);
-            if (!oldsize) { oldsize = (current_spans*_memory_span_size)-(size_t)pdelta(blk, block)-SPAN_HEADER_SIZE; }
-            if ((current_spans >= num_spans) && (total_size >= (oldsize>>1))) {
-                if (blk != block && !(flags&MEM_NO_PRESERVE)) {
+            if (!oldsize) {
+                oldsize = (current_spans * _memory_span_size) - (size_t) pdelta(blk, block) - SPAN_HEADER_SIZE;
+            }
+            if ((current_spans >= num_spans) && (total_size >= (oldsize >> 1))) {
+                if (blk != block && !(flags & MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
                 }
                 return block;
             }
         } else {
-            size_t total_size = len+SPAN_HEADER_SIZE;
-            size_t num_pages = total_size>>_memory_page_size_shift;
-            if (total_size&(_memory_page_size-1)) { ++num_pages; }
+            size_t total_size = len + SPAN_HEADER_SIZE;
+            size_t num_pages = total_size >> _memory_page_size_shift;
+            if (total_size & (_memory_page_size - 1)) { ++num_pages; }
             size_t current_pages = span->span_count;
             void *block = poff(span, SPAN_HEADER_SIZE);
-            if (!oldsize) { oldsize = (current_pages*_memory_page_size)-(size_t)pdelta(blk, block)-SPAN_HEADER_SIZE; }
-            if ((current_pages >= num_pages) && (num_pages >= (current_pages>>1))) {
-                if (blk != block && !(flags&MEM_NO_PRESERVE)) {
+            if (!oldsize) {
+                oldsize = (current_pages * _memory_page_size) - (size_t) pdelta(blk, block) - SPAN_HEADER_SIZE;
+            }
+            if ((current_pages >= num_pages) && (num_pages >= (current_pages >> 1))) {
+                if (blk != block && !(flags & MEM_NO_PRESERVE)) {
                     memmove(block, blk, oldsize);
                 }
                 return block;
@@ -4845,12 +4986,12 @@ void *neo_allocator_realloc(void *blk, size_t len) {
     } else {
         oldsize = 0;
     }
-    if (flags&MEM_GROW_OR_FAIL) { return NULL; }
-    size_t lower_bound = oldsize+(oldsize>>2)+(oldsize>>3);
-    size_t new_size = (len>lower_bound)?len:((len>oldsize)?lower_bound:len);
+    if (flags & MEM_GROW_OR_FAIL) { return NULL; }
+    size_t lower_bound = oldsize + (oldsize >> 2) + (oldsize >> 3);
+    size_t new_size = (len > lower_bound) ? len : ((len > oldsize) ? lower_bound : len);
     void *block = neo_allocator_alloc(len);
     if (blk && block) {
-        if (!(flags&MEM_NO_PRESERVE)) {
+        if (!(flags & MEM_NO_PRESERVE)) {
             memcpy(block, blk, oldsize < new_size ? oldsize : new_size);
         }
         neo_allocator_free(blk);
@@ -4862,17 +5003,17 @@ void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align) {
     static const unsigned flags = 0;
     check_allocator_online();
     neo_assert(len < MAX_ALLOC_SIZE, "Allocation with invalid size: %zub, max: %zub", len, MAX_ALLOC_SIZE);
-    neo_assert(len+align >= len && (align&(align-1)) == 0, "Allocation with invalid alignment: %zu", align);
+    neo_assert(len + align >= len && (align & (align - 1)) == 0, "Allocation with invalid alignment: %zu", align);
     size_t oldsize = 0;
     if (align <= SMALL_GRANULARITY) { return neo_allocator_realloc(blk, len); }
-    bool no_alloc = (flags&MEM_GROW_OR_FAIL) != 0;
+    bool no_alloc = (flags & MEM_GROW_OR_FAIL) != 0;
     size_t usablesize = neo_allocator_bin_useable_size(blk);
-    if ((usablesize >= len) && !((uintptr_t)blk&(align-1))) {
-        if (no_alloc || len >= (usablesize>>1)) {  return blk; }
+    if ((usablesize >= len) && !((uintptr_t) blk & (align - 1))) {
+        if (no_alloc || len >= (usablesize >> 1)) { return blk; }
     }
     void *block = (!no_alloc ? neo_allocator_alloc_aligned(len, align) : 0);
     if (neo_likely(block != 0)) {
-        if (!(flags&MEM_NO_PRESERVE) && blk) {
+        if (!(flags & MEM_NO_PRESERVE) && blk) {
             if (!oldsize) { oldsize = usablesize; }
             memcpy(block, blk, oldsize < len ? oldsize : len);
         }
@@ -4883,24 +5024,24 @@ void *neo_allocator_realloc_aligned(void *blk, size_t len, size_t align) {
 
 size_t neo_allocator_bin_useable_size(void *blk) {
     if (neo_unlikely(!blk)) { return 0; }
-    span_t *span = (span_t *)((uintptr_t)blk&_memory_span_mask);
+    span_t *span = (span_t *) ((uintptr_t) blk & _memory_span_mask);
     if (span->size_class < SIZE_CLASS_COUNT) {
         void *blocks_start = poff(span, SPAN_HEADER_SIZE);
-        return span->block_size-((size_t)pdelta(blk, blocks_start)%span->block_size);
+        return span->block_size - ((size_t) pdelta(blk, blocks_start) % span->block_size);
     }
     if (span->size_class == SIZE_CLASS_LARGE) {
         size_t current_spans = span->span_count;
-        return (current_spans*_memory_span_size)-(size_t)pdelta(blk, span);
+        return (current_spans * _memory_span_size) - (size_t) pdelta(blk, span);
     }
     size_t current_pages = span->span_count;
-    return (current_pages*_memory_page_size)-(size_t)pdelta(blk, span);
+    return (current_pages * _memory_page_size) - (size_t) pdelta(blk, span);
 }
 
 void neo_allocator_free(void *blk) {
     check_allocator_online();
     if (neo_unlikely(!blk)) { return; }
     _memstat_add64(&_deallocation_counter, 1);
-    span_t *span = (span_t *)((uintptr_t)blk & _memory_span_mask);
+    span_t *span = (span_t *) ((uintptr_t) blk & _memory_span_mask);
     if (neo_unlikely(!span)) { return; }
     if (neo_likely(span->size_class < SIZE_CLASS_COUNT)) {
         _memdeallocate_small_or_medium(span, blk);
