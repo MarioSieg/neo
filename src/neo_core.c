@@ -2627,11 +2627,9 @@ static void _memspin(void) {
 static void NTAPI
 _memthread_destructor(void* value) {
 #if NEO_ALLOC_ENABLE_OVERRIDE
-            if (get_thread_id() == _memmain_thread_id)
-        return;
+        if (get_thread_id() == _memmain_thread_id) { return; }
 #endif
-    if (value)
-        memthread_finalize(1);
+    if (value) { memthread_finalize(1); }
 }
 #endif
 
@@ -2670,20 +2668,19 @@ static void _memunmap(void *address, size_t size, size_t offset, size_t release)
 }
 
 static void *_memmmap_os(size_t size, size_t *offset) {
-    size_t padding = ((size >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) ? _memory_span_size
-                                                                                                    : 0;
+    size_t padding = ((size >= _memory_span_size) && (_memory_span_size > _memory_map_granularity)) ? _memory_span_size : 0;
     neo_assert(size >= _memory_page_size, "Invalid mmap size");
 #if PLATFORM_WINDOWS
     void* ptr = VirtualAlloc(0, size + padding, (_memory_huge_pages ? MEM_LARGE_PAGES : 0) | MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-if (!ptr) {
-    if (_memory_config.map_fail_callback) {
-        if (_memory_config.map_fail_callback(size + padding))
-            return _memmmap_os(size, offset);
-    } else {
-        neo_assert(ptr, "Failed to map virtual memory block");
+    if (!ptr) {
+        if (_memory_config.map_fail_callback) {
+            if (_memory_config.map_fail_callback(size + padding))
+                return _memmmap_os(size, offset);
+        } else {
+            neo_assert(ptr, "Failed to map virtual memory block");
+        }
+        return 0;
     }
-    return 0;
-}
 #else
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNINITIALIZED;
 #  if defined(__APPLE__) && !TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
