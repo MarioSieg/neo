@@ -24,7 +24,8 @@ TEST(core, bundled_alloc_vs_malloc_bench) {
         sys_malloc.emplace_back(malloc(block_sizes[i]));
     }
 
-    std::cout << "Sysmalloc took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock).count() << "ms" << std::endl;
+    auto sysmalloc = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock);
+    std::cout << "Sysmalloc took " << sysmalloc.count() << "ms" << std::endl;
 
     clock = std::chrono::high_resolution_clock::now();
 
@@ -32,7 +33,12 @@ TEST(core, bundled_alloc_vs_malloc_bench) {
         bundled_malloc.emplace_back(neo_allocator_alloc(block_sizes[i]));
     }
 
-    std::cout << "Bundled malloc took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock).count() << "ms" << std::endl;
+    auto bmalloc = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - clock);
+    std::cout << "Bundled malloc took " << bmalloc.count() << "ms" << std::endl;
+
+    double percentage_difference = ((static_cast<double>(sysmalloc.count()) - bmalloc.count()) / sysmalloc.count()) * 100;
+
+    std::cout << "Bundled malloc is " << percentage_difference << "% faster than sys_malloc." << std::endl;
 
     for (void *p : sys_malloc) {
         free(p);
