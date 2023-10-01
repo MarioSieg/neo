@@ -2562,7 +2562,7 @@ get_thread_heap(void) {
 
 static inline uintptr_t get_thread_id(void) {
 #if defined(_WIN32)
-    return (uintptr_t)((void*)NtCurrentTeb());
+    return (uintptr_t)((void *)NtCurrentTeb());
 #elif (defined(__GNUC__) || defined(__clang__)) && !defined(__CYGWIN__)
     uintptr_t tid;
 #  if defined(__i386__)
