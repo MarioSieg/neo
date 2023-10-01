@@ -2218,13 +2218,9 @@ static NEO_AINLINE int     atomic_cas_ptr(atomicptr_t* dst, void* val, void* ref
 
 #include <stdatomic.h>
 
-typedef volatile _Atomic(int32_t)
-atomic32_t;
-typedef volatile _Atomic(int64_t)
-atomic64_t;
-typedef volatile _Atomic(
-void*)
-atomicptr_t;
+typedef volatile _Atomic(int32_t) atomic32_t;
+typedef volatile _Atomic(int64_t) atomic64_t;
+typedef volatile _Atomic(void*) atomicptr_t;
 
 static NEO_AINLINE int32_t atomic_load32(atomic32_t *src) { return atomic_load_explicit(src, memory_order_relaxed); }
 
