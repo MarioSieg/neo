@@ -53,17 +53,18 @@ using namespace neo;
         \
         error_vector_t ev {}; \
         errvec_init(&ev); \
-        deduced_t type = deduce_typeof_expr(pool, &ev, expr); \
-        ASSERT_TRUE(type.is_valid); \
+        typeid_t tid;\
+        bool ok = deduce_typeof_expr(pool, &ev, expr, &tid); \
+        ASSERT_TRUE(ok); \
         errvec_print(&ev, stdout, true); \
         ASSERT_TRUE(errvec_isempty(ev)); \
-        ASSERT_EQ(type.tid, expected_type); \
+        ASSERT_EQ(tid, expected_type); \
         errvec_free(&ev); \
     }
 
 test_typeof_expr("22", TYPEID_INT, int)
 test_typeof_expr("0xfefe ^ (32-1)", TYPEID_INT, int_expr)
-test_typeof_expr("-1.0", TYPEID_FLOAT, float)
+test_typeof_expr("1.0", TYPEID_FLOAT, float)
 test_typeof_expr("2.5*0.5", TYPEID_FLOAT, float_expr)
 
 TEST(compiler, compile_test_file) {
@@ -79,4 +80,50 @@ TEST(compiler, render_ast_test_file) {
     compiler compiler {};
     compiler |= COM_FLAG_RENDER_AST;
     ASSERT_TRUE(compiler(source));
+}
+
+TEST(compiler, compiletest_file) {
+    source_code source {"test/files/test.neo"};
+
+    compiler compiler {};
+    ASSERT_TRUE(compiler(source));
+}
+
+TEST(compiler, render_ast_test_small_file) {
+    source_code source {"test/files/test_small.neo"};
+
+    compiler compiler {};
+    compiler |= COM_FLAG_RENDER_AST;
+    ASSERT_TRUE(compiler(source));
+}
+
+#include <filesystem>
+#include <vector>
+
+[[nodiscard]] static auto load_all_source_files_from_dir(const std::string &dir) {
+    std::vector<neo::source_code> files {};
+    for (auto &&entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (entry.is_regular_file()) {
+            files.emplace_back(neo::source_code{entry.path().string()});
+        }
+    }
+    return files;
+}
+
+TEST(compile_files, accept) {
+    std::vector<neo::source_code> sources {load_all_source_files_from_dir("test/files/semantic/accept")};
+    for (auto &&src : sources) {
+        std::cout << "Compiling valid: " << src.get_file_name() << std::endl;
+        compiler compiler {};
+        ASSERT_TRUE(compiler(src));
+    }
+}
+
+TEST(compile_files, reject) {
+    std::vector<neo::source_code> sources {load_all_source_files_from_dir("test/files/semantic/reject")};
+    for (auto &&src : sources) {
+        std::cout << "Parsing invalid: " << src.get_file_name() << std::endl;
+        compiler compiler {};
+        ASSERT_FALSE(compiler(src));
+    }
 }

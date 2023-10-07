@@ -122,9 +122,9 @@ neo_static_assert(TOK__COUNT <= 255);
 neo_static_assert(KWR_START>=0 && KWR_END<TOK__COUNT && KWR_LEN>0 && KWR_LEN<=255 && KWR_END-KWR_START>0);
 extern NEO_EXPORT const char *tok_lexemes[TOK__COUNT];
 
-/* Represents a span (also known as slice in the Rust world) of UTF-8 source code. */
+/* Represents a span (! NOT zero terminated) (also known as slice in the Rust world) of UTF-8 source code. */
 typedef struct srcspan_t {
-    const uint8_t *p; /* Start pointer. */
+    const uint8_t *p; /* Start pointer. Never pass to any string functions directly, NOT zero terminated. */
     uint32_t len; /* Length in bytes. So end would be: const uint8_t *end = p + len.  */
 } srcspan_t;
 #define srcspan_from(str) ((srcspan_t){.p=(const uint8_t *)(str),.len=sizeof(str)-1}) /* Create source span from string literal. */

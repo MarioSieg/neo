@@ -1,0 +1,14 @@
+class Test
+    let var: int = 10
+    let name: string = "Hey"
+
+    # This func counts
+    func f(x: int) -> int
+        let r: int = 0
+        let i: int = 0
+        while i < x do
+            r += 1
+        end
+        return r
+    end
+end

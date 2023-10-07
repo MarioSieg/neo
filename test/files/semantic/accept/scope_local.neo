@@ -1,0 +1,7 @@
+let x: int = 10
+
+func f()
+    let y: int = 22 # local
+end
+
+let y: int = 22 # allowed again

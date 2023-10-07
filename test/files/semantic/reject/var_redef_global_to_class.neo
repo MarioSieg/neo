@@ -1,0 +1,5 @@
+let x: int = 10
+
+class A
+    let x: float = 1.0
+end

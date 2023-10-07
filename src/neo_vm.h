@@ -6,6 +6,7 @@
 
 #include "neo_core.h"
 #include "neo_bc.h"
+#include "neo_gc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,6 +62,7 @@ struct vm_isolate_t {
     char name[128]; /* Name of the isolate. */
     int64_t id; /* Unique ID of the isolate. */
     opstck_t stack; /* Stack. */
+    gc_context_t gc_context; /* GC context. */
     FILE *io_input; /* Input stream. */
     FILE *io_output; /* Output stream. */
     FILE *io_error; /* Error stream. */

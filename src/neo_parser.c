@@ -234,7 +234,7 @@ static NEO_AINLINE bool is_line_or_block_done(parser_t *self) {
 
 static binary_op_type_t expr_paren_grouping(parser_t *self, astref_t *node) {
     neo_dassert(self != NULL && node != NULL, "Invalid arguments");
-    if (self->prev.type == TOK_PU_L_PAREN) {
+    if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
         expr_eval_precedence(self, node, PREC_TERNARY);
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')'");
         *node = astnode_new_group(&self->pool, &(node_group_t) {
@@ -253,9 +253,39 @@ static binary_op_type_t expr_literal_identifier(parser_t *self, astref_t *node) 
     return EXPR_OP_DONE;
 }
 
+static bool escape_string(parser_t *self, uint8_t *p, size_t n) {
+    neo_dassert(self != NULL && p != NULL, "Invalid arguments");
+    size_t l = 0;
+    for (size_t i = 0; i < n; ++i) {
+        if (p[i] != '\\') { /* Nothing to escape. */
+            p[l++] = p[i];
+            continue;
+        }
+        switch (p[++i]) {
+            case 'n': p[++l] = '\n'; continue;
+            case 't': p[++l] = '\t'; continue;
+            case '\\': p[++l] = '\\'; continue;
+            case 'v': p[++l] = '\v'; continue;
+            case 'r': p[++l] = '\r'; continue;
+            default: return false;
+        }
+    }
+    p[l] = '\0';
+    return true;
+}
+
 static binary_op_type_t expr_literal_string(parser_t *self, astref_t *node) {
     neo_dassert(self != NULL && node != NULL, "Invalid arguments");
-    return EXPR_OP_DONE; /* TODO. */
+    if (neo_likely(self->prev.type == TOK_LI_STRING)) {
+        uint8_t *str;
+        srcspan_stack_clone(self->prev.lexeme, str);
+        escape_string(self, str, self->prev.lexeme.len);
+        *node = astnode_new_string(&self->pool, str, &self->prev);
+        return EXPR_OP_DONE;
+    } else {
+        error(self, &self->prev, "Invalid string literal");
+        return EXPR_OP_DONE;
+    }
 }
 
 static binary_op_type_t expr_literal_char(parser_t *self, astref_t *node) {
@@ -271,7 +301,7 @@ static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
             srcspan_t lexeme = self->prev.lexeme;
             uint8_t *p;
             p = (uint8_t *)alloca((1+2+lexeme.len)*sizeof(*(p)));
-            memcpy((p), lexeme.p, lexeme.len*sizeof(*(p)));
+            memcpy(p, lexeme.p, lexeme.len*sizeof(*(p)));
             p[lexeme.len] = 'l';
             p[lexeme.len+1] = 'l';
             p[lexeme.len+2] = '\0';
@@ -288,7 +318,7 @@ static binary_op_type_t expr_literal_scalar(parser_t *self, astref_t *node) {
         case TOK_LI_FLOAT: {
             srcspan_t lexeme = self->prev.lexeme;
             record_t v = {0};
-            neo_strscan_format_t fmt = neo_strscan_scan(lexeme.p, lexeme.len, &v, NEO_STRSCAN_OPT_NONE);
+            neo_strscan_format_t fmt = neo_strscan_scan(lexeme.p, lexeme.len, &v, NEO_STRSCAN_OPT_TONUM);
             if (neo_unlikely(fmt != NEO_STRSCAN_NUM)) {
                 error(self, &self->prev, "Invalid literal for type 'float'");
                 return EXPR_OP_DONE;
@@ -436,25 +466,40 @@ static binary_op_type_t expr_binary_op(parser_t *self, astref_t *node) {
 }
 #undef map_prec
 
+static void push_scope(parser_t *self, node_block_t *block) {
+    if (node_block_can_have_symtabs(block)) {
+        block->scope_depth = ++self->scope_depth;
+    }
+}
+static void pop_scope(parser_t *self, const node_block_t *block) {
+    if (node_block_can_have_symtabs(block)) {
+        neo_assert(self->scope_depth > 0, "Scope push/pop mismatch");
+        --self->scope_depth;
+    }
+}
+
 static binary_op_type_t expr_function_call(parser_t *self, astref_t *node) {
     neo_dassert(self != NULL && node != NULL, "Invalid arguments");
     advance(self); /* Eat LPAREN. */
     if (neo_likely(self->prev.type == TOK_PU_L_PAREN)) {
         if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have arguments. */
-            node_block_t arguments = {
+            node_block_t args_list = {
                 .scope = BLOCKSCOPE_ARGLIST
             };
+            push_scope(self, &args_list);
             do { /* Parse arguments. */
                 astref_t arg = ASTREF_NULL;
                 expr_eval_precedence(self, &arg, PREC_TERNARY);
                 if (neo_unlikely(astref_isnull(arg))) {
                     error(self, &self->prev, "Invalid argument in function call, expected expression");
+                    pop_scope(self, &args_list);
                     return EXPR_OP_DONE;
                 }
-                node_block_push_child(&self->pool, &arguments, arg);
+                node_block_push_child(&self->pool, &args_list, arg);
             } while (consume_match(self, TOK_PU_COMMA));
             consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after function call arguments");
-            *node = astnode_new_block(&self->pool, &arguments);
+            pop_scope(self, &args_list);
+            *node = astnode_new_block(&self->pool, &args_list);
         }
         return BINOP_CALL;
     } else {
@@ -596,17 +641,19 @@ static astref_t rule_function(parser_t *self, bool is_static) {
     consume_or_err(self, TOK_PU_L_PAREN, "Expected '(' after function name. Rule: function <name>(<parameters>) -> <return-type>");
     astref_t parameters = ASTREF_NULL;
     if (!consume_match(self, TOK_PU_R_PAREN)) { /* We have parameters. */
-        node_block_t param_list = {
+        node_block_t params_block = {
             .scope = BLOCKSCOPE_PARAMLIST
         };
-        int depth = 0;
+        push_scope(self, &params_block);
+        uint32_t depth = 0;
         do { /* Eat all parameters. */
             check_depth_lim(depth);
-            node_block_push_child(&self->pool, &param_list, rule_variable(self, VARSCOPE_PARAM));
+            node_block_push_child(&self->pool, &params_block, rule_variable(self, VARSCOPE_PARAM));
             ++depth;
         } while (is_status_ok(self) && consume_match(self, TOK_PU_COMMA));
         consume_or_err(self, TOK_PU_R_PAREN, "Expected ')' after function parameter list. Rule: function <name>(<parameters>) -> <return-type>");
-        parameters = astnode_new_block(&self->pool, &param_list);
+        pop_scope(self, &params_block);
+        parameters = astnode_new_block(&self->pool, &params_block);
     }
     astref_t ret_type = ASTREF_NULL;
     if (consume_match(self, TOK_PU_ARROW)) { /* We have a return type. */
@@ -642,41 +689,45 @@ static astref_t rule_class(parser_t *self, bool is_static) {
 */
 static NEO_HOTPROC astref_t parser_root_stmt(parser_t *self, bool within_loop) {
     neo_dassert(self != NULL, "self is NULL");
-    node_block_t block = {
+    node_block_t local_block = {
         .scope = BLOCKSCOPE_LOCAL
     };
-    for (int depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
+    push_scope(self, &local_block);
+    for (uint32_t depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         if (consume_match(self, TOK_KW_LET)) {
-            node_block_push_child(&self->pool, &block, rule_variable(self, VARSCOPE_LOCAL));
+            node_block_push_child(&self->pool, &local_block, rule_variable(self, VARSCOPE_LOCAL));
         } else if (consume_match(self, TOK_KW_IF)) {
-            node_block_push_child(&self->pool, &block, rule_branch(self, within_loop));
+            node_block_push_child(&self->pool, &local_block, rule_branch(self, within_loop));
         } else if (consume_match(self, TOK_KW_WHILE)) {
-            node_block_push_child(&self->pool, &block, rule_loop(self, true));
+            node_block_push_child(&self->pool, &local_block, rule_loop(self, true));
         } else if (consume_match(self, TOK_KW_RETURN)) {
-            node_block_push_child(&self->pool, &block, rule_return(self));
+            node_block_push_child(&self->pool, &local_block, rule_return(self));
         } else if (consume_match(self, TOK_KW_BREAK)) {
             if (neo_likely(within_loop)) {
-                node_block_push_child(&self->pool, &block, astnode_new_break(&self->pool));
+                node_block_push_child(&self->pool, &local_block, astnode_new_break(&self->pool));
             } else {
+                pop_scope(self, &local_block);
                 error(self, &self->prev, "'break' statement can only be used within loops");
                 return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_KW_CONTINUE)) {
             if (neo_likely(within_loop)) {
-                node_block_push_child(&self->pool, &block, astnode_new_continue(&self->pool));
+                node_block_push_child(&self->pool, &local_block, astnode_new_continue(&self->pool));
             } else {
+                pop_scope(self, &local_block);
                 error(self, &self->prev, "'continue' statement can only be used within loops");
                 return ASTREF_NULL;
             }
         } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
         } else {
-            node_block_push_child(&self->pool, &block, rule_free_expr_statement(self));
+            node_block_push_child(&self->pool, &local_block, rule_free_expr_statement(self));
         }
     }
+    pop_scope(self, &local_block);
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after function end. Rule: end <newline>");
-    return astnode_new_block(&self->pool, &block);
+    return astnode_new_block(&self->pool, &local_block);
 }
 
 /*
@@ -685,25 +736,28 @@ static NEO_HOTPROC astref_t parser_root_stmt(parser_t *self, bool within_loop) {
 */
 static NEO_HOTPROC astref_t parser_root_stmt_class(parser_t *self) {
     neo_dassert(self != NULL, "self is NULL");
-    node_block_t block = {
+    node_block_t class_block = {
         .scope = BLOCKSCOPE_CLASS
     };
-    for (int depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
+    push_scope(self, &class_block);
+    for (uint32_t depth = 0; is_status_ok(self) && !consume_match(self, TOK_KW_END); ++depth) {
         check_depth_lim(depth);
         bool is_static = consume_match(self, TOK_KW_STATIC); /* Is the following function or variable static? */
         if (consume_match(self, TOK_KW_FUNCTION)) {
-            node_block_push_child(&self->pool, &block, rule_function(self, is_static));
+            node_block_push_child(&self->pool, &class_block, rule_function(self, is_static));
         } else if (consume_match(self, TOK_KW_LET)) {
-            node_block_push_child(&self->pool, &block, rule_variable(self, is_static ? VARSCOPE_STATIC_FIELD : VARSCOPE_FIELD));
+            node_block_push_child(&self->pool, &class_block, rule_variable(self, is_static ? VARSCOPE_STATIC_FIELD : VARSCOPE_FIELD));
         } else if (consume_match(self, TOK_PU_NEWLINE)) {
             /* Ignored here. */
         } else {
             error(self, &self->curr, "Expected function or variable.");
+            pop_scope(self, &class_block);
             return ASTREF_NULL;
         }
     }
     consume_or_err(self, TOK_PU_NEWLINE, "Expected new line after class end. Rule: end <newline>");
-    return astnode_new_block(&self->pool, &block);
+    pop_scope(self, &class_block);
+    return astnode_new_block(&self->pool, &class_block);
 }
 
 /*
@@ -759,20 +813,22 @@ static astref_t parser_root_stmt_module_error_handling_wrapper(parser_t *self, b
 
 static NEO_HOTPROC astref_t parser_drain_whole_module(parser_t *self) {
     neo_dassert(self != NULL, "self is NULL");
-    node_block_t block = {
+    node_block_t module_block = {
         .scope = BLOCKSCOPE_MODULE
     };
-    for (int depth = 0; is_status_ok(self); ++depth) {
+    push_scope(self, &module_block);
+    for (uint32_t depth = 0; is_status_ok(self); ++depth) {
         check_depth_lim(depth);
         bool skip = false;
         astref_t node = parser_root_stmt_module_error_handling_wrapper(self, &skip);
         if (skip) { continue; }
         if (neo_unlikely(astref_isnull(node))) { break; }
         neo_assert(astpool_isvalidref(&self->pool, node), "Invalid AST-Reference emitted");
-        node_block_push_child(&self->pool, &block, node);
+        node_block_push_child(&self->pool, &module_block, node);
     }
+    pop_scope(self, &module_block);
     return astnode_new_module(&self->pool, &(node_module_t) {
-        .body = astnode_new_block(&self->pool, &block)
+        .body = astnode_new_block(&self->pool, &module_block)
     });
 }
 

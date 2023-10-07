@@ -381,12 +381,14 @@ astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value, const token_t *tok)
     return ref;
 }
 
-astref_t astnode_new_string(astpool_t *pool, srcspan_t value, const token_t *tok) {
-    neo_dassert(pool != NULL, "self is NULL");
+astref_t astnode_new_string(astpool_t *pool, const uint8_t *src, const token_t *tok) {
+    neo_dassert(pool != NULL && src != NULL, "Invalid arguments");
     astnode_t *nn = NULL;
     astref_t ref = astpool_alloc(pool, &nn, ASTNODE_STRING_LIT);
-    nn->dat.n_string_lit.span = value;
-    nn->dat.n_string_lit.hash = srcspan_hash(value); /* Strings are hashed. */
+    /* String literals own the memory, because the literal must be escaped :) */
+    size_t len;
+    nn->dat.n_string_lit.str = neo_strdup2(src, &len); /* Clone. */
+    nn->dat.n_string_lit.hash = neo_hash_fnv1a(nn->dat.n_string_lit.str, len); /* Strings are hashed. */
     nn->dat.n_string_lit.tok = tok ? *tok : (token_t){};
     return ref;
 }
@@ -528,6 +530,14 @@ size_t astnode_visit(astpool_t *pool, astref_t root, void (*visitor)(astpool_t *
     return c;
 }
 
+/* Called by the pool to release individual node data. */
+static void astnode_free(astnode_t *node) {
+    if (!node || node->type != ASTNODE_STRING_LIT) { return; }
+    uint8_t *str = node->dat.n_string_lit.str;
+    if (!str) { return; }
+    neo_memalloc(str, 0);
+}
+
 astref_t astpool_alloc(astpool_t *self, astnode_t **o, astnode_type_t type) { /* TODO: Use mempool alloc. */
     neo_dassert(self != NULL, "AST-pool is NULL");
     size_t plen = self->node_pool.len+sizeof(astnode_t);
@@ -559,6 +569,10 @@ void astpool_init(astpool_t *self) {
 
 void astpool_free(astpool_t *self) {
     neo_dassert(self != NULL, "self is NULL");
+    for (size_t i = 0; i < self->node_pool.len; i += sizeof(astnode_t)) { /* Free all string literal data. */
+        astnode_t *node = (astnode_t *)(&((uint8_t *)self->node_pool.top)[i]);
+        astnode_free(node); /* Free individual node data, if any. */
+    }
     neo_mempool_free(&self->list_pool);
     neo_mempool_free(&self->node_pool);
 }
@@ -644,7 +658,12 @@ static Agnode_t *create_colored_node(Agraph_t *g, const astnode_t *target, const
     char buf[32];
     snprintf(buf, sizeof(buf), "%" PRIu32, c);
     Agnode_t *n = agnode(g, buf, 1);
-    name = name && *name ? name : target->type == ASTNODE_BLOCK ? block_names[target->dat.n_block.scope] : astnode_names[target->type];
+    bool is_block = target->type == ASTNODE_BLOCK;
+    char bname[128];
+    if (is_block) {
+        snprintf(bname, sizeof(bname), "%s depth=%" PRIu32, block_names[target->dat.n_block.scope], target->dat.n_block.scope_depth);
+    }
+    name = name && *name ? name : is_block ? bname : astnode_names[target->type];
     agsafeset(n, "label", (char *)name, "");
     agsafeset(n, "style", "filled", ""); /* make it filled */
     agsafeset(n, "color", "transparent", ""); /* hide outline */
@@ -749,7 +768,7 @@ static void graphviz_ast_visitor(
         case ASTNODE_STRING_LIT: {
             const node_string_literal_t *data = &node->dat.n_string_lit;
             char buf[8192];
-            snprintf(buf, sizeof(buf), "\"%.*s\"", data->span.len, data->span.p);
+            snprintf(buf, sizeof(buf), "\"%s\"", data->str);
             graph_append(node, graph, anode, id, buf, NULL, edge);
         } return;
         case ASTNODE_IDENT_LIT: {

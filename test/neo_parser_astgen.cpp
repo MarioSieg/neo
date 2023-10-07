@@ -438,7 +438,7 @@ rule_free_expr_function_call_two_params,
     ASSERT_EQ(param->dat.n_int_lit.value, 0);
     param = astref(astpool_resolvelist(&parser.pool, right->dat.n_block.nodes)[1], parser.pool);
     ASSERT_EQ(param, ASTNODE_IDENT_LIT);
-    ASSERT_TRUE(srcspan_eq(param->dat.n_string_lit.span, srcspan_from("msg")));
+    ASSERT_EQ(memcmp(param->dat.n_string_lit.str, (const uint8_t *)"msg", 3), 0);
 })
 
 ast_gen_test(

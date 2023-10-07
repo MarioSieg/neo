@@ -1,0 +1,3 @@
+func f(x: string)
+    let x: int = 10
+end

@@ -111,6 +111,7 @@ void *neo_mempool_alloc(neo_mempool_t *self, size_t len) {
 
 void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
     neo_dassert(self != NULL, "self is NULL");
+    neo_assert(len != 0, "Allocation length must not be zero");
     neo_dassert(align != 0 && align >= sizeof(void *) && !(align & (align - 1)), "Invalid alignment: %zu", align);
     uintptr_t off = (uintptr_t)align - 1 + sizeof(void *);
     void *p = neo_mempool_alloc(self, len + off);
@@ -118,7 +119,8 @@ void *neo_mempool_alloc_aligned(neo_mempool_t *self, size_t len, size_t align) {
 }
 
 size_t neo_mempool_alloc_idx(neo_mempool_t *self, size_t len, uint32_t base, size_t lim, void **pp) {
-    neo_dassert(self != NULL && len != 0, "self is NULL");
+    neo_dassert(self != NULL, "self is NULL");
+    neo_assert(len != 0, "Allocation length must not be zero");
     size_t idx = self->len + base * len;
     neo_assert(idx <= lim, "Pool index limit reached. Max: %zu, Current: %zu", lim, idx);
     void *p = neo_mempool_alloc(self, len);
@@ -593,16 +595,17 @@ uint64_t neo_hash_sip64(const void *key, size_t len, uint64_t seed0, uint64_t se
 
 neo_static_assert(sizeof(char) == sizeof(uint8_t));
 
-uint8_t *neo_strdup2(const uint8_t *str) {
-    return (uint8_t *)neo_strdup((const char *)str);
+uint8_t *neo_strdup2(const uint8_t *str, size_t *out_len) {
+    return (uint8_t *)neo_strdup((const char *)str, out_len);
 }
 
-char *neo_strdup(const char *str) {
+char *neo_strdup(const char *str, size_t *out_len) {
     neo_assert(str != NULL, "String ptr is NULL");
     size_t len = strlen(str); /* strlen also works with UTF-8 strings to find the end \0. */
     char *dup = neo_memalloc(NULL, (len + 1) * sizeof(*dup));
     memcpy(dup, str, len);
     dup[len] = '\0';
+    if (out_len) { *out_len = len; }
     return dup;
 }
 
@@ -4859,7 +4862,6 @@ void *neo_allocator_alloc(size_t len) {
     } else {
         p = _memallocate_huge(heap, len);
     }
-    neo_assert(p != NULL, "Out of memory, allocation size: %zu", len);
     return p;
 }
 

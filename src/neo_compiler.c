@@ -33,8 +33,8 @@ NEO_COLDPROC const compile_error_t *comerror_from_token(error_type_t type, const
     error->col = tok->col;
     error->lexeme = clone_span(tok->lexeme);
     error->lexeme_line = clone_span(tok->lexeme_line);
-    error->file = neo_strdup2(tok->file);
-    error->msg = neo_strdup2(msg);
+    error->file = neo_strdup2(tok->file, NULL);
+    error->msg = neo_strdup2(msg, NULL);
     return error;
 }
 
@@ -55,10 +55,10 @@ NEO_COLDPROC const compile_error_t *comerror_new(
     error->type = type;
     error->line = line;
     error->col = col;
-    error->lexeme = neo_strdup2(lexeme);
-    error->lexeme_line = neo_strdup2(lexeme_line);
-    error->file = neo_strdup2(file);
-    error->msg = neo_strdup2(msg);
+    error->lexeme = neo_strdup2(lexeme, NULL);
+    error->lexeme_line = neo_strdup2(lexeme_line, NULL);
+    error->file = neo_strdup2(file, NULL);
+    error->msg = neo_strdup2(msg, NULL);
     return error;
 }
 
@@ -230,7 +230,7 @@ const source_t *source_from_file(const uint8_t *path, source_load_error_info_t *
     buf[size] = '\n'; /* Append final newline */
     buf[size+1] = '\0'; /* Append terminator */
     source_t *self = (source_t *)neo_memalloc(NULL, sizeof(*self));
-    self->filename = neo_strdup2(path);
+    self->filename = neo_strdup2(path, NULL);
     self->src = buf;
     self->len = size+1; /* +1 for final newline. */
     self->is_file = true;
@@ -570,48 +570,46 @@ typedef struct type_t {
     };
 } type_t;
 
-typedef struct deduced_t {
-    bool is_valid;
-    typeid_t tid;
-} deduced_t;
-
-static NEO_NODISCARD NEO_UNUSED deduced_t deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr) {
+static NEO_NODISCARD NEO_UNUSED bool deduce_typeof_expr(const astpool_t *pool, error_vector_t *errors, astref_t expr, typeid_t *out) {
     neo_dassert(pool != NULL && errors != NULL, "Invalid arguments");
-    if (astref_isnull(expr)) { return (deduced_t){.is_valid = false}; }
+    if (astref_isnull(expr)) { return false; }
     const astnode_t *node = astpool_resolve(pool, expr);
     switch (node->type) {
-        case ASTNODE_INT_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_INT};
-        case ASTNODE_FLOAT_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_FLOAT};
-        case ASTNODE_CHAR_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_CHAR};
-        case ASTNODE_BOOL_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_BOOL};
-        case ASTNODE_STRING_LIT: return (deduced_t){.is_valid = true, .tid = TYPEID_STRING};
+        case ASTNODE_INT_LIT: *out = TYPEID_INT; return true;
+        case ASTNODE_FLOAT_LIT: *out = TYPEID_FLOAT; return true;
+        case ASTNODE_CHAR_LIT: *out = TYPEID_CHAR; return true;
+        case ASTNODE_BOOL_LIT: *out = TYPEID_BOOL; return true;
+        case ASTNODE_STRING_LIT: *out = TYPEID_STRING; return true;
         case ASTNODE_IDENT_LIT:
-        case ASTNODE_SELF_LIT:
-            return (deduced_t){.is_valid = true, .tid = TYPEID_IDENT};
+        case ASTNODE_SELF_LIT: *out = TYPEID_IDENT; return true;
         case ASTNODE_GROUP: {
             const node_group_t *data = &node->dat.n_group;
-            return deduce_typeof_expr(pool, errors, data->child_expr);
+            return deduce_typeof_expr(pool, errors, data->child_expr, out);
         }
         case ASTNODE_UNARY_OP: {
             const node_group_t *data = &node->dat.n_group;
-            return deduce_typeof_expr(pool, errors, data->child_expr);
+            return deduce_typeof_expr(pool, errors, data->child_expr, out);
         }
         case ASTNODE_BINARY_OP: {
             const node_binary_op_t *data = &node->dat.n_binary_op;
-            deduced_t left = deduce_typeof_expr(pool, errors, data->left_expr);
-            deduced_t right = deduce_typeof_expr(pool, errors, data->right_expr);
-            if (neo_unlikely(!left.is_valid || !right.is_valid)) { return (deduced_t){.is_valid = false}; }
-            if (neo_likely(left.tid == right.tid)) { return (deduced_t){.is_valid = true, .tid = left.tid}; } /* Both sides are the same type. */
+            typeid_t left;
+            typeid_t right;
+            bool left_ok = deduce_typeof_expr(pool, errors, data->left_expr, &left);
+            bool right_ok = deduce_typeof_expr(pool, errors, data->right_expr, &right);
+            if (neo_unlikely(!left_ok || !right_ok)) { return false; } /* Types deduction error in one of them. */
+            if (neo_likely(left == right)) { *out = left; return true; } /* Both binary operands are type equivalent. */
             errvec_push(errors, comerror_new(COMERR_TYPE_MISMATCH, 0, 0, NULL, NULL, NULL, NULL));
-            return (deduced_t){.is_valid = false};
+            return false;
         } break;
         default: {
             neo_assert((ASTNODE_EXPR_MASK & astmask(node->type)) == 0, "AST node is of type expression, but not handled");
             errvec_push(errors, comerror_new(COMERR_INVALID_EXPRESSION, 0, 0, NULL, NULL, NULL, NULL));
-            return (deduced_t){.is_valid = false};
+            return false;
         }
     }
 }
+
+#define MAX_BLOCK_DEPTH (1<<10)
 
 /* Context for semantic analysis. */
 typedef struct sema_context_t {
@@ -620,6 +618,8 @@ typedef struct sema_context_t {
     astref_t *blocks; /* Tracked blocks, to free symtab from. */
     uint32_t len;
     uint32_t cap;
+    uint32_t prev_depth; /* Previous scope depth. */
+    uint32_t scope_stack_needle; /* Scope stack needle. */
 } sema_context_t;
 
 static void sema_ctx_init(sema_context_t *self, error_vector_t *errors, const astpool_t *pool) {
@@ -646,6 +646,8 @@ static void block_free_symtabs(node_block_t *self) { /* Free all symbol tables i
     switch ((block_scope_t)self->scope) { /* Init all symbol tables. */
         case BLOCKSCOPE_MODULE:
             symtab_free(&self->symtabs.sc_module.class_table);
+            symtab_free(&self->symtabs.sc_module.method_table);
+            symtab_free(&self->symtabs.sc_module.variable_table);
             break;
         case BLOCKSCOPE_CLASS:
             symtab_free(&self->symtabs.sc_class.method_table);
@@ -673,32 +675,72 @@ static void sema_ctx_free(sema_context_t *self) {
     memset(self, 0, sizeof(*self));
 }
 
+/* Checks if symbol is within symtab. If true, error is emitted and false is returned, else true is returned. */
+static bool symtab_check(symtab_t *tab, const node_ident_literal_t *key, sema_context_t *ctx) {
+    const symrecord_t *existing = NULL;
+    if (neo_unlikely(symtab_get(tab, key, &existing))) { /* Key already exists. */
+        neo_dassert(existing != NULL, "Existing symbol record is NULL");
+        uint8_t *cloned;
+        srcspan_stack_clone(key->span, cloned); /* Clone span into zero terminated stack-string. */
+        /* Emit error, key string is cloned by comerror_from_token(). */
+        errvec_push(ctx->errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned));
+        return false; /* We're done. */
+    }
+    return true;
+}
+
+static bool symtab_check_block(node_block_t *block, const node_ident_literal_t *key, sema_context_t *ctx) {
+    switch (block->scope) {
+        case BLOCKSCOPE_MODULE:
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_module.class_table, key, ctx))) { return false; }
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_module.variable_table, key, ctx))) { return false; }
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_module.method_table, key, ctx))) { return false; }
+            return true;
+        case BLOCKSCOPE_CLASS:
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_class.variable_table, key, ctx))) { return false; }
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_class.method_table, key, ctx))) { return false; }
+            return true;
+        case BLOCKSCOPE_LOCAL:
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_local.variable_table, key, ctx))) { return false; }
+            return true;
+        case BLOCKSCOPE_PARAMLIST:
+            if (neo_unlikely(!symtab_check(&block->symtabs.sc_params.variable_table, key, ctx))) { return false; }
+            return true;
+        case BLOCKSCOPE_ARGLIST:
+        case BLOCKSCOPE__COUNT:
+            return false;
+            /* No symtabs. */
+    }
+    return false;
+}
+
 static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
     symtab_t *target,
     const astpool_t *pool,
     astref_t noderef,
     astnode_type_t target_type,
     astref_t (*extractor)(const astnode_t *target),
-    sema_context_t *ctx
+    sema_context_t *ctx,
+    uint32_t parent_depth
 ) {
-    neo_dassert(target != NULL && pool != NULL && extractor != NULL && ctx != NULL, "Invalid arguments");
     if (neo_unlikely(astref_isnull(noderef))) { return; }
     const astnode_t *node = astpool_resolve(pool, noderef);
     if (node->type != target_type) { return; } /* Skip non-target nodes. */
     const astnode_t *ident = astpool_resolve(pool, (*extractor)(node));
     neo_assert(ident != NULL && ident->type == ASTNODE_IDENT_LIT, "AST node is not an identifier");
     const node_ident_literal_t key = ident->dat.n_ident_lit;
-    if (!target->cap || !target->buckets) { /* Init symbol table if not already done. */
+    if (!symtab_is_init(target)) { /* Init symbol table if not already done. */
         symtab_init(target, 1<<4); /* Init symbol table. */
     }
-    /* Now that we have the key, check if the identifier is already defined in the current symbol table. */
-    const symrecord_t *existing = NULL;
-    if (neo_unlikely(symtab_get(target, &key, &existing))) { /* Key already exists -> ERROR. Note that this only checks if an identifier exists within the SAME symbol table. */
-        neo_dassert(existing != NULL, "Existing symbol record is NULL");
-        uint8_t *cloned;
-        srcspan_stack_clone(key.span, cloned); /* Clone span into zero terminated stack-string. */
-        errvec_push(ctx->errors, comerror_from_token(COMERR_SYMBOL_REDEFINITION, &existing->tok, cloned)); /* Emit error, key string is cloned by comerror_from_token(). */
-        return; /* We're done. */
+    /* Now that we have the key, check if the identifier is already defined in any symbol tables. */
+    if (neo_unlikely(!symtab_check(target, &key, ctx))) { return; }  /* 1. Check current symbtab. */
+    for (uint32_t i = 0; i < ctx->len; ++i) {
+        astnode_t *block = astpool_resolve(pool, ctx->blocks[i]);
+        neo_dassert(block != NULL && block->type == ASTNODE_BLOCK, "Invalid block node");
+        if (block->dat.n_block.scope_depth < parent_depth && /* Check if upper blocks contain the symbol. */
+            neo_unlikely(!symtab_check_block(&block->dat.n_block, &key, ctx))) {
+            return;
+        }
     }
     /* Key does not exist yet, so register it. */
     const symrecord_t val = {
@@ -709,17 +751,14 @@ static void inject_symtab_symbol( /* Injects a symbol into a symbol table. */
 }
 
 static astref_t sym_extract_class(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_CLASS, "Invalid arguments");
     return target->dat.n_class.ident;
 }
 
-static astref_t sym_extract_method(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_FUNCTION, "Invalid arguments");
+static astref_t sym_extract_func(const astnode_t *target) {
     return target->dat.n_method.ident;
 }
 
 static astref_t sym_extract_variable(const astnode_t *target) {
-    neo_dassert(target != NULL && target->type == ASTNODE_VARIABLE, "Invalid arguments");
     return target->dat.n_variable.ident;
 }
 
@@ -729,7 +768,6 @@ static void populate_symbol_tables(
     astpool_t *pool,
     sema_context_t *ctx
 ) {
-    neo_dassert(self != NULL && pool != NULL && ctx != NULL, "Invalid arguments");
     if (self->len == 0) { return; }
     sema_ctx_push_block(ctx, selfref); /* Track block for later cleanup. */
     astref_t *children = astpool_resolvelist(pool, self->nodes);
@@ -745,7 +783,26 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_CLASS,
                     &sym_extract_class,
-                    ctx
+                    ctx,
+                    self->scope_depth
+                );
+                inject_symtab_symbol( /* Inject into class method table. */
+                    &self->symtabs.sc_module.method_table,
+                    pool,
+                    target,
+                    ASTNODE_FUNCTION,
+                    &sym_extract_func,
+                    ctx,
+                    self->scope_depth
+                );
+                inject_symtab_symbol( /* Inject into class variable table. */
+                    &self->symtabs.sc_module.variable_table,
+                    pool,
+                    target,
+                    ASTNODE_VARIABLE,
+                    &sym_extract_variable,
+                    ctx,
+                    self->scope_depth
                 );
             break;
             case BLOCKSCOPE_CLASS:
@@ -754,8 +811,9 @@ static void populate_symbol_tables(
                     pool,
                     target,
                     ASTNODE_FUNCTION,
-                    &sym_extract_method,
-                    ctx
+                    &sym_extract_func,
+                    ctx,
+                    self->scope_depth
                 );
                 inject_symtab_symbol( /* Inject into class variable table. */
                     &self->symtabs.sc_class.variable_table,
@@ -763,7 +821,8 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    ctx
+                    ctx,
+                    self->scope_depth
                 );
             break;
             case BLOCKSCOPE_LOCAL:
@@ -773,7 +832,8 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    ctx
+                    ctx,
+                    self->scope_depth
                 );
             break;
             case BLOCKSCOPE_PARAMLIST:
@@ -783,7 +843,8 @@ static void populate_symbol_tables(
                     target,
                     ASTNODE_VARIABLE,
                     &sym_extract_variable,
-                    ctx
+                    ctx,
+                    self->scope_depth
                 );
             break;
             case BLOCKSCOPE_ARGLIST: break; /* No symbols to inject. */
@@ -851,8 +912,9 @@ static void semantic_visitor(astpool_t *pool, astref_t ref, void *usr) {
         } return;
         case ASTNODE_BLOCK: {
             node_block_t *data = &node->dat.n_block;
-            populate_symbol_tables(data, ref, pool, ctx);
-            node_block_dump_symbols(data, stdout);
+            if (node_block_can_have_symtabs(data)) {
+                populate_symbol_tables(data, ref, pool, ctx);
+            }
         } return;
         case ASTNODE_VARIABLE: {
             const node_variable_t *data = &node->dat.n_variable;
@@ -897,6 +959,8 @@ static NEO_COLDPROC NEO_UNUSED void node_block_dump_symbols(const node_block_t *
     switch ((block_scope_t)self->scope) { /* Free all symbol tables. */
         case BLOCKSCOPE_MODULE:
             symtab_print(&self->symtabs.sc_module.class_table, f, "Classes");
+            symtab_print(&self->symtabs.sc_module.method_table, f, "Methods");
+            symtab_print(&self->symtabs.sc_module.variable_table, f, "Variables");
             break;
         case BLOCKSCOPE_CLASS:
             symtab_print(&self->symtabs.sc_class.method_table, f, "Methods");

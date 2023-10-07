@@ -23,6 +23,7 @@ typedef struct parser_t {
     bool panic; /* Panic mode. */
     bool error; /* Error mode. */
     const char *prev_error; /* Previous error message. */
+    uint32_t scope_depth; /* Scope depth. */
 } parser_t;
 
 extern NEO_EXPORT void parser_init(parser_t *self, struct error_vector_t *errors);

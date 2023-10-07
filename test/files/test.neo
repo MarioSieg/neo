@@ -1,8 +1,11 @@
 class Test
+    let var: int = 10
+    let name: string = "Hey"
+
     # This func calculates the nth number in the Fibonacci sequence.
     func fibonacci(n: int) -> int
         let a: int = 0
-        let b: int = 1
+        let bx: int = 1
         let i: int = 2
 
         if n == 0 then
@@ -14,9 +17,9 @@ class Test
         end
 
         while i <= n do
-            let c: int = a + b
+            let cx: int = a + b
             a = b
-            b = c
+            b = cx
             i = i + 1
         end
 

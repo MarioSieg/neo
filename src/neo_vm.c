@@ -35,13 +35,14 @@ void vm_init(vm_isolate_t **self, const char *name) {
 #if NEO_COM_GCC
 #pragma GCC diagnostic pop
 #endif
-        (*self)->name[sizeof((*self)->name)-1] = '\0';
+        (**self).name[sizeof((*self)->name)-1] = '\0';
     }
     static volatile int64_t mkid = 0x1000;
     uint64_t tid = neo_tid();
-    (*self)->id = neo_atomic_fetch_add(&mkid, 1, NEO_MEMORD_RELX); /* Generate ID. */
-    (*self)->id ^= (int64_t)((tid >> 32) | (tid & ~(uint32_t)0)); /* Mix in thread ID. */
-    stk_alloc(&(*self)->stack, VMSTK_DEF_SIZE, VMSTK_DEF_WARMUP); /* Allocate stack. */
+    (**self).id = neo_atomic_fetch_add(&mkid, 1, NEO_MEMORD_RELX); /* Generate ID. */
+    (**self).id ^= (int64_t)((tid >> 32) | (tid & ~(uint32_t)0)); /* Mix in thread ID. */
+    stk_alloc(&(**self).stack, VMSTK_DEF_SIZE, VMSTK_DEF_WARMUP); /* Allocate stack. */
+    gc_init(&(**self).gc_context, (**self).stack.p, (**self).stack.len);
     (**self).io_input = stdin;
     (**self).io_output = stdout;
     (**self).io_error = stderr;
@@ -50,7 +51,8 @@ void vm_init(vm_isolate_t **self, const char *name) {
 
 void vm_free(vm_isolate_t **self) {
     neo_assert(self != NULL, "self must not be NULL");
-    stk_free(&(*self)->stack, true);
+    gc_free(&(**self).gc_context);
+    stk_free(&(**self).stack, true);
     neo_memalloc(*self, 0);
     memset(*self, 0, sizeof(**self));
     *self = NULL;

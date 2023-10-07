@@ -20,7 +20,7 @@
 TEST(parser_files, accept) {
     std::vector<neo::source_code> sources {load_all_source_files_from_dir("test/files/parser/accept")};
     for (auto &&src : sources) {
-        std::cout << "Parsing: " << src.get_file_name() << std::endl;
+        std::cout << "Parsing valid: " << src.get_file_name() << std::endl;
         error_vector_t ev;
         errvec_init(&ev);
         parser_t parser;
@@ -40,7 +40,7 @@ TEST(parser_files, accept) {
 TEST(parser_files, reject) {
     std::vector<neo::source_code> sources {load_all_source_files_from_dir("test/files/parser/reject")};
     for (auto &&src : sources) {
-        std::cout << "Parsing: " << src.get_file_name() << std::endl;
+        std::cout << "Parsing invalid: " << src.get_file_name() << std::endl;
         error_vector_t ev;
         errvec_init(&ev);
         parser_t parser;

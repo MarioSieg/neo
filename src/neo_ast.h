@@ -72,7 +72,7 @@ typedef struct node_bool_literal_t {
 } node_bool_literal_t;
 
 typedef struct node_string_literal_t {
-    srcspan_t span;
+    uint8_t *str; /* String literals own the memory, because the literal must be escaped :) TODO: add string pool */
     uint32_t hash;
     token_t tok; /* Token for better error handling in the semantic analysis stage. */
 } node_string_literal_t;
@@ -103,6 +103,7 @@ typedef struct symtab_t {
     uint32_t cap;
 } symtab_t;
 
+#define symtab_is_init(self) ((self)->buckets != NULL)
 extern NEO_EXPORT void symtab_init(symtab_t *self, uint32_t cap);
 extern NEO_EXPORT bool symtab_put(symtab_t *self, const node_ident_literal_t *key, const symrecord_t *val);
 extern NEO_EXPORT bool symtab_get(symtab_t *self, const node_ident_literal_t *key, const symrecord_t **val);
@@ -232,18 +233,26 @@ typedef struct block_symbol_t {
     token_t token;
 } block_symbol_t;
 
+/*
+** Represents a module/class/local/param scope which includes
+** 1. The child statements
+** 2. A symbol table for the identifiers, generated in the semantic analysis stage.
+** ! When adding/removing symbol tables or blockscopes, remember to free them correctly in the block functions.
+*/
 typedef struct node_block_t {
     block_scope_t scope : 8; /* Discriminator. */
     union {
         struct {
             symtab_t class_table; /* Global symbol table. */
+            symtab_t variable_table; /* Class variables (static and local). */
+            symtab_t method_table; /* Class methods (static and local). */
         } sc_module; /* Scope of: BLOCKSCOPE_MODULE */
         struct {
             symtab_t variable_table; /* Class variables (static and local). */
             symtab_t method_table; /* Class methods (static and local). */
         } sc_class; /* Scope of: BLOCKSCOPE_CLASS */
         struct {
-            symtab_t variable_table; /* Local variables. */
+            symtab_t variable_table; /* Class variables (static and local). */
         } sc_local; /* Scope of: BLOCKSCOPE_LOCAL */
         struct {
             symtab_t variable_table; /* Local parameter variables. */
@@ -252,8 +261,9 @@ typedef struct node_block_t {
     listref_t nodes; /* Child nodes. */
     uint32_t len;
     uint32_t cap;
+    uint32_t scope_depth;
 } node_block_t;
-
+#define node_block_can_have_symtabs(self) ((self)->scope != BLOCKSCOPE_ARGLIST) /* All scopes have symtabs, except BLOCKSCOPE_ARGLIST. */
 extern NEO_EXPORT void node_block_push_child(astpool_t *pool, node_block_t *self, astref_decl(req) node);
 
 /* Variable type */
@@ -372,7 +382,7 @@ extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_int(astpool_t *pool, neo_in
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_float(astpool_t *pool, neo_float_t value, const token_t *tok);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_char(astpool_t *pool, neo_char_t value, const token_t *tok);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_bool(astpool_t *pool, neo_bool_t value, const token_t *tok);
-extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, srcspan_t value, const token_t *tok);
+extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_string(astpool_t *pool, const uint8_t *str, const token_t *tok);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_ident(astpool_t *pool, srcspan_t value, const token_t *tok); /* Contains the token for better error handling in the semantic analysis stage. */
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_unary_op(astpool_t *pool, const struct node_unary_op_t *node);
 extern NEO_EXPORT NEO_NODISCARD astref_t astnode_new_binary_op(astpool_t *pool, const node_binary_op_t *node);
